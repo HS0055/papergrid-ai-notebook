@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
-
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 import { NavBar } from './landing/NavBar';
 import { HeroSection } from './landing/HeroSection';
@@ -14,26 +15,26 @@ import { TestimonialsSection } from './landing/TestimonialsSection';
 import { FinalCTA } from './landing/FinalCTA';
 import { LandingFooter } from './landing/LandingFooter';
 
-interface LandingPageProps {
-  onLaunch: () => void;
-  isExiting?: boolean;
-}
+gsap.registerPlugin(ScrollTrigger);
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onLaunch, isExiting }) => {
+export const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // ─── Exit Animation ─────────────────────────────────────
-  useEffect(() => {
-    if (isExiting && rootRef.current) {
+  const handleLaunch = useCallback(() => {
+    if (rootRef.current) {
       gsap.to(rootRef.current, {
         opacity: 0,
         scale: 0.97,
         y: -20,
-        duration: 0.5,
+        duration: 0.4,
         ease: 'power3.inOut',
+        onComplete: () => { navigate('/app'); },
       });
+    } else {
+      navigate('/app');
     }
-  }, [isExiting]);
+  }, [navigate]);
 
   useEffect(() => {
     // ── Hero GSAP animations (timeline + floating) ───────────
@@ -65,14 +66,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunch, isExiting })
           opacity: 0,
           duration: 0.8,
           ease: 'power3.out',
-        }, '-=0.6')
-        .from('.hero-mockup', {
-          y: 60,
-          opacity: 0,
-          scale: 0.95,
-          duration: 1.2,
-          ease: 'power2.out',
-        }, '-=0.8');
+        }, '-=0.6');
 
       // Floating paper cards idle animation
       gsap.to('.floating-paper', {
@@ -88,30 +82,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunch, isExiting })
           from: 'random',
         },
       });
-    }, rootRef);
 
-    // ── IntersectionObserver for scroll reveals ──────────────
-    const revealElements = rootRef.current?.querySelectorAll(
-      '.reveal, .reveal-scale, .reveal-left, .reveal-right'
-    );
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.setAttribute('data-revealed', 'true');
-            observer.unobserve(entry.target);
-          }
+      // ── ScrollTrigger reveals for sections below hero ──
+      const revealSelectors = '.reveal, .reveal-scale, .reveal-left, .reveal-right';
+      gsap.utils.toArray<HTMLElement>(revealSelectors).forEach((el) => {
+        ScrollTrigger.create({
+          trigger: el,
+          start: 'top 92%',
+          onEnter: () => el.setAttribute('data-revealed', 'true'),
+          once: true,
         });
-      },
-      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
-    );
+      });
 
-    revealElements?.forEach((el) => observer.observe(el));
+      // Ensure all ScrollTrigger positions are recalculated after pin spacers
+      ScrollTrigger.refresh();
+    }, rootRef);
 
     return () => {
       ctx.revert();
-      observer.disconnect();
     };
   }, []);
 
@@ -121,16 +109,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunch, isExiting })
       className="min-h-screen font-sans overflow-x-hidden"
       style={{ color: 'var(--color-ink)' }}
     >
-      <NavBar onLaunch={onLaunch} />
-      <HeroSection onLaunch={onLaunch} />
+      <NavBar onLaunch={handleLaunch} />
+      <HeroSection onLaunch={handleLaunch} />
       <StatsStrip />
-      <PaperStylesSection onLaunch={onLaunch} />
-      <AIFeatureSection onLaunch={onLaunch} />
-      <BlockTypesBento onLaunch={onLaunch} />
-      <AestheticsSection onLaunch={onLaunch} />
+      <PaperStylesSection onLaunch={handleLaunch} />
+      <AIFeatureSection onLaunch={handleLaunch} />
+      <BlockTypesBento onLaunch={handleLaunch} />
+      <AestheticsSection onLaunch={handleLaunch} />
       <HowItWorksSection />
       <TestimonialsSection />
-      <FinalCTA onLaunch={onLaunch} />
+      <FinalCTA onLaunch={handleLaunch} />
       <LandingFooter />
     </div>
   );

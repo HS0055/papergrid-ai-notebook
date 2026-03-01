@@ -8,12 +8,28 @@ export enum BlockType {
   DIVIDER = 'DIVIDER',
   MOOD_TRACKER = 'MOOD_TRACKER',
   PRIORITY_MATRIX = 'PRIORITY_MATRIX',
-  INDEX = 'INDEX'
+  INDEX = 'INDEX',
+  MUSIC_STAFF = 'MUSIC_STAFF'
 }
 
 export interface GridCell {
   id: string;
   content: string;
+}
+
+export interface MusicNote {
+  id: string;
+  pitch: string;       // 'C','D','E','F','G','A','B'
+  octave: number;      // 3-5
+  duration: 'whole' | 'half' | 'quarter' | 'eighth';
+  position: number;    // horizontal % (0-100)
+  accidental?: 'sharp' | 'flat';
+}
+
+export interface MusicStaffData {
+  clef: 'treble' | 'bass';
+  timeSignature: string;
+  notes: MusicNote[];
 }
 
 export interface Block {
@@ -36,6 +52,7 @@ export interface Block {
     q3: string;
     q4: string;
   };
+  musicData?: MusicStaffData;
 }
 
 export interface NotebookPage {
@@ -46,6 +63,7 @@ export interface NotebookPage {
   blocks: Block[];
   aesthetic?: string;
   themeColor?: string;
+  aiGenerated?: boolean;
 }
 
 export interface Notebook {

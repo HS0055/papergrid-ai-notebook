@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Block types enum - mirrors BlockType from types.ts
 export const BlockTypeSchema = z.enum([
   'TEXT', 'HEADING', 'GRID', 'CHECKBOX', 'CALLOUT',
-  'QUOTE', 'DIVIDER', 'MOOD_TRACKER', 'PRIORITY_MATRIX', 'INDEX',
+  'QUOTE', 'DIVIDER', 'MOOD_TRACKER', 'PRIORITY_MATRIX', 'INDEX', 'MUSIC_STAFF',
 ]);
 
 // Paper types - mirrors NotebookPage.paperType union
@@ -37,6 +37,23 @@ export const MatrixDataSchema = z.object({
   q4: z.string(),
 });
 
+// MusicNote - mirrors MusicNote interface
+export const MusicNoteSchema = z.object({
+  id: z.string(),
+  pitch: z.enum(['C', 'D', 'E', 'F', 'G', 'A', 'B']),
+  octave: z.number().min(3).max(5),
+  duration: z.enum(['whole', 'half', 'quarter', 'eighth']),
+  position: z.number().min(0).max(100),
+  accidental: z.enum(['sharp', 'flat']).optional(),
+});
+
+// MusicStaffData - mirrors MusicStaffData interface
+export const MusicStaffDataSchema = z.object({
+  clef: z.enum(['treble', 'bass']),
+  timeSignature: z.string(),
+  notes: z.array(MusicNoteSchema),
+});
+
 // Block - mirrors Block interface
 export const BlockSchema = z.object({
   id: z.string(),
@@ -50,6 +67,7 @@ export const BlockSchema = z.object({
   side: z.enum(['left', 'right']).optional(),
   moodValue: z.number().min(0).max(4).optional(),
   matrixData: MatrixDataSchema.optional(),
+  musicData: MusicStaffDataSchema.optional(),
 });
 
 // NotebookPage - mirrors NotebookPage interface
@@ -109,6 +127,8 @@ export type ThemeColorZ = z.infer<typeof ThemeColorSchema>;
 export type GridCellZ = z.infer<typeof GridCellSchema>;
 export type GridDataZ = z.infer<typeof GridDataSchema>;
 export type MatrixDataZ = z.infer<typeof MatrixDataSchema>;
+export type MusicNoteZ = z.infer<typeof MusicNoteSchema>;
+export type MusicStaffDataZ = z.infer<typeof MusicStaffDataSchema>;
 export type BlockZ = z.infer<typeof BlockSchema>;
 export type NotebookPageZ = z.infer<typeof NotebookPageSchema>;
 export type NotebookZ = z.infer<typeof NotebookSchema>;

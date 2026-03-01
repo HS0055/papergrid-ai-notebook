@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { Block, BlockType, GridCell, NotebookPage } from '@papergrid/core';
 import { Trash2, GripVertical, Plus, Info, Quote, ArrowLeftRight } from 'lucide-react';
+import { MusicStaffBlock } from './MusicStaffBlock';
 
 interface BlockProps {
   block: Block;
@@ -9,7 +10,24 @@ interface BlockProps {
   focused?: boolean;
   allPages?: NotebookPage[];
   onNavigate?: (pageId: string) => void;
+  onInsertAfter?: (type: BlockType) => void;
+  selectedPitch?: { pitch: string; octave: number } | null;
+  selectedDuration?: 'whole' | 'half' | 'quarter' | 'eighth';
+  dragHandleProps?: Record<string, any>;
 }
+
+const getAccentColor = (color?: string): string => {
+  switch (color) {
+    case 'rose': return '#e11d48';
+    case 'indigo': return '#4f46e5';
+    case 'emerald': return '#059669';
+    case 'amber': return '#d97706';
+    case 'sky': return '#0284c7';
+    case 'slate': return '#475569';
+    case 'gray':
+    default: return '#6b7280';
+  }
+};
 
 const getColorClasses = (color?: string) => {
   switch (color) {
@@ -43,13 +61,20 @@ const getEmphasisClass = (emphasis?: string, colorClasses?: any) => {
   }
 };
 
-export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete, focused, allPages, onNavigate }) => {
+export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete, focused, allPages, onNavigate, onInsertAfter, selectedPitch, selectedDuration, dragHandleProps }) => {
   const textRef = useRef<HTMLTextAreaElement>(null);
   const calloutRef = useRef<HTMLTextAreaElement>(null);
   const quoteRef = useRef<HTMLTextAreaElement>(null);
   const colorClasses = getColorClasses(block.color);
   const alignmentClass = getAlignmentClass(block.alignment);
   const emphasisClass = getEmphasisClass(block.emphasis, colorClasses);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onInsertAfter?.(block.type);
+    }
+  };
 
   const getActiveRef = useCallback(() => {
     if (block.type === BlockType.CALLOUT) return calloutRef;
@@ -100,13 +125,13 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
     <div className="group relative flex items-start -ml-16 mb-0 hover:bg-black/5 transition-colors rounded-lg pl-16 pr-2 py-0">
       {/* Block Controls (Hover) */}
       <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
-         <div className="p-1 text-gray-400 cursor-move hover:text-gray-600">
+         <div className="p-1 text-gray-400 cursor-move hover:text-gray-600" {...dragHandleProps}>
             <GripVertical size={16} />
          </div>
-         <button onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })} className="p-1 hover:bg-blue-100 rounded text-gray-400 hover:text-blue-500" title="Move to other page">
+         <button onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })} className="p-1 hover:bg-blue-100 rounded text-gray-400 hover:text-blue-500" aria-label="Move block to other page">
            <ArrowLeftRight size={16} />
          </button>
-         <button onClick={() => onDelete(block.id)} className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-500">
+         <button onClick={() => onDelete(block.id)} className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-500" aria-label="Delete block">
            <Trash2 size={16} />
          </button>
       </div>
@@ -118,7 +143,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
               className={`w-full bg-transparent text-3xl font-bold font-hand text-gray-800 placeholder-gray-300 focus:outline-none border-none p-0 m-0 ${alignmentClass} ${
                 block.emphasis === 'highlight' ? `${colorClasses.bg} px-4 rounded-lg shadow-sm` : colorClasses.text
               }`}
-              style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '6px' }}
+              style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '7px' }}
               value={block.content}
               onChange={(e) => onChange(block.id, { content: e.target.value })}
               placeholder="Section Heading..."
@@ -131,14 +156,15 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             <textarea
               ref={textRef}
               className={`w-full bg-transparent font-hand text-xl text-gray-800 resize-none focus:outline-none overflow-hidden placeholder-gray-300 block p-0 m-0 border-none ${alignmentClass} ${emphasisClass}`}
-              style={{ 
-                lineHeight: '32px', 
+              style={{
+                lineHeight: '32px',
                 minHeight: '32px',
                 position: 'relative',
                 top: '9px' // Fine-tune text to sit exactly on the baseline
               }}
               value={block.content}
               onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
               placeholder="Write here..."
               spellCheck={false}
             />
@@ -151,14 +177,15 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
               type="checkbox"
               checked={block.checked}
               onChange={(e) => onChange(block.id, { checked: e.target.checked })}
-              className={`w-5 h-5 cursor-pointer rounded border-gray-400 ${colorClasses.text}`}
-              style={{ position: 'relative', top: '4px' }}
+              className="w-5 h-5 cursor-pointer rounded border-gray-400"
+              style={{ position: 'relative', top: '9px', accentColor: getAccentColor(block.color) }}
             />
             <input
                className={`flex-1 bg-transparent font-hand text-xl text-gray-800 focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${emphasisClass}`}
                style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '9px' }}
                value={block.content}
                onChange={(e) => onChange(block.id, { content: e.target.value })}
+               onKeyDown={handleKeyDown}
                placeholder="To-do item"
             />
           </div>
@@ -189,7 +216,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             <textarea
               ref={quoteRef}
               className={`w-full bg-transparent font-serif text-2xl italic text-gray-700 resize-none focus:outline-none overflow-hidden placeholder-gray-300 block p-0 m-0 border-none ${alignmentClass}`}
-              style={{ lineHeight: '32px', minHeight: '32px', position: 'relative', top: '2px' }}
+              style={{ lineHeight: '32px', minHeight: '32px', position: 'relative', top: '9px' }}
               value={block.content}
               onChange={handleTextChange}
               placeholder="Quote..."
@@ -321,6 +348,15 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
                </button>
              </div>
           </div>
+        )}
+
+        {block.type === BlockType.MUSIC_STAFF && (
+          <MusicStaffBlock
+            block={block}
+            onChange={onChange}
+            selectedPitch={selectedPitch}
+            selectedDuration={selectedDuration}
+          />
         )}
       </div>
     </div>

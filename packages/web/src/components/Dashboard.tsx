@@ -1,0 +1,830 @@
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { NotebookView } from './NotebookView';
+import { LayoutGenerator } from './LayoutGenerator';
+import { Notebook, NotebookPage, Block, BlockType } from '@papergrid/core';
+import { generateLayout } from '../services/geminiService';
+import {
+  Book, Plus, Sparkles, Menu, ChevronLeft, ChevronRight, Bookmark,
+  AlertCircle, CheckCircle2, X, Home, Search, FileText, Undo2,
+  Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
+  Download, Image, Printer
+} from 'lucide-react';
+import html2canvas from 'html2canvas';
+
+// Lazy-load 3D components (Three.js chunk loads on demand)
+const BookCoverScene = lazy(() => import('./three/notebook/BookCoverScene'));
+
+const STORAGE_KEY = 'papergrid_notebooks';
+
+const COVER_COLORS = [
+  'bg-indigo-900', 'bg-rose-900', 'bg-emerald-900', 'bg-slate-900',
+  'bg-amber-900', 'bg-sky-900', 'bg-violet-900', 'bg-stone-900',
+  'bg-red-900', 'bg-teal-900', 'bg-fuchsia-900', 'bg-zinc-900',
+];
+
+const STARTER_TEMPLATES = [
+  { id: 'blank', title: 'Blank Page', desc: 'Start from scratch', icon: FileText, blocks: [] },
+  { id: 'planner', title: 'Daily Planner', desc: 'Organize your day', icon: Calendar, blocks: [
+    { id: 't1', type: BlockType.HEADING, content: 'Daily Plan', side: 'left' as const },
+    { id: 't2', type: BlockType.CHECKBOX, content: 'Morning routine', checked: false, side: 'left' as const },
+    { id: 't3', type: BlockType.CHECKBOX, content: 'Top priority task', checked: false, side: 'left' as const },
+    { id: 't4', type: BlockType.CHECKBOX, content: 'Exercise', checked: false, side: 'left' as const },
+    { id: 't5', type: BlockType.DIVIDER, content: '', side: 'right' as const },
+    { id: 't6', type: BlockType.TEXT, content: 'Notes for today...', side: 'right' as const },
+  ]},
+  { id: 'meeting', title: 'Meeting Notes', desc: 'Capture key points', icon: PenLine, blocks: [
+    { id: 'm1', type: BlockType.HEADING, content: 'Meeting Notes', side: 'left' as const },
+    { id: 'm2', type: BlockType.TEXT, content: 'Attendees: ', side: 'left' as const },
+    { id: 'm3', type: BlockType.CALLOUT, content: 'Key decisions', side: 'left' as const },
+    { id: 'm4', type: BlockType.HEADING, content: 'Action Items', side: 'right' as const },
+    { id: 'm5', type: BlockType.CHECKBOX, content: '', checked: false, side: 'right' as const },
+  ]},
+  { id: 'tracker', title: 'Project Tracker', desc: 'Track tasks & progress', icon: ListChecks, blocks: [
+    { id: 'p1', type: BlockType.HEADING, content: 'Project Tracker', side: 'left' as const },
+    { id: 'p2', type: BlockType.GRID, content: 'Tasks', side: 'left' as const, gridData: {
+      columns: ['Task', 'Status', 'Due'],
+      rows: [[{id: '1', content: ''}, {id: '2', content: ''}, {id: '3', content: ''}]]
+    }},
+    { id: 'p3', type: BlockType.CALLOUT, content: 'Blockers & risks', side: 'right' as const },
+  ]},
+  { id: 'bujo', title: 'Bullet Journal', desc: 'Rapid logging system', icon: BookOpen, blocks: [
+    { id: 'j1', type: BlockType.HEADING, content: 'Bullet Journal', side: 'left' as const },
+    { id: 'j2', type: BlockType.CHECKBOX, content: 'Task one', checked: false, side: 'left' as const },
+    { id: 'j3', type: BlockType.TEXT, content: '- Note about something', side: 'left' as const },
+    { id: 'j4', type: BlockType.MOOD_TRACKER, content: '', side: 'right' as const, moodValue: 3 },
+    { id: 'j5', type: BlockType.QUOTE, content: 'Inspiration for the day', side: 'right' as const },
+  ]},
+  { id: 'weekly', title: 'Weekly Review', desc: 'Reflect & plan ahead', icon: LayoutDashboard, blocks: [
+    { id: 'w1', type: BlockType.HEADING, content: 'Weekly Review', side: 'left' as const },
+    { id: 'w2', type: BlockType.TEXT, content: 'Wins this week:', side: 'left' as const },
+    { id: 'w3', type: BlockType.TEXT, content: 'Challenges:', side: 'left' as const },
+    { id: 'w4', type: BlockType.HEADING, content: 'Next Week', side: 'right' as const },
+    { id: 'w5', type: BlockType.PRIORITY_MATRIX, content: '', side: 'right' as const, matrixData: { q1: '', q2: '', q3: '', q4: '' }},
+  ]},
+];
+
+// ─── Toast Component ────────────────────────────────────────
+interface ToastData {
+  id: number;
+  message: string;
+  type: 'error' | 'success' | 'undo';
+  onUndo?: () => void;
+}
+
+const Toast: React.FC<{ toast: ToastData; onDismiss: (id: number) => void }> = ({ toast, onDismiss }) => {
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsExiting(true);
+      setTimeout(() => onDismiss(toast.id), 300);
+    }, toast.type === 'undo' ? 5000 : 4000);
+    return () => clearTimeout(timer);
+  }, [toast.id, toast.type, onDismiss]);
+
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-md max-w-sm ${
+        isExiting ? 'toast-exit' : 'toast-enter'
+      } ${
+        toast.type === 'error'
+          ? 'bg-red-950/90 border-red-800/50 text-red-100'
+          : toast.type === 'undo'
+          ? 'bg-gray-900/95 border-gray-700/50 text-gray-100'
+          : 'bg-emerald-950/90 border-emerald-800/50 text-emerald-100'
+      }`}
+    >
+      {toast.type === 'error' ? (
+        <AlertCircle size={18} className="text-red-400 shrink-0" />
+      ) : toast.type === 'undo' ? (
+        <Undo2 size={18} className="text-gray-400 shrink-0" />
+      ) : (
+        <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+      )}
+      <span className="text-sm font-medium flex-1">{toast.message}</span>
+      {toast.onUndo && (
+        <button
+          onClick={() => {
+            toast.onUndo?.();
+            setIsExiting(true);
+            setTimeout(() => onDismiss(toast.id), 300);
+          }}
+          className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-xs font-bold uppercase tracking-wider transition-colors"
+        >
+          Undo
+        </button>
+      )}
+      <button
+        onClick={() => {
+          setIsExiting(true);
+          setTimeout(() => onDismiss(toast.id), 300);
+        }}
+        className="text-white/50 hover:text-white/80 transition-colors shrink-0"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+};
+
+// ─── Dashboard ──────────────────────────────────────────────
+export const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const [notebooks, setNotebooks] = useState<Notebook[]>([]);
+  const [activeNotebookId, setActiveNotebookId] = useState<string>('');
+  const [activePageIndex, setActivePageIndex] = useState<number>(-1);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const [sidebarSearch, setSidebarSearch] = useState('');
+  const [showBookmarks, setShowBookmarks] = useState(false);
+
+  // Animation states
+  const [contentKey, setContentKey] = useState(0);
+  const [pageDirection, setPageDirection] = useState<'left' | 'right' | null>(null);
+
+  // 3D animation states
+  const [isOpening, setIsOpening] = useState(false);
+  const [coverFading, setCoverFading] = useState(false);
+
+  // Toast state
+  const [toasts, setToasts] = useState<ToastData[]>([]);
+  const toastCounter = useRef(0);
+
+  const addToast = useCallback((message: string, type: 'error' | 'success' | 'undo', onUndo?: () => void) => {
+    const id = ++toastCounter.current;
+    setToasts(prev => [...prev, { id, message, type, onUndo }]);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Load from local storage
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setNotebooks(parsed);
+          setActiveNotebookId(parsed[0].id);
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to load saved data");
+      }
+    }
+    // Default notebook if nothing saved
+    const defaultNb: Notebook = {
+      id: 'nb-1',
+      title: 'My Journal',
+      coverColor: 'bg-indigo-900',
+      createdAt: new Date().toISOString(),
+      bookmarks: [],
+      pages: [{
+        id: 'init-1',
+        title: 'Welcome',
+        createdAt: new Date().toISOString(),
+        paperType: 'lined',
+        blocks: [
+          { id: 'b1', type: BlockType.HEADING, content: 'Welcome to PaperGrid', side: 'left' },
+          { id: 'b2', type: BlockType.TEXT, content: 'This is a digital notebook that feels real. The text sits right on the lines.', side: 'left' },
+          { id: 'b3', type: BlockType.CHECKBOX, content: 'Try the AI Generator for structured layouts', checked: false, side: 'right' },
+        ]
+      }]
+    };
+    setNotebooks([defaultNb]);
+    setActiveNotebookId(defaultNb.id);
+  }, []);
+
+  // Save to local storage
+  useEffect(() => {
+    if (notebooks.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(notebooks));
+    }
+  }, [notebooks]);
+
+  const activeNotebook = notebooks.find(n => n.id === activeNotebookId) || notebooks[0];
+  const activePage = activeNotebook && activePageIndex >= 0 && activePageIndex < activeNotebook.pages.length
+    ? activeNotebook.pages[activePageIndex]
+    : null;
+
+  const handleUpdatePage = (updatedPage: NotebookPage) => {
+    setNotebooks(prev => prev.map(nb => {
+      if (nb.id !== activeNotebookId) return nb;
+      return {
+        ...nb,
+        pages: nb.pages.map(p => p.id === updatedPage.id ? updatedPage : p)
+      };
+    }));
+  };
+
+  const handleNewNotebook = () => {
+    const newNb: Notebook = {
+      id: crypto.randomUUID(),
+      title: 'New Notebook',
+      coverColor: COVER_COLORS[Math.floor(Math.random() * COVER_COLORS.length)],
+      createdAt: new Date().toISOString(),
+      bookmarks: [],
+      pages: []
+    };
+    setNotebooks([newNb, ...notebooks]);
+    setActiveNotebookId(newNb.id);
+    setActivePageIndex(-1);
+    setContentKey(k => k + 1);
+  };
+
+  const handleSwitchNotebook = (nbId: string) => {
+    if (nbId === activeNotebookId) return;
+    setContentKey(k => k + 1);
+    setActiveNotebookId(nbId);
+    setActivePageIndex(-1);
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const handleNewPage = (templateBlocks?: Block[]) => {
+    const newPage: NotebookPage = {
+      id: crypto.randomUUID(),
+      title: '',
+      createdAt: new Date().toISOString(),
+      paperType: 'lined',
+      blocks: templateBlocks ? templateBlocks.map(b => ({ ...b, id: crypto.randomUUID() })) : []
+    };
+    setNotebooks(prev => {
+      const updated = prev.map(nb => {
+        if (nb.id !== activeNotebookId) return nb;
+        return { ...nb, pages: [...nb.pages, newPage] };
+      });
+      const nb = updated.find(n => n.id === activeNotebookId);
+      if (nb) {
+        setPageDirection('right');
+        setActivePageIndex(nb.pages.length - 1);
+      }
+      return updated;
+    });
+  };
+
+  const handlePageBack = () => {
+    if (activePageIndex <= -1) return;
+    setPageDirection('left');
+    setActivePageIndex(prev => Math.max(-1, prev - 1));
+  };
+
+  const handlePageForward = () => {
+    if (!activeNotebook || activePageIndex >= activeNotebook.pages.length) return;
+    setPageDirection('right');
+    setActivePageIndex(prev => prev + 1);
+  };
+
+  // Flat fallback cover: instant open (no 3D loaded yet)
+  const handleOpenCover = () => {
+    if (!activeNotebook || activeNotebook.pages.length === 0) return;
+    setPageDirection('right');
+    setActivePageIndex(0);
+  };
+
+  // 3D cover: trigger open animation
+  const handleOpen3DCover = useCallback(() => {
+    if (!activeNotebook || activeNotebook.pages.length === 0) return;
+    setIsOpening(true);
+  }, [activeNotebook]);
+
+  // 3D cover animation complete → fade out 3D, then switch to page view
+  const handleCoverOpenComplete = useCallback(() => {
+    setIsOpening(false);
+    setCoverFading(true);
+    setTimeout(() => {
+      setCoverFading(false);
+      setPageDirection('right');
+      setActivePageIndex(0);
+    }, 400);
+  }, []);
+
+  const handleAiGeneration = async (prompt: string, industry?: string, aesthetic?: string) => {
+    try {
+      const layout = await generateLayout(prompt, industry, aesthetic);
+      const newPage: NotebookPage = {
+        id: crypto.randomUUID(),
+        title: layout.title,
+        createdAt: new Date().toISOString(),
+        paperType: layout.paperType,
+        blocks: layout.blocks,
+        aesthetic: aesthetic || 'modern-planner',
+        themeColor: layout.themeColor,
+        aiGenerated: true,
+      };
+      setNotebooks(prev => {
+        const updated = prev.map(nb => {
+          if (nb.id !== activeNotebookId) return nb;
+          return { ...nb, pages: [...nb.pages, newPage] };
+        });
+        const nb = updated.find(n => n.id === activeNotebookId);
+        if (nb) {
+          setPageDirection('right');
+          setActivePageIndex(nb.pages.length - 1);
+        }
+        return updated;
+      });
+      addToast('Layout generated successfully!', 'success');
+    } catch (error) {
+      addToast('Failed to generate layout. Please check your API key.', 'error');
+    }
+  };
+
+  const toggleBookmark = () => {
+    if (!activePage) return;
+    setNotebooks(prev => prev.map(nb => {
+      if (nb.id !== activeNotebookId) return nb;
+      const isBookmarked = nb.bookmarks.includes(activePage.id);
+      return {
+        ...nb,
+        bookmarks: isBookmarked
+          ? nb.bookmarks.filter(id => id !== activePage.id)
+          : [...nb.bookmarks, activePage.id]
+      };
+    }));
+  };
+
+  // Export state
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close export menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    if (showExportMenu) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
+
+  const handleExportPNG = async () => {
+    const el = document.querySelector('[data-export-target]') as HTMLElement;
+    if (!el) return;
+    try {
+      const canvas = await html2canvas(el, { backgroundColor: '#e5e5e5', scale: 2, useCORS: true });
+      const link = document.createElement('a');
+      link.download = `${activePage?.title || 'page'}-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      addToast('Page exported as PNG', 'success');
+    } catch {
+      addToast('Failed to export PNG', 'error');
+    }
+    setShowExportMenu(false);
+  };
+
+  const handlePrint = () => {
+    window.print();
+    setShowExportMenu(false);
+  };
+
+  // Undo handler for block deletion
+  const handleBlockDeleted = useCallback((block: Block, index: number) => {
+    addToast('Block deleted', 'undo', () => {
+      setNotebooks(prev => prev.map(nb => {
+        if (nb.id !== activeNotebookId) return nb;
+        return {
+          ...nb,
+          pages: nb.pages.map(p => {
+            if (p.id !== activePage?.id) return p;
+            const newBlocks = [...p.blocks];
+            newBlocks.splice(index, 0, block);
+            return { ...p, blocks: newBlocks };
+          })
+        };
+      }));
+    });
+  }, [activeNotebookId, activePage?.id, addToast]);
+
+  const handleCoverColorChange = (color: string) => {
+    setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? {...nb, coverColor: color} : nb));
+  };
+
+  const getPageAnimClass = () => {
+    if (pageDirection === 'left') return 'anim-slide-left';
+    if (pageDirection === 'right') return 'anim-slide-right';
+    return 'anim-content-swap';
+  };
+
+  // Filter notebooks by search
+  const filteredNotebooks = sidebarSearch
+    ? notebooks.filter(nb => nb.title.toLowerCase().includes(sidebarSearch.toLowerCase()))
+    : notebooks;
+
+  // Bookmarked pages for active notebook
+  const bookmarkedPages = activeNotebook
+    ? activeNotebook.pages.filter(p => activeNotebook.bookmarks.includes(p.id))
+    : [];
+
+  // Page indicator label
+  const getPageLabel = () => {
+    if (!activeNotebook) return '';
+    if (activePageIndex === -1) return 'Cover';
+    if (activePageIndex >= activeNotebook.pages.length) return 'End';
+    return `Page ${activePageIndex + 1} of ${activeNotebook.pages.length}`;
+  };
+
+  if (!activeNotebook) return null;
+
+  return (
+    <div className="flex h-screen w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in">
+      {/* Sidebar */}
+      <aside
+        className={`${isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'}
+        bg-[#1a1c23] text-gray-300 transition-all duration-300 ease-in-out flex flex-col border-r border-gray-800 absolute z-20 md:relative h-full shadow-2xl`}
+      >
+        <div className="p-6 flex items-center gap-3 text-white border-b border-gray-800/50">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+             <Book size={18} />
+          </div>
+          <span className="font-semibold text-lg tracking-tight">PaperGrid AI</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+          {/* Search */}
+          <div className="px-1 mb-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-2.5 text-gray-500" />
+              <input
+                className="w-full pl-9 pr-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-gray-600 transition-colors"
+                placeholder="Search notebooks..."
+                value={sidebarSearch}
+                onChange={(e) => setSidebarSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Notebooks</div>
+          {filteredNotebooks.map(nb => (
+            <button
+              key={nb.id}
+              onClick={() => handleSwitchNotebook(nb.id)}
+              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 ${
+                activeNotebookId === nb.id
+                  ? 'bg-gray-800 text-white shadow-md border border-gray-700'
+                  : 'hover:bg-gray-800/50 hover:text-gray-100'
+              }`}
+            >
+               <div className={`w-4 h-6 rounded-sm ${nb.coverColor} shadow-sm border border-white/10`} />
+               <div className="overflow-hidden flex-1">
+                 <div className="truncate font-medium text-sm">{nb.title || "Untitled"}</div>
+                 <div className="text-[10px] text-gray-500 mt-0.5">{nb.pages.length} spreads</div>
+               </div>
+               {nb.pages.some(p => p.aiGenerated) && (
+                 <Sparkles size={12} className="text-indigo-400 shrink-0" />
+               )}
+            </button>
+          ))}
+
+          {/* Bookmarks Section */}
+          {bookmarkedPages.length > 0 && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowBookmarks(!showBookmarks)}
+                className="w-full px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2 hover:text-gray-400 transition-colors"
+              >
+                <Bookmark size={12} />
+                <span>Bookmarks ({bookmarkedPages.length})</span>
+                <ChevronRight size={12} className={`ml-auto transition-transform ${showBookmarks ? 'rotate-90' : ''}`} />
+              </button>
+              {showBookmarks && (
+                <div className="space-y-0.5">
+                  {bookmarkedPages.map(p => {
+                    const pageIdx = activeNotebook.pages.findIndex(pg => pg.id === p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setPageDirection('right');
+                          setActivePageIndex(pageIdx);
+                          if (window.innerWidth < 768) setIsSidebarOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800/50 hover:text-gray-200 transition-colors flex items-center gap-2"
+                      >
+                        <Bookmark size={12} className="text-amber-500 shrink-0" fill="currentColor" />
+                        <span className="truncate">{p.title || `Spread ${pageIdx + 1}`}</span>
+                        {p.aiGenerated && <Sparkles size={10} className="text-indigo-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-gray-800/50 space-y-3">
+          <button
+             onClick={handleNewNotebook}
+             className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-medium border border-gray-700 transition-colors"
+          >
+             <Plus size={16} />
+             <span>New Notebook</span>
+          </button>
+          <button
+             onClick={() => navigate('/')}
+             className="w-full py-2 px-4 text-gray-500 hover:text-gray-300 rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors"
+          >
+             <Home size={14} />
+             <span>Back to Home</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 relative flex flex-col h-full overflow-hidden items-center justify-center p-4 md:p-12">
+        {/* Mobile Header / Sidebar Toggle */}
+        <div className="absolute top-4 left-4 z-30">
+           <button
+             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+             className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white transition-colors"
+             aria-label={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+             aria-expanded={isSidebarOpen}
+           >
+             <Menu size={20} />
+           </button>
+        </div>
+
+        {/* Navigation & Actions */}
+        <div className="absolute top-4 right-4 z-30 flex gap-2">
+           {activePage && (
+             <>
+               <button
+                 onClick={toggleBookmark}
+                 className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${
+                   activeNotebook.bookmarks.includes(activePage.id)
+                     ? 'bg-amber-100 border-amber-300 text-amber-600'
+                     : 'bg-white/80 border-gray-200 text-gray-700 hover:bg-white'
+                 }`}
+                 aria-label={activeNotebook.bookmarks.includes(activePage.id) ? 'Remove bookmark' : 'Bookmark page'}
+               >
+                 <Bookmark size={20} fill={activeNotebook.bookmarks.includes(activePage.id) ? "currentColor" : "none"} />
+               </button>
+               <button
+                 onClick={() => setIsGeneratorOpen(true)}
+                 className="py-2 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-medium shadow-lg shadow-indigo-900/50 transition-all transform hover:scale-[1.02]"
+               >
+                 <Sparkles size={16} />
+                 <span>AI Layout</span>
+               </button>
+               <div className="relative" ref={exportMenuRef}>
+                 <button
+                   onClick={() => setShowExportMenu(!showExportMenu)}
+                   className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white transition-colors"
+                   aria-label="Export page"
+                   aria-expanded={showExportMenu}
+                 >
+                   <Download size={20} />
+                 </button>
+                 {showExportMenu && (
+                   <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 py-1 min-w-[160px] z-50 anim-popover">
+                     <button
+                       onClick={handleExportPNG}
+                       className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                     >
+                       <Image size={16} className="text-gray-400" />
+                       Export as PNG
+                     </button>
+                     <button
+                       onClick={handlePrint}
+                       className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                     >
+                       <Printer size={16} className="text-gray-400" />
+                       Print / PDF
+                     </button>
+                   </div>
+                 )}
+               </div>
+             </>
+           )}
+        </div>
+
+        {/* Notebook Container */}
+        <div className="w-full max-w-6xl h-full flex flex-col items-center justify-center relative">
+
+           {/* Left Navigation Arrow */}
+           {activePageIndex >= 0 && (
+             <button
+               onClick={handlePageBack}
+               className="absolute left-0 md:-left-12 top-1/2 -translate-y-1/2 z-40 p-3 bg-white/80 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:-translate-x-1 hover:shadow-xl"
+               aria-label="Previous page"
+             >
+               <ChevronLeft size={24} />
+             </button>
+           )}
+
+           {/* The Book — animated wrapper */}
+           <div
+             key={`${activeNotebookId}-${activePageIndex}-${contentKey}`}
+             className={`w-full flex-1 max-h-[900px] relative ${getPageAnimClass()}`}
+             onAnimationEnd={() => setPageDirection(null)}
+           >
+             {activePageIndex === -1 ? (
+               /* Cover View — 3D with flat CSS fallback */
+               <div
+                 className="w-full max-w-2xl mx-auto h-full flex items-center justify-center transition-opacity duration-400"
+                 style={{ opacity: coverFading ? 0 : 1 }}
+               >
+                 <Suspense
+                   fallback={
+                     /* Flat CSS Cover (shown while 3D loads) */
+                     <div
+                       className={`w-full h-full max-h-[800px] ${activeNotebook.coverColor} rounded-r-3xl rounded-l-md shadow-2xl relative cursor-pointer group transition-transform duration-300 hover:scale-[1.01]`}
+                       onClick={activeNotebook.pages.length > 0 ? handleOpenCover : undefined}
+                     >
+                       <div className="absolute left-0 top-0 bottom-0 w-12 bg-black/20 rounded-l-md border-r border-white/10" />
+                       <div className="absolute left-10 top-0 bottom-0 w-px bg-white/20" />
+                       <div className="absolute inset-0 flex flex-col items-center justify-center p-8 md:p-12 text-center">
+                         <input
+                           className="bg-transparent text-white/90 text-4xl md:text-6xl font-serif font-bold text-center border-b border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full"
+                           value={activeNotebook.title}
+                           onChange={(e) => {
+                             setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? {...nb, title: e.target.value} : nb));
+                           }}
+                           onClick={(e) => e.stopPropagation()}
+                         />
+                         <div className="mt-6 text-white/60 font-sans tracking-widest uppercase text-sm">
+                           {activeNotebook.pages.length} Spreads
+                         </div>
+                         {activeNotebook.pages.length > 0 && (
+                           <div className="mt-8 opacity-0 group-hover:opacity-100 transition-opacity text-white/80 flex items-center gap-2 bg-black/20 px-4 py-2 rounded-full">
+                             <span>Click to open</span>
+                             <ChevronRight size={16} />
+                           </div>
+                         )}
+                       </div>
+                     </div>
+                   }
+                 >
+                   {/* 3D Book Cover + DOM overlay */}
+                   <div
+                     className="relative w-full h-full max-h-[800px] rounded-2xl"
+                     style={{ overflow: 'hidden' }}
+                   >
+                     <BookCoverScene
+                       coverColorClass={activeNotebook.coverColor}
+                       title={activeNotebook.title}
+                       pageCount={activeNotebook.pages.length}
+                       isOpening={isOpening}
+                       onOpenComplete={handleCoverOpenComplete}
+                     />
+                     {/* DOM overlay for title editing, color picker, CTA */}
+                     <div
+                       className="absolute inset-0 flex flex-col items-center justify-end pb-10 md:pb-14 px-8 text-center pointer-events-none"
+                       style={{ zIndex: 20 }}
+                     >
+                       <input
+                         className="pointer-events-auto bg-transparent text-white text-3xl md:text-5xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md"
+                         style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}
+                         value={activeNotebook.title}
+                         onChange={(e) => {
+                           setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? {...nb, title: e.target.value} : nb));
+                         }}
+                       />
+
+                       <div
+                         className="mt-3 text-white/50 font-sans tracking-widest uppercase text-xs"
+                         style={{ textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}
+                       >
+                         {activeNotebook.pages.length} Spreads
+                       </div>
+
+                       {/* Cover Color Picker */}
+                       <div className="pointer-events-auto flex items-center gap-1.5 mt-5 px-4 py-2.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
+                         <Palette size={14} className="text-white/50 mr-1" />
+                         {COVER_COLORS.map(color => (
+                           <button
+                             key={color}
+                             onClick={() => handleCoverColorChange(color)}
+                             className={`w-5 h-5 rounded-full ${color} border-2 transition-all duration-200 ${
+                               activeNotebook.coverColor === color
+                                 ? 'border-white scale-[1.35] shadow-lg shadow-white/20'
+                                 : 'border-white/20 hover:border-white/50 hover:scale-110'
+                             }`}
+                           />
+                         ))}
+                       </div>
+
+                       {activeNotebook.pages.length > 0 ? (
+                         !isOpening && (
+                           <button
+                             onClick={handleOpen3DCover}
+                             className="pointer-events-auto mt-6 text-white flex items-center gap-2.5 bg-indigo-600/80 hover:bg-indigo-500/90 backdrop-blur-sm px-7 py-3.5 rounded-2xl transition-all hover:scale-105 cursor-pointer font-medium shadow-xl shadow-indigo-900/30"
+                           >
+                             <BookOpen size={18} />
+                             <span>Open Notebook</span>
+                             <ChevronRight size={16} />
+                           </button>
+                         )
+                       ) : (
+                         /* Onboarding Templates */
+                         <div className="pointer-events-auto mt-6 w-full max-w-lg">
+                           <div className="text-white/50 text-xs font-sans uppercase tracking-widest mb-3">Get Started</div>
+                           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                             {STARTER_TEMPLATES.map(tpl => (
+                               <button
+                                 key={tpl.id}
+                                 onClick={() => handleNewPage(tpl.blocks as Block[])}
+                                 className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 transition-all text-left group/tpl"
+                               >
+                                 <tpl.icon size={18} className="text-white/60 group-hover/tpl:text-white/90 transition-colors mb-1.5" />
+                                 <div className="text-white/90 text-xs font-semibold">{tpl.title}</div>
+                                 <div className="text-white/40 text-[10px] mt-0.5">{tpl.desc}</div>
+                               </button>
+                             ))}
+                           </div>
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 </Suspense>
+               </div>
+             ) : activePage ? (
+               /* Spread View */
+               <NotebookView
+                 page={activePage}
+                 onUpdatePage={handleUpdatePage}
+                 allPages={activeNotebook.pages}
+                 onNavigate={(pageId) => {
+                   const idx = activeNotebook.pages.findIndex(p => p.id === pageId);
+                   if (idx !== -1) {
+                     setPageDirection(idx > activePageIndex ? 'right' : 'left');
+                     setActivePageIndex(idx);
+                   }
+                 }}
+                 onBlockDeleted={handleBlockDeleted}
+               />
+             ) : (
+               /* Empty State (End of book) */
+               <div className="w-full h-full flex flex-col items-center justify-center bg-white/50 backdrop-blur rounded-2xl border-2 border-dashed border-gray-300">
+                 <Book size={48} className="text-gray-300 mb-4" />
+                 <h3 className="text-xl font-medium text-gray-600 mb-2">End of Notebook</h3>
+                 <button
+                   onClick={() => handleNewPage()}
+                   className="py-2.5 px-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-2 font-medium shadow-md transition-colors"
+                 >
+                   <Plus size={18} /> Add New Spread
+                 </button>
+               </div>
+             )}
+           </div>
+
+           {/* Right Navigation Arrow */}
+           {activePageIndex !== -1 && activePageIndex < activeNotebook.pages.length && (
+             <button
+               onClick={handlePageForward}
+               className="absolute right-0 md:-right-12 top-1/2 -translate-y-1/2 z-40 p-3 bg-white/80 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:translate-x-1 hover:shadow-xl"
+               aria-label="Next page"
+             >
+               <ChevronRight size={24} />
+             </button>
+           )}
+
+           {/* Page Position Indicator */}
+           <div className="mt-3 flex items-center justify-center gap-3 shrink-0">
+             <span className="text-xs font-sans text-gray-400 uppercase tracking-widest">
+               {getPageLabel()}
+             </span>
+             {activeNotebook.pages.length > 0 && activeNotebook.pages.length <= 20 && (
+               <div className="flex items-center gap-1">
+                 {activeNotebook.pages.map((_, i) => (
+                   <button
+                     key={i}
+                     onClick={() => {
+                       setPageDirection(i > activePageIndex ? 'right' : 'left');
+                       setActivePageIndex(i);
+                     }}
+                     className={`w-1.5 h-1.5 rounded-full transition-all ${
+                       i === activePageIndex
+                         ? 'bg-indigo-500 scale-150'
+                         : 'bg-gray-300 hover:bg-gray-400'
+                     }`}
+                   />
+                 ))}
+               </div>
+             )}
+           </div>
+        </div>
+      </main>
+
+      <LayoutGenerator
+        isOpen={isGeneratorOpen}
+        onClose={() => setIsGeneratorOpen(false)}
+        onGenerate={handleAiGeneration}
+      />
+
+      {/* Toast Notification Container */}
+      {toasts.length > 0 && (
+        <div className="fixed top-6 right-6 z-[100] flex flex-col gap-3">
+          {toasts.map(toast => (
+            <Toast key={toast.id} toast={toast} onDismiss={dismissToast} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
