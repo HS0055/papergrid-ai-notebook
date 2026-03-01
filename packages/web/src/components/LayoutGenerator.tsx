@@ -8,13 +8,24 @@ interface LayoutGeneratorProps {
 }
 
 const AESTHETICS = [
+  { id: 'pastel', label: 'Pastel & Soft', icon: '\uD83C\uDF38', font: 'font-hand', blocks: ['HEADING', 'CHECKBOX', 'CHECKBOX', 'GRID', 'CALLOUT', 'MOOD_TRACKER'] },
   { id: 'modern-planner', label: 'Ultimate Planner', icon: '\uD83D\uDCF1', font: 'font-sans', blocks: ['HEADING', 'CHECKBOX', 'CHECKBOX', 'CHECKBOX', 'GRID', 'DIVIDER'] },
-  { id: 'e-ink', label: 'E-Ink Focus', icon: '\uD83D\uDCD3', font: 'font-sans', blocks: ['HEADING', 'TEXT', 'TEXT', 'DIVIDER', 'TEXT'] },
   { id: 'bujo', label: 'Bullet Journal', icon: '\u270D\uFE0F', font: 'font-hand', blocks: ['HEADING', 'CHECKBOX', 'CHECKBOX', 'TEXT', 'MOOD_TRACKER'] },
+  { id: 'rainbow', label: 'ADHD Rainbow', icon: '\uD83C\uDF08', font: 'font-hand', blocks: ['HEADING', 'CHECKBOX', 'CHECKBOX', 'PRIORITY_MATRIX', 'CALLOUT'] },
+  { id: 'e-ink', label: 'E-Ink Focus', icon: '\uD83D\uDCD3', font: 'font-sans', blocks: ['HEADING', 'TEXT', 'TEXT', 'DIVIDER', 'TEXT'] },
   { id: 'cornell', label: 'Cornell Notes', icon: '\uD83D\uDCDD', font: 'font-serif', blocks: ['HEADING', 'TEXT', 'CALLOUT', 'DIVIDER', 'TEXT'] },
 ];
 
-const SUGGESTIONS = ['Project Tracker', 'Lesson Plan', 'Workout Log', 'Meeting Minutes'];
+const SUGGESTIONS = [
+  'Weekly Planner',
+  'Daily Schedule',
+  'Habit Tracker',
+  'Meal Planner',
+  'Study Plan',
+  'Budget Tracker',
+  'Workout Log',
+  'Meeting Notes',
+];
 
 // Wireframe block labels for preview
 const BLOCK_PREVIEW: Record<string, { height: string; label: string; style: string }> = {
@@ -32,7 +43,7 @@ const BLOCK_PREVIEW: Record<string, { height: string; label: string; style: stri
 export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClose, onGenerate }) => {
   const [prompt, setPrompt] = useState('');
   const [industry, setIndustry] = useState('');
-  const [aesthetic, setAesthetic] = useState('modern-planner');
+  const [aesthetic, setAesthetic] = useState('pastel');
   const [isLoading, setIsLoading] = useState(false);
 
   const activeAesthetic = useMemo(() => AESTHETICS.find(a => a.id === aesthetic), [aesthetic]);
@@ -59,7 +70,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
       onClose();
       setPrompt('');
       setIndustry('');
-      setAesthetic('modern-planner');
+      setAesthetic('pastel');
     } catch (error) {
       // Error handling is done in parent
     } finally {
@@ -104,7 +115,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
 
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Aesthetic Style</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {AESTHETICS.map((style) => (
                   <button
                     key={style.id}
