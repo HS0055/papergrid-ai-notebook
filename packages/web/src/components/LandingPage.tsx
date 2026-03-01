@@ -206,14 +206,33 @@ export const LandingPage: React.FC = () => {
         {/* Content sections (above 3D canvas) */}
         <div className="relative z-10">
           <PaperStylesSection onLaunch={handleLaunch} />
+
+          {/* Gradient transition: PaperStyles (#fdfbf7) → AIFeature (#f8f6f3) */}
+          <div style={{ height: '40px', background: 'linear-gradient(to bottom, #fdfbf7, #f8f6f3)' }} />
+
           <AIFeatureSection onLaunch={handleLaunch} />
           <InlineTestimonials />
+
+          {/* Gradient transition: AIFeature/Testimonials → BlockTypesBento (#ffffff) */}
+          <div style={{ height: '40px', background: 'linear-gradient(to bottom, #f8f6f3, #ffffff)' }} />
+
           <BlockTypesBento onLaunch={handleLaunch} />
+
+          {/* Gradient transition: BlockTypesBento (#ffffff) → AestheticsSection (#F4F0EC) */}
+          <div style={{ height: '40px', background: 'linear-gradient(to bottom, #ffffff, #F4F0EC)' }} />
+
           <AestheticsSection onLaunch={handleLaunch} />
         </div>
       </div>
 
+      {/* Gradient transition: AestheticsSection (#F4F0EC) → FinalCTA (#0f111a) */}
+      <div style={{ height: '60px', background: 'linear-gradient(to bottom, #F4F0EC, #0f111a)' }} />
+
       <FinalCTA onLaunch={handleLaunch} />
+
+      {/* Subtle gradient transition: FinalCTA (#0f111a) → Footer (#0a0c14) */}
+      <div style={{ height: '20px', background: 'linear-gradient(to bottom, #0f111a, #0a0c14)' }} />
+
       <LandingFooter />
 
       {/* Floating CTA Bar (fixed position, outside content flow) */}

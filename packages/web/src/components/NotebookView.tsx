@@ -55,6 +55,8 @@ const ALL_BLOCK_TYPES: BlockType[] = [
   BlockType.TEXT, BlockType.HEADING, BlockType.CHECKBOX, BlockType.GRID,
   BlockType.CALLOUT, BlockType.QUOTE, BlockType.DIVIDER, BlockType.MOOD_TRACKER,
   BlockType.PRIORITY_MATRIX, BlockType.INDEX,
+  BlockType.CALENDAR, BlockType.WEEKLY_VIEW, BlockType.HABIT_TRACKER,
+  BlockType.GOAL_SECTION, BlockType.TIME_BLOCK, BlockType.DAILY_SECTION,
 ];
 
 const PAPER_BLOCK_MAP: Record<string, BlockType[]> = {
@@ -82,6 +84,12 @@ const BLOCK_BUTTON_CONFIG: Record<BlockType, { icon: React.ReactNode; label: str
   [BlockType.PRIORITY_MATRIX]: { icon: <LayoutGrid size={18} />, label: 'Matrix' },
   [BlockType.INDEX]: { icon: <List size={18} />, label: 'Index' },
   [BlockType.MUSIC_STAFF]: { icon: <Music size={18} />, label: 'Staff' },
+  [BlockType.CALENDAR]: { icon: <Calendar size={18} />, label: 'Calendar' },
+  [BlockType.WEEKLY_VIEW]: { icon: <CalendarDays size={18} />, label: 'Weekly' },
+  [BlockType.HABIT_TRACKER]: { icon: <CheckSquare size={18} />, label: 'Habits' },
+  [BlockType.GOAL_SECTION]: { icon: <Target size={18} />, label: 'Goals' },
+  [BlockType.TIME_BLOCK]: { icon: <Clock size={18} />, label: 'Schedule' },
+  [BlockType.DAILY_SECTION]: { icon: <Sun size={18} />, label: 'Daily' },
 };
 
 const SortableBlock: React.FC<{ id: string; children: (props: { dragHandleProps: Record<string, any>; style: React.CSSProperties; isDragging: boolean }) => React.ReactNode }> = ({ id, children }) => {

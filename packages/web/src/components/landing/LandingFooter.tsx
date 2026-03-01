@@ -3,7 +3,7 @@ import { Book, Github } from 'lucide-react';
 
 export const LandingFooter: React.FC = () => {
   return (
-    <footer style={{ background: 'var(--color-ink)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+    <footer style={{ background: '#0a0c14', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
       {/* Main footer */}
       <div className="max-w-7xl mx-auto px-6 py-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
