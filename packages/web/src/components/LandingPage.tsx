@@ -14,6 +14,8 @@ import { InlineTestimonials } from './landing/InlineTestimonials';
 import { FinalCTA } from './landing/FinalCTA';
 import { LandingFooter } from './landing/LandingFooter';
 import { FloatingCTABar } from './landing/FloatingCTABar';
+import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 // Lazy-load 3D components for code splitting
 const AmbientCanvas = lazy(() => import('./three/canvas/AmbientCanvas'));
@@ -27,6 +29,7 @@ export const LandingPage: React.FC = () => {
   const inkLineRef = useRef<HTMLDivElement>(null);
   const contentSectionsRef = useRef<HTMLDivElement>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const isMobile = useIsMobile();
 
   const handleLaunch = useCallback(() => {
     if (rootRef.current) {
@@ -60,31 +63,45 @@ export const LandingPage: React.FC = () => {
   useEffect(() => {
     // ── Hero GSAP animations (timeline + floating) ───────────
     const ctx = gsap.context(() => {
+      // Use fromTo (not from) to guarantee both start AND end states.
+      // gsap.from() can leave elements at opacity:0 after HMR reloads.
       const heroTl = gsap.timeline({ delay: 0.1 });
 
       heroTl
-        .from('.hero-badge', {
+        .fromTo('.hero-badge', {
           y: -20,
           opacity: 0,
+        }, {
+          y: 0,
+          opacity: 1,
           duration: 0.6,
           ease: 'power3.out',
         })
-        .from('.hero-word', {
+        .fromTo('.hero-word', {
           y: 80,
           opacity: 0,
+        }, {
+          y: 0,
+          opacity: 1,
           duration: 1,
           stagger: 0.15,
           ease: 'power4.out',
         }, '-=0.3')
-        .from('.hero-desc', {
+        .fromTo('.hero-desc', {
           y: 20,
           opacity: 0,
+        }, {
+          y: 0,
+          opacity: 1,
           duration: 0.8,
           ease: 'power3.out',
         }, '-=0.5')
-        .from('.hero-btns', {
+        .fromTo('.hero-btns', {
           y: 20,
           opacity: 0,
+        }, {
+          y: 0,
+          opacity: 1,
           duration: 0.8,
           ease: 'power3.out',
         }, '-=0.6');
@@ -190,18 +207,22 @@ export const LandingPage: React.FC = () => {
 
       {/* Content sections with ambient 3D background */}
       <div ref={contentSectionsRef} className="relative">
-        {/* Ambient 3D Canvas with floating papers (behind content) */}
-        <Suspense fallback={null}>
-          <AmbientCanvas
-            style={{
-              zIndex: 0,
-              top: 0,
-              height: '100%',
-            }}
-          >
-            <FloatingPapers scrollProgress={scrollProgress} />
-          </AmbientCanvas>
-        </Suspense>
+        {/* Ambient 3D Canvas with floating papers (behind content, desktop only) */}
+        {!isMobile && (
+          <Canvas3DErrorBoundary>
+            <Suspense fallback={null}>
+              <AmbientCanvas
+                style={{
+                  zIndex: 0,
+                  top: 0,
+                  height: '100%',
+                }}
+              >
+                <FloatingPapers scrollProgress={scrollProgress} />
+              </AmbientCanvas>
+            </Suspense>
+          </Canvas3DErrorBoundary>
+        )}
 
         {/* Content sections (above 3D canvas) */}
         <div className="relative z-10">

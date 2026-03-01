@@ -2,6 +2,8 @@ import React, { useRef, useEffect, Suspense, lazy, useState } from 'react';
 import { Sparkles, ChevronRight, Github } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { Canvas3DErrorBoundary } from '../three/Canvas3DErrorBoundary';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -15,11 +17,13 @@ interface HeroSectionProps {
 /**
  * Scroll-driven hero with 3 phases driven entirely by GSAP (no React state in scroll loop).
  * The 3D scene reads scroll progress from a shared ref inside useFrame — zero React re-renders.
+ * On mobile: disables 3D, shortens scroll, and uses simpler layout.
  */
 export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const pinContainerRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
+  const isMobile = useIsMobile();
 
   // Shared mutable ref — 3D scene reads this in useFrame, no React re-render needed
   const scrollRef = useRef({ progress: 0 });
@@ -33,6 +37,18 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
 
   useEffect(() => {
     if (!sectionRef.current || !pinContainerRef.current) return;
+
+    // Mobile: simpler animation - just fade in Phase 1, no scroll-driven phases
+    if (isMobile) {
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          phase1Ref.current,
+          { y: 30, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out', delay: 0.2 },
+        );
+      }, sectionRef);
+      return () => { ctx.revert(); };
+    }
 
     const ctx = gsap.context(() => {
       // Master ScrollTrigger: pins the hero and drives all animations
@@ -100,13 +116,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     return () => {
       ctx.revert();
     };
-  }, []);
+  }, [isMobile]);
 
   return (
     <section
       ref={sectionRef}
       className="hero-section relative"
-      style={{ minHeight: '300vh' }}
+      style={{ minHeight: isMobile ? '100vh' : '300vh' }}
     >
       {/* Scroll progress indicator — outside pin container to avoid jump */}
       <div
@@ -151,15 +167,19 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           }}
         />
 
-        {/* ── 3D Canvas: overlays entire section ── */}
-        <div
-          className="absolute inset-0"
-          style={{ zIndex: 5, pointerEvents: 'none' }}
-        >
-          <Suspense fallback={null}>
-            <HeroScene scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} />
-          </Suspense>
-        </div>
+        {/* ── 3D Canvas: overlays entire section (desktop only) ── */}
+        {!isMobile && (
+          <div
+            className="absolute inset-0"
+            style={{ zIndex: 5, pointerEvents: 'none' }}
+          >
+            <Canvas3DErrorBoundary>
+              <Suspense fallback={null}>
+                <HeroScene scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} />
+              </Suspense>
+            </Canvas3DErrorBoundary>
+          </div>
+        )}
 
         {/* ── Phase 1: Main headline ── */}
         <div
@@ -224,11 +244,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </p>
         </div>
 
-        {/* ── Phase 2: Feature callout (starts hidden) ── */}
+        {/* ── Phase 2: Feature callout (starts hidden, desktop only) ── */}
         <div
           ref={phase2Ref}
           className="absolute inset-0 flex items-center justify-center px-6"
-          style={{ zIndex: 20, opacity: 0 }}
+          style={{ zIndex: 20, opacity: 0, display: isMobile ? 'none' : undefined }}
         >
           <div className="text-center max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
@@ -255,11 +275,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </div>
         </div>
 
-        {/* ── Phase 3: Final CTA (starts hidden) ── */}
+        {/* ── Phase 3: Final CTA (starts hidden, desktop only) ── */}
         <div
           ref={phase3Ref}
           className="absolute inset-0 flex items-center justify-center px-6"
-          style={{ zIndex: 20, opacity: 0 }}
+          style={{ zIndex: 20, opacity: 0, display: isMobile ? 'none' : undefined }}
         >
           <div className="text-center max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
@@ -294,13 +314,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </div>
         </div>
 
-        {/* ── Notebook hover target ── */}
-        <div
-          className="relative w-full max-w-5xl mx-auto mt-16"
-          style={{ height: '420px', zIndex: 15 }}
-          onPointerEnter={() => setHovered(true)}
-          onPointerLeave={() => setHovered(false)}
-        />
+        {/* ── Notebook hover target (desktop only) ── */}
+        {!isMobile && (
+          <div
+            className="relative w-full max-w-5xl mx-auto mt-16"
+            style={{ height: '420px', zIndex: 15 }}
+            onPointerEnter={() => setHovered(true)}
+            onPointerLeave={() => setHovered(false)}
+          />
+        )}
       </div>
     </section>
   );

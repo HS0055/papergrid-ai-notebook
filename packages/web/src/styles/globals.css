@@ -517,6 +517,23 @@
 }
 
 /* ========================================
+   HERO VISIBILITY SAFETY NET
+   If GSAP fails or HMR corrupts state, hero content
+   still becomes visible after 1.5s via CSS animation.
+   ======================================== */
+
+@keyframes heroSafetyFadeIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-badge,
+.hero-word,
+.hero-desc,
+.hero-btns {
+  animation: heroSafetyFadeIn 0.5s ease-out 1.5s both;
+}
+
+/* ========================================
    PREFERS REDUCED MOTION
    ======================================== */
 
