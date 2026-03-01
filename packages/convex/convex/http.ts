@@ -21,6 +21,12 @@ interface CompactBlock {
   moodValue?: number;
   matrixData?: { q1: string; q2: string; q3: string; q4: string };
   checked?: boolean;
+  calendarData?: { month: number; year: number; highlights?: number[] };
+  weeklyViewData?: { startDate?: string; days: Array<{ label: string; content: string }> };
+  habitTrackerData?: { habits: string[]; days: number; checked: boolean[][] };
+  goalSectionData?: { goals: Array<{ text: string; subItems: Array<{ text: string; checked: boolean }>; progress?: number }> };
+  timeBlockData?: { startHour: number; endHour: number; interval: number; entries: Array<{ time: string; content: string; color?: string }> };
+  dailySectionData?: { date?: string; dayLabel?: string; sections: Array<{ label: string; content: string }> };
 }
 
 interface CompactReference {
@@ -443,8 +449,13 @@ ${referenceExamples}
 11. Use PRIORITY_MATRIX for task management, project planning, and Eisenhower matrix layouts. Fill matrixData q1-q4 with relevant starter text.
 12. Pre-populate GRID blocks with realistic column headers and example rows relevant to the user's request.
 13. For CHECKBOX blocks, set checked to false by default.
+14. For "planner", "schedule", or "weekly" requests: use WEEKLY_VIEW blocks for day-spread views and CALENDAR for mini month calendars. Pre-populate weeklyViewData.days with 7 days (Monday-Sunday) with content hints. For CALENDAR, set calendarData month/year to the current month based on ${currentDate}.
+15. For "habit", "tracker", or "routine" requests: use HABIT_TRACKER blocks. Pre-populate habitTrackerData.habits with 5-7 relevant habits and set days to 7 (weekly) or 30 (monthly). Initialize checked as a 2D boolean array (all false).
+16. For "goals", "objectives", or "project" requests: use GOAL_SECTION blocks. Pre-populate goalSectionData.goals with 3-4 relevant goals, each with 2-3 sub-items (checked: false).
+17. For "daily", "schedule", or "time" requests: use TIME_BLOCK for hourly schedules (set startHour/endHour/interval and entries) and DAILY_SECTION for structured day views (set sections with "Morning", "Afternoon", "Evening" labels).
+18. IMPORTANT: Prefer the new specialized planner types over GRID workarounds. Use WEEKLY_VIEW instead of a 7-row GRID for weekly schedules. Use HABIT_TRACKER instead of a habits-in-columns GRID. Use TIME_BLOCK instead of a time-slot GRID.
 
-Return a JSON object with: title (string), paperType (enum), themeColor (enum), blocks (array of block objects with type, content, alignment, emphasis, color, side, gridData, moodValue, matrixData, checked).`;
+Return a JSON object with: title (string), paperType (enum), themeColor (enum), blocks (array of block objects with type, content, alignment, emphasis, color, side, gridData, moodValue, matrixData, checked, calendarData, weeklyViewData, habitTrackerData, goalSectionData, timeBlockData, dailySectionData).`;
 
       const geminiPayload = {
         contents: [
@@ -477,7 +488,7 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
                   properties: {
                     type: {
                       type: "STRING",
-                      enum: ["TEXT", "HEADING", "GRID", "CHECKBOX", "CALLOUT", "QUOTE", "DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "INDEX"],
+                      enum: ["TEXT", "HEADING", "GRID", "CHECKBOX", "CALLOUT", "QUOTE", "DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "INDEX", "MUSIC_STAFF", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION"],
                     },
                     content: { type: "STRING" },
                     alignment: { type: "STRING", enum: ["left", "center", "right"] },
@@ -510,6 +521,108 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
                       nullable: true,
                     },
                     checked: { type: "BOOLEAN", nullable: true },
+                    calendarData: {
+                      type: "OBJECT",
+                      properties: {
+                        month: { type: "NUMBER" },
+                        year: { type: "NUMBER" },
+                        highlights: { type: "ARRAY", items: { type: "NUMBER" } },
+                      },
+                      nullable: true,
+                    },
+                    weeklyViewData: {
+                      type: "OBJECT",
+                      properties: {
+                        startDate: { type: "STRING" },
+                        days: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              label: { type: "STRING" },
+                              content: { type: "STRING" },
+                            },
+                          },
+                        },
+                      },
+                      nullable: true,
+                    },
+                    habitTrackerData: {
+                      type: "OBJECT",
+                      properties: {
+                        habits: { type: "ARRAY", items: { type: "STRING" } },
+                        days: { type: "NUMBER" },
+                        checked: {
+                          type: "ARRAY",
+                          items: { type: "ARRAY", items: { type: "BOOLEAN" } },
+                        },
+                      },
+                      nullable: true,
+                    },
+                    goalSectionData: {
+                      type: "OBJECT",
+                      properties: {
+                        goals: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              text: { type: "STRING" },
+                              subItems: {
+                                type: "ARRAY",
+                                items: {
+                                  type: "OBJECT",
+                                  properties: {
+                                    text: { type: "STRING" },
+                                    checked: { type: "BOOLEAN" },
+                                  },
+                                },
+                              },
+                              progress: { type: "NUMBER" },
+                            },
+                          },
+                        },
+                      },
+                      nullable: true,
+                    },
+                    timeBlockData: {
+                      type: "OBJECT",
+                      properties: {
+                        startHour: { type: "NUMBER" },
+                        endHour: { type: "NUMBER" },
+                        interval: { type: "NUMBER" },
+                        entries: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              time: { type: "STRING" },
+                              content: { type: "STRING" },
+                              color: { type: "STRING" },
+                            },
+                          },
+                        },
+                      },
+                      nullable: true,
+                    },
+                    dailySectionData: {
+                      type: "OBJECT",
+                      properties: {
+                        date: { type: "STRING" },
+                        dayLabel: { type: "STRING" },
+                        sections: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              label: { type: "STRING" },
+                              content: { type: "STRING" },
+                            },
+                          },
+                        },
+                      },
+                      nullable: true,
+                    },
                   },
                   required: ["type", "content"],
                 },
@@ -590,6 +703,108 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
         };
       };
 
+      const parseCalendarData = (raw: unknown) => {
+        if (!raw || typeof raw !== "object") return undefined;
+        const cal = raw as Record<string, unknown>;
+        return {
+          month: typeof cal.month === "number" ? cal.month : new Date().getMonth() + 1,
+          year: typeof cal.year === "number" ? cal.year : new Date().getFullYear(),
+          highlights: Array.isArray(cal.highlights) ? cal.highlights.filter((n: unknown) => typeof n === "number") : [],
+        };
+      };
+
+      const parseWeeklyViewData = (raw: unknown) => {
+        if (!raw || typeof raw !== "object") return undefined;
+        const wv = raw as Record<string, unknown>;
+        const days = Array.isArray(wv.days)
+          ? wv.days.map((d: unknown) => {
+              const day = d as Record<string, unknown>;
+              return {
+                label: typeof day.label === "string" ? day.label : "",
+                content: typeof day.content === "string" ? day.content : "",
+              };
+            })
+          : [
+              { label: "Monday", content: "" }, { label: "Tuesday", content: "" },
+              { label: "Wednesday", content: "" }, { label: "Thursday", content: "" },
+              { label: "Friday", content: "" }, { label: "Saturday", content: "" },
+              { label: "Sunday", content: "" },
+            ];
+        return { startDate: typeof wv.startDate === "string" ? wv.startDate : undefined, days };
+      };
+
+      const parseHabitTrackerData = (raw: unknown) => {
+        if (!raw || typeof raw !== "object") return undefined;
+        const ht = raw as Record<string, unknown>;
+        const habits = Array.isArray(ht.habits) ? ht.habits.filter((h: unknown) => typeof h === "string") as string[] : [];
+        const days = typeof ht.days === "number" ? ht.days : 7;
+        const checked = Array.isArray(ht.checked)
+          ? ht.checked.map((row: unknown) =>
+              Array.isArray(row) ? row.map((v: unknown) => v === true) : new Array(days).fill(false)
+            )
+          : habits.map(() => new Array(days).fill(false));
+        return { habits, days, checked };
+      };
+
+      const parseGoalSectionData = (raw: unknown) => {
+        if (!raw || typeof raw !== "object") return undefined;
+        const gs = raw as Record<string, unknown>;
+        const goals = Array.isArray(gs.goals)
+          ? gs.goals.map((g: unknown) => {
+              const goal = g as Record<string, unknown>;
+              return {
+                text: typeof goal.text === "string" ? goal.text : "",
+                subItems: Array.isArray(goal.subItems)
+                  ? goal.subItems.map((si: unknown) => {
+                      const sub = si as Record<string, unknown>;
+                      return { text: typeof sub.text === "string" ? sub.text : "", checked: sub.checked === true };
+                    })
+                  : [],
+                progress: typeof goal.progress === "number" ? goal.progress : undefined,
+              };
+            })
+          : [];
+        return { goals };
+      };
+
+      const parseTimeBlockData = (raw: unknown) => {
+        if (!raw || typeof raw !== "object") return undefined;
+        const tb = raw as Record<string, unknown>;
+        return {
+          startHour: typeof tb.startHour === "number" ? tb.startHour : 8,
+          endHour: typeof tb.endHour === "number" ? tb.endHour : 18,
+          interval: (tb.interval === 30 ? 30 : 60) as 30 | 60,
+          entries: Array.isArray(tb.entries)
+            ? tb.entries.map((e: unknown) => {
+                const entry = e as Record<string, unknown>;
+                return {
+                  time: typeof entry.time === "string" ? entry.time : "",
+                  content: typeof entry.content === "string" ? entry.content : "",
+                  color: typeof entry.color === "string" ? entry.color : undefined,
+                };
+              })
+            : [],
+        };
+      };
+
+      const parseDailySectionData = (raw: unknown) => {
+        if (!raw || typeof raw !== "object") return undefined;
+        const ds = raw as Record<string, unknown>;
+        return {
+          date: typeof ds.date === "string" ? ds.date : undefined,
+          dayLabel: typeof ds.dayLabel === "string" ? ds.dayLabel : undefined,
+          sections: Array.isArray(ds.sections)
+            ? ds.sections.map((s: unknown) => {
+                const section = s as Record<string, unknown>;
+                return {
+                  label: typeof section.label === "string" ? section.label : "",
+                  content: typeof section.content === "string" ? section.content : "",
+                };
+              })
+            : [{ label: "Morning", content: "" }, { label: "Afternoon", content: "" }, { label: "Evening", content: "" }],
+        };
+      };
+
       const blocks = (layoutData.blocks || []).map(
         (b: Record<string, unknown>, index: number) => ({
           id: generateId(),
@@ -610,6 +825,30 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
               ? parseMatrixData(b.matrixData) || { q1: "", q2: "", q3: "", q4: "" }
               : undefined,
           gridData: parseGridData(b.gridData),
+          calendarData:
+            b.type === "CALENDAR"
+              ? parseCalendarData(b.calendarData) || { month: new Date().getMonth() + 1, year: new Date().getFullYear(), highlights: [] }
+              : undefined,
+          weeklyViewData:
+            b.type === "WEEKLY_VIEW"
+              ? parseWeeklyViewData(b.weeklyViewData)
+              : undefined,
+          habitTrackerData:
+            b.type === "HABIT_TRACKER"
+              ? parseHabitTrackerData(b.habitTrackerData)
+              : undefined,
+          goalSectionData:
+            b.type === "GOAL_SECTION"
+              ? parseGoalSectionData(b.goalSectionData)
+              : undefined,
+          timeBlockData:
+            b.type === "TIME_BLOCK"
+              ? parseTimeBlockData(b.timeBlockData)
+              : undefined,
+          dailySectionData:
+            b.type === "DAILY_SECTION"
+              ? parseDailySectionData(b.dailySectionData)
+              : undefined,
         })
       );
 
