@@ -1,0 +1,19 @@
+{
+  "name": "papergrid",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "dev:web": "turbo dev --filter=@papergrid/web",
+    "dev:convex": "turbo dev --filter=@papergrid/convex",
+    "build:web": "turbo build --filter=@papergrid/web"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  },
+  "packageManager": "npm@10.0.0"
+}

@@ -1,0 +1,299 @@
+@import "tailwindcss";
+
+/* ========================================
+   PAPERGRID THEME - Tailwind v4
+   ======================================== */
+
+@theme {
+  --color-paper: #fdfbf7;
+  --color-paper-dark: #f3f0e8;
+  --color-line: #cbd5e1;
+  --color-line-strong: #94a3b8;
+
+  /* Landing page design tokens */
+  --color-parchment: #F4F0EC;
+  --color-ink: #1a1c23;
+  --color-leather: #926644;
+  --color-amber-gold: #d97706;
+  --color-indigo-brand: #4f46e5;
+
+  --font-hand: "Patrick Hand", cursive;
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Playfair Display", serif;
+  --font-marker: "Caveat", cursive;
+}
+
+/* ========================================
+   CUSTOM SCROLLBAR
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-line-strong);
+}
+
+/* ========================================
+   PAPER PATTERNS - 32px vertical rhythm
+   ======================================== */
+
+.paper-lines {
+  background-color: var(--color-paper);
+  background-image: linear-gradient(transparent 31px, var(--color-line) 31px);
+  background-size: 100% 32px;
+  background-attachment: local;
+}
+
+.paper-grid {
+  background-color: var(--color-paper);
+  background-image:
+    linear-gradient(var(--color-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: 0 -1px;
+}
+
+.paper-dots {
+  background-color: var(--color-paper);
+  background-image: radial-gradient(var(--color-line-strong) 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
+  background-position: 16px 16px;
+}
+
+.paper-music {
+  background-color: var(--color-paper);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 8px,
+    var(--color-line) 8px,
+    var(--color-line) 9px,
+    transparent 9px,
+    transparent 17px,
+    var(--color-line) 17px,
+    var(--color-line) 18px,
+    transparent 18px,
+    transparent 26px,
+    var(--color-line) 26px,
+    var(--color-line) 27px,
+    transparent 27px,
+    transparent 35px,
+    var(--color-line) 35px,
+    var(--color-line) 36px,
+    transparent 36px,
+    transparent 44px,
+    var(--color-line) 44px,
+    var(--color-line) 45px,
+    transparent 45px,
+    transparent 128px
+  );
+  background-attachment: local;
+}
+
+.paper-rows {
+  background-color: var(--color-paper);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 31px,
+    var(--color-line) 31px,
+    var(--color-line) 32px,
+    #f8fafc 32px,
+    #f8fafc 63px,
+    var(--color-line) 63px,
+    var(--color-line) 64px
+  );
+  background-attachment: local;
+}
+
+.paper-isometric {
+  background-color: var(--color-paper);
+  background-image: url("data:image/svg+xml,%3Csvg width='32' height='55.42' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M32 9.237L0 27.71m0-18.473l32 18.473M16 0v55.42' stroke='%23cbd5e1' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-size: 32px 55.42px;
+  background-attachment: local;
+}
+
+.paper-hex {
+  background-color: var(--color-paper);
+  background-image: url("data:image/svg+xml,%3Csvg width='56' height='98' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 16L0 32v32l28 16 28-16V32zm0 82v-32m-28-16l28 16 28-16' stroke='%23cbd5e1' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-size: 56px 98px;
+  background-attachment: local;
+}
+
+.paper-legal {
+  background-color: #fbf0d9;
+  background-image:
+    linear-gradient(90deg, transparent 59px, #f87171 59px, #f87171 61px, transparent 61px),
+    linear-gradient(transparent 31px, var(--color-line) 31px);
+  background-size: 100% 100%, 100% 32px;
+  background-attachment: local;
+}
+
+.paper-crumpled {
+  background-color: var(--color-paper);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.04' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+  background-attachment: fixed;
+}
+
+/* ========================================
+   PAPER BASE
+   ======================================== */
+
+.bg-paper {
+  background-color: var(--color-paper);
+}
+
+/* ========================================
+   LANDING PAGE UTILITIES
+   ======================================== */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@utility landing-section-pad {
+  padding-top: 6rem;
+  padding-bottom: 6rem;
+}
+
+@utility text-ink {
+  color: var(--color-ink);
+}
+
+@utility bg-parchment {
+  background-color: var(--color-parchment);
+}
+
+@utility bg-ink {
+  background-color: var(--color-ink);
+}
+
+/* ========================================
+   SCROLL REVEAL SYSTEM (IntersectionObserver)
+   ======================================== */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal[data-revealed="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-scale {
+  opacity: 0;
+  transform: scale(0.88);
+  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-scale[data-revealed="true"] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.reveal-left {
+  opacity: 0;
+  transform: translateX(-32px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-left[data-revealed="true"] {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.reveal-right {
+  opacity: 0;
+  transform: translateX(32px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-right[data-revealed="true"] {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ========================================
+   TRANSITION ANIMATIONS
+   ======================================== */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.97) translateY(-12px); }
+}
+
+@keyframes slideInFromLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInFromRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes contentSwap {
+  0%   { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.anim-fade-in {
+  animation: fadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-fade-out {
+  animation: fadeOut 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-slide-left {
+  animation: slideInFromLeft 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-slide-right {
+  animation: slideInFromRight 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-content-swap {
+  animation: contentSwap 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ========================================
+   TOAST NOTIFICATIONS
+   ======================================== */
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateY(-12px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes toastSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-12px) scale(0.95); }
+}
+
+.toast-enter {
+  animation: toastSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.toast-exit {
+  animation: toastSlideOut 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
