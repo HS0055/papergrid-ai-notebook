@@ -13,7 +13,7 @@ interface LandingCanvasProps {
   style?: React.CSSProperties;
   /** Whether to enable shadows */
   shadows?: boolean;
-  /** Post-processing preset */
+  /** Post-processing preset (undefined = no post-processing) */
   postPreset?: 'landing' | 'dramatic' | 'subtle';
   /** Lighting preset */
   lightPreset?: 'landing' | 'warm' | 'dramatic';
@@ -23,6 +23,8 @@ interface LandingCanvasProps {
   cameraPosition?: [number, number, number];
   /** Whether this canvas overlays DOM content (transparent background) */
   overlay?: boolean;
+  /** Mobile low-power mode: caps DPR at 1, disables antialiasing */
+  mobileLowPower?: boolean;
 }
 
 /**
@@ -50,15 +52,17 @@ export default function LandingCanvas({
   fov = 45,
   cameraPosition = [0, 2, 8],
   overlay = false,
+  mobileLowPower = false,
 }: LandingCanvasProps) {
   const [dpr, setDpr] = useState(1.5);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Adjust DPR based on device pixel ratio (cap at 1.5 for performance)
+  // Mobile: cap DPR at 1.0 for GPU savings. Desktop: cap at 1.5.
   useEffect(() => {
-    const deviceDpr = Math.min(window.devicePixelRatio, 1.5);
+    const maxDpr = mobileLowPower ? 1.0 : 1.5;
+    const deviceDpr = Math.min(window.devicePixelRatio, maxDpr);
     setDpr(deviceDpr);
-  }, []);
+  }, [mobileLowPower]);
 
   return (
     <div
@@ -75,11 +79,11 @@ export default function LandingCanvas({
       <Canvas
         dpr={dpr}
         gl={{
-          antialias: true,
+          antialias: !mobileLowPower,
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.1,
           alpha: overlay,
-          powerPreference: 'high-performance',
+          powerPreference: mobileLowPower ? 'low-power' : 'high-performance',
         }}
         camera={{
           fov,
@@ -103,8 +107,8 @@ export default function LandingCanvas({
           {/* Scene content */}
           {children}
 
-          {/* Post-processing */}
-          <PostEffects preset={postPreset} />
+          {/* Post-processing (skipped on mobile / when no preset) */}
+          {postPreset && <PostEffects preset={postPreset} />}
 
           {/* Preload all assets */}
           <Preload all />

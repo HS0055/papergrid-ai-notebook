@@ -17,6 +17,8 @@ interface HeroNotebookProps {
   hovered?: boolean;
   /** Shared ref with normalized cursor position (-1 to 1) */
   cursorRef?: React.RefObject<{ x: number; y: number }>;
+  /** Mobile mode: lower textures, no cursor tilt, simpler animation */
+  isMobile?: boolean;
 }
 
 /**
@@ -24,7 +26,7 @@ interface HeroNotebookProps {
  * Lightweight version - no heavy canvas textures for performance.
  * Book opens as user scrolls, shows paper textures inside.
  */
-export function HeroNotebook({ scrollRef, hovered = false, cursorRef }: HeroNotebookProps) {
+export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile = false }: HeroNotebookProps) {
   const groupRef = useRef<THREE.Group>(null);
   const frontCoverRef = useRef<THREE.Group>(null);
   const targetOpen = useRef(0);
@@ -33,10 +35,11 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef }: HeroNote
   const currentCursorY = useRef(0);
   const currentHoverScale = useRef(1);
 
-  // Materials
+  // Materials — mobile uses lower resolution textures
+  const texRes = isMobile ? 256 : 512;
   const coverMaterial = useCoverMaterial('leather', '#1e1b4b');
-  const leftPageMaterial = usePaperMaterial({ paperType: 'lined', resolution: 512 });
-  const rightPageMaterial = usePaperMaterial({ paperType: 'dotted', resolution: 512 });
+  const leftPageMaterial = usePaperMaterial({ paperType: 'lined', resolution: texRes });
+  const rightPageMaterial = usePaperMaterial({ paperType: 'dotted', resolution: texRes });
 
   // Page edge material
   const pageEdgeMat = useMemo(() => new THREE.MeshStandardMaterial({
@@ -103,8 +106,10 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef }: HeroNote
     const scrollProgress = scrollRef.current?.progress ?? 0;
 
     // Map scroll to book open: starts at 5%, fully open by 40%
-    // Earlier start + wider range = book opens sooner and more gradually
-    const openTarget = THREE.MathUtils.clamp((scrollProgress - 0.05) / 0.35, 0, 1);
+    // Mobile: book stays slightly open (no scroll-driven pinning)
+    const openTarget = isMobile
+      ? 0.25 // Fixed slight open on mobile — shows pages peeking
+      : THREE.MathUtils.clamp((scrollProgress - 0.05) / 0.35, 0, 1);
     targetOpen.current = openTarget;
 
     // Fast responsive lerp: ~18% catch-up per frame at 60fps (was ~5%)
@@ -118,15 +123,19 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef }: HeroNote
 
     const open = currentOpen.current;
 
-    // ── Cursor tilt (fades as book opens) ──
-    const rawCursorX = cursorRef?.current?.x ?? 0;
-    const rawCursorY = cursorRef?.current?.y ?? 0;
-    currentCursorX.current = THREE.MathUtils.lerp(currentCursorX.current, rawCursorX, lerpFactor);
-    currentCursorY.current = THREE.MathUtils.lerp(currentCursorY.current, rawCursorY, lerpFactor);
+    // ── Cursor tilt (fades as book opens, disabled on mobile) ──
+    let cursorTiltX = 0;
+    let cursorTiltY = 0;
+    if (!isMobile) {
+      const rawCursorX = cursorRef?.current?.x ?? 0;
+      const rawCursorY = cursorRef?.current?.y ?? 0;
+      currentCursorX.current = THREE.MathUtils.lerp(currentCursorX.current, rawCursorX, lerpFactor);
+      currentCursorY.current = THREE.MathUtils.lerp(currentCursorY.current, rawCursorY, lerpFactor);
 
-    const cursorWeight = Math.max(0, 1 - open * 2); // fades by 50% open
-    const cursorTiltX = currentCursorY.current * 0.08 * cursorWeight;
-    const cursorTiltY = currentCursorX.current * 0.12 * cursorWeight;
+      const cursorWeight = Math.max(0, 1 - open * 2); // fades by 50% open
+      cursorTiltX = currentCursorY.current * 0.08 * cursorWeight;
+      cursorTiltY = currentCursorX.current * 0.12 * cursorWeight;
+    }
 
     // Hover scale
     const targetHoverScale = hovered ? 1.03 : 1.0;
@@ -162,15 +171,18 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef }: HeroNote
     groupRef.current.position.y = exitDrift;
 
     // Fade all materials via traverse (only ~8 meshes, lightweight)
-    groupRef.current.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mat = (child as THREE.Mesh).material;
-        if (mat && !Array.isArray(mat)) {
-          (mat as THREE.MeshStandardMaterial).transparent = true;
-          (mat as THREE.MeshStandardMaterial).opacity = exitOpacity;
+    // On mobile: skip exit fade (no scroll-driven phases) to save GPU cycles
+    if (!isMobile) {
+      groupRef.current.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mat = (child as THREE.Mesh).material;
+          if (mat && !Array.isArray(mat)) {
+            (mat as THREE.MeshStandardMaterial).transparent = true;
+            (mat as THREE.MeshStandardMaterial).opacity = exitOpacity;
+          }
         }
-      }
-    });
+      });
+    }
   });
 
   const hw = BOOK_WIDTH / 2;
@@ -178,9 +190,9 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef }: HeroNote
 
   return (
     <Float
-      speed={1.2}
-      rotationIntensity={0.06}
-      floatIntensity={0.2}
+      speed={isMobile ? 0.8 : 1.2}
+      rotationIntensity={isMobile ? 0.03 : 0.06}
+      floatIntensity={isMobile ? 0.1 : 0.2}
       floatingRange={[-0.03, 0.03]}
     >
       <group position={[0.5, -0.5, 0]}>

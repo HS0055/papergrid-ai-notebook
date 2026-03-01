@@ -167,19 +167,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           }}
         />
 
-        {/* ── 3D Canvas: overlays entire section (desktop only) ── */}
-        {!isMobile && (
-          <div
-            className="absolute inset-0"
-            style={{ zIndex: 5, pointerEvents: 'none' }}
-          >
-            <Canvas3DErrorBoundary>
-              <Suspense fallback={null}>
-                <HeroScene scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} />
-              </Suspense>
-            </Canvas3DErrorBoundary>
-          </div>
-        )}
+        {/* ── 3D Canvas: overlays entire section ── */}
+        <div
+          className="absolute inset-0"
+          style={{ zIndex: 5, pointerEvents: 'none' }}
+        >
+          <Canvas3DErrorBoundary>
+            <Suspense fallback={null}>
+              <HeroScene scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} isMobile={isMobile} />
+            </Suspense>
+          </Canvas3DErrorBoundary>
+        </div>
 
         {/* ── Phase 1: Main headline ── */}
         <div
