@@ -14,6 +14,8 @@ interface BlockProps {
   selectedPitch?: { pitch: string; octave: number } | null;
   selectedDuration?: 'whole' | 'half' | 'quarter' | 'eighth';
   dragHandleProps?: Record<string, any>;
+  onPenScratch?: () => void;
+  onCheckboxClick?: () => void;
 }
 
 const getAccentColor = (color?: string): string => {
@@ -61,7 +63,7 @@ const getEmphasisClass = (emphasis?: string, colorClasses?: any) => {
   }
 };
 
-export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete, focused, allPages, onNavigate, onInsertAfter, selectedPitch, selectedDuration, dragHandleProps }) => {
+export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete, focused, allPages, onNavigate, onInsertAfter, selectedPitch, selectedDuration, dragHandleProps, onPenScratch, onCheckboxClick }) => {
   const textRef = useRef<HTMLTextAreaElement>(null);
   const calloutRef = useRef<HTMLTextAreaElement>(null);
   const quoteRef = useRef<HTMLTextAreaElement>(null);
@@ -103,6 +105,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(block.id, { content: e.target.value });
+    onPenScratch?.();
   };
 
   const handleGridCellChange = (rowIndex: number, cellIndex: number, value: string) => {
@@ -145,7 +148,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
               }`}
               style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '7px' }}
               value={block.content}
-              onChange={(e) => onChange(block.id, { content: e.target.value })}
+              onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
               placeholder="Section Heading..."
             />
           </div>
@@ -176,7 +179,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             <input
               type="checkbox"
               checked={block.checked}
-              onChange={(e) => onChange(block.id, { checked: e.target.checked })}
+              onChange={(e) => { onChange(block.id, { checked: e.target.checked }); onCheckboxClick?.(); }}
               className="w-5 h-5 cursor-pointer rounded border-gray-400"
               style={{ position: 'relative', top: '9px', accentColor: getAccentColor(block.color) }}
             />
@@ -184,7 +187,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
                className={`flex-1 bg-transparent font-hand text-xl text-gray-800 focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${emphasisClass}`}
                style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '9px' }}
                value={block.content}
-               onChange={(e) => onChange(block.id, { content: e.target.value })}
+               onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
                onKeyDown={handleKeyDown}
                placeholder="To-do item"
             />

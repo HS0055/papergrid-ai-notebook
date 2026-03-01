@@ -8,12 +8,21 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from '@dnd-kit/utilities';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 
+interface SoundCallbacks {
+  penScratch: () => void;
+  checkboxClick: () => void;
+  blockAdd: () => void;
+  blockDelete: () => void;
+  dragRustle: () => void;
+}
+
 interface NotebookViewProps {
   page: NotebookPage;
   onUpdatePage: (updatedPage: NotebookPage) => void;
   allPages?: NotebookPage[];
   onNavigate?: (pageId: string) => void;
   onBlockDeleted?: (block: Block, index: number) => void;
+  sounds?: SoundCallbacks;
 }
 
 const PAPER_TYPES = [
@@ -91,7 +100,7 @@ const SortableBlock: React.FC<{ id: string; children: (props: { dragHandleProps:
   );
 };
 
-export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, allPages, onNavigate, onBlockDeleted }) => {
+export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, allPages, onNavigate, onBlockDeleted, sounds }) => {
   const [openMenu, setOpenMenu] = useState<'left' | 'right' | null>(null);
   const [showPaperPicker, setShowPaperPicker] = useState(false);
   const [mobileSide, setMobileSide] = useState<'left' | 'right'>('left');
@@ -141,6 +150,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
     }
     const newBlocks = page.blocks.filter(b => b.id !== id);
     onUpdatePage({ ...page, blocks: newBlocks });
+    sounds?.blockDelete();
   };
 
   const addBlock = (type: BlockType, side: 'left' | 'right') => {
@@ -169,6 +179,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
     setFocusedBlockId(newBlock.id);
     onUpdatePage({ ...page, blocks: [...page.blocks, newBlock] });
     setOpenMenu(null);
+    sounds?.blockAdd();
   };
 
   const insertBlockAfter = (afterBlockId: string, type: BlockType, side: 'left' | 'right') => {
@@ -186,6 +197,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
     setNewBlockId(newBlock.id);
     setFocusedBlockId(newBlock.id);
     onUpdatePage({ ...page, blocks: newBlocks });
+    sounds?.blockAdd();
   };
 
   const handleEmptySpaceClick = (e: React.MouseEvent, side: 'left' | 'right') => {
@@ -211,6 +223,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
 
     const reordered = arrayMove(sideBlocks, oldIndex, newIndex);
     onUpdatePage({ ...page, blocks: [...reordered, ...otherBlocks] });
+    sounds?.dragRustle();
   };
 
   const bgClass = PAPER_BG_MAP[page.paperType || 'lined'];
@@ -416,6 +429,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
                         selectedPitch={page.paperType === 'music' ? selectedPitch : undefined}
                         selectedDuration={page.paperType === 'music' ? selectedDuration : undefined}
                         dragHandleProps={dragHandleProps}
+                        onPenScratch={sounds?.penScratch}
+                        onCheckboxClick={sounds?.checkboxClick}
                       />
                     </div>
                   )}

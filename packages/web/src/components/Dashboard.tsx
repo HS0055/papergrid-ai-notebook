@@ -8,9 +8,10 @@ import {
   Book, Plus, Sparkles, Menu, ChevronLeft, ChevronRight, Bookmark,
   AlertCircle, CheckCircle2, X, Home, Search, FileText, Undo2,
   Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
-  Download, Image, Printer
+  Download, Image, Printer, Volume2, VolumeX
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { useSoundEffects } from '../hooks/useSoundEffects';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
 const BookCoverScene = lazy(() => import('./three/notebook/BookCoverScene'));
@@ -147,6 +148,9 @@ export const Dashboard: React.FC = () => {
   const [isOpening, setIsOpening] = useState(false);
   const [coverFading, setCoverFading] = useState(false);
 
+  // Sound effects
+  const sfx = useSoundEffects();
+
   // Toast state
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const toastCounter = useRef(0);
@@ -269,12 +273,14 @@ export const Dashboard: React.FC = () => {
     if (activePageIndex <= -1) return;
     setPageDirection('left');
     setActivePageIndex(prev => Math.max(-1, prev - 1));
+    sfx.pageFlip();
   };
 
   const handlePageForward = () => {
     if (!activeNotebook || activePageIndex >= activeNotebook.pages.length) return;
     setPageDirection('right');
     setActivePageIndex(prev => prev + 1);
+    sfx.pageFlip();
   };
 
   // Flat fallback cover: instant open (no 3D loaded yet)
@@ -282,6 +288,7 @@ export const Dashboard: React.FC = () => {
     if (!activeNotebook || activeNotebook.pages.length === 0) return;
     setPageDirection('right');
     setActivePageIndex(0);
+    sfx.pageFlip();
   };
 
   // 3D cover: trigger open animation
@@ -538,7 +545,7 @@ export const Dashboard: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 relative flex flex-col h-full overflow-hidden items-center justify-center p-4 md:p-12">
         {/* Mobile Header / Sidebar Toggle */}
-        <div className="absolute top-4 left-4 z-30">
+        <div className="absolute top-4 left-4 z-30 flex gap-2">
            <button
              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
              className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white transition-colors"
@@ -546,6 +553,18 @@ export const Dashboard: React.FC = () => {
              aria-expanded={isSidebarOpen}
            >
              <Menu size={20} />
+           </button>
+           <button
+             onClick={sfx.toggle}
+             className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${
+               sfx.enabled
+                 ? 'bg-indigo-100 border-indigo-300 text-indigo-600'
+                 : 'bg-white/80 border-gray-200 text-gray-400 hover:bg-white hover:text-gray-600'
+             }`}
+             aria-label={sfx.enabled ? 'Mute sounds' : 'Enable sounds'}
+             title={sfx.enabled ? 'Sound effects on' : 'Sound effects off'}
+           >
+             {sfx.enabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
            </button>
         </div>
 
@@ -754,9 +773,17 @@ export const Dashboard: React.FC = () => {
                    if (idx !== -1) {
                      setPageDirection(idx > activePageIndex ? 'right' : 'left');
                      setActivePageIndex(idx);
+                     sfx.pageFlip();
                    }
                  }}
                  onBlockDeleted={handleBlockDeleted}
+                 sounds={{
+                   penScratch: sfx.penScratch,
+                   checkboxClick: sfx.checkboxClick,
+                   blockAdd: sfx.blockAdd,
+                   blockDelete: sfx.blockDelete,
+                   dragRustle: sfx.dragRustle,
+                 }}
                />
              ) : (
                /* Empty State (End of book) */
