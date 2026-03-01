@@ -38,7 +38,7 @@ export function PostEffects({ preset = 'landing', fpsThreshold = 30, disabled = 
     if (fpsRef.current.length > 60) fpsRef.current.shift();
 
     // Check average FPS every 2 seconds
-    if (fpsRef.current.length === 60) {
+    if (fpsRef.current.length >= 60) {
       const avg = fpsRef.current.reduce((a, b) => a + b, 0) / fpsRef.current.length;
       if (avg < fpsThreshold && quality === 'high') {
         setQuality('low');

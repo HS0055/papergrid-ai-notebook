@@ -23,6 +23,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
 
   // Shared mutable ref — 3D scene reads this in useFrame, no React re-render needed
   const scrollRef = useRef({ progress: 0 });
+  const cursorRef = useRef({ x: 0, y: 0 });
 
   // DOM refs for GSAP-direct animation (no React state)
   const phase1Ref = useRef<HTMLDivElement>(null);
@@ -35,13 +36,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
 
     const ctx = gsap.context(() => {
       // Master ScrollTrigger: pins the hero and drives all animations
+      // +=200% gives 2 viewports of scroll — tighter timing with crossfade transitions
       const masterTl = gsap.timeline({
         scrollTrigger: {
-          trigger: sectionRef.current!,
+          trigger: sectionRef.current,
           start: 'top top',
-          end: '+=250%',
-          pin: pinContainerRef.current!,
-          scrub: 0.3,
+          end: '+=200%',
+          pin: pinContainerRef.current,
+          scrub: 0.25,
           onUpdate: (self) => {
             // Only write to ref — NO setState
             scrollRef.current.progress = self.progress;
@@ -56,37 +58,40 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
         },
       });
 
-      // Phase 1: visible 0%–25%, fades out 25%–35%
+      // Phase 1: visible 0-8%, fades out 8-14%
       masterTl.to(
         phase1Ref.current,
-        { opacity: 0, y: -60, duration: 0.15, ease: 'power2.in' },
-        0.2, // starts at 20% of scroll
+        { opacity: 0, y: -50, duration: 0.06, ease: 'power2.in' },
+        0.08,
       );
 
-      // Phase 2: fades in 25%–32%, visible until 55%, fades out 55%–65%
+      // Phase 2: fades in 12-18% (crossfades with Phase 1 exit), visible until 38%, fades out 38-46%
       masterTl
         .fromTo(
           phase2Ref.current,
-          { opacity: 0, y: 40 },
-          { opacity: 1, y: 0, duration: 0.1, ease: 'power2.out' },
-          0.25,
+          { opacity: 0, y: 30 },
+          { opacity: 1, y: 0, duration: 0.08, ease: 'power2.out' },
+          0.12,
         )
         .to(
           phase2Ref.current,
-          { opacity: 0, y: -40, duration: 0.1, ease: 'power2.in' },
-          0.55,
+          { opacity: 0, y: -30, duration: 0.08, ease: 'power2.in' },
+          0.38,
         );
 
-      // Phase 3: fades in 55%–70%, stays visible
-      masterTl.fromTo(
-        phase3Ref.current,
-        { opacity: 0, y: 40 },
-        { opacity: 1, y: 0, duration: 0.15, ease: 'power2.out' },
-        0.55,
-      );
-
-      // Force timeline total duration to 1.0 so positions map exactly to scroll %
-      masterTl.totalDuration(1.0);
+      // Phase 3: fades in 44-52% (crossfades with Phase 2 exit), visible 52-72%, fades out 72-84%
+      masterTl
+        .fromTo(
+          phase3Ref.current,
+          { opacity: 0, y: 30 },
+          { opacity: 1, y: 0, duration: 0.10, ease: 'power2.out' },
+          0.44,
+        )
+        .to(
+          phase3Ref.current,
+          { opacity: 0, y: -25, scale: 0.97, duration: 0.12, ease: 'power2.in' },
+          0.72,
+        );
     }, sectionRef);
 
     // Refresh ScrollTrigger after all contexts are initialized
@@ -101,7 +106,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     <section
       ref={sectionRef}
       className="hero-section relative"
-      style={{ minHeight: '350vh' }}
+      style={{ minHeight: '300vh' }}
     >
       {/* Scroll progress indicator — outside pin container to avoid jump */}
       <div
@@ -119,6 +124,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
         className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden px-6 pt-24 pb-16"
         style={{
           background: 'linear-gradient(160deg, #0f111a 0%, #1a1c23 45%, #2a1f3d 70%, #0f111a 100%)',
+        }}
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          cursorRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          cursorRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        }}
+        onMouseLeave={() => {
+          cursorRef.current.x = 0;
+          cursorRef.current.y = 0;
         }}
       >
         {/* Ambient glow blobs */}
@@ -143,7 +157,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           style={{ zIndex: 5, pointerEvents: 'none' }}
         >
           <Suspense fallback={null}>
-            <HeroScene scrollRef={scrollRef} hovered={hovered} />
+            <HeroScene scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} />
           </Suspense>
         </div>
 

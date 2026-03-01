@@ -34,3 +34,14 @@ __pycache__
 
 # Convex
 convex/_generated/
+
+dev-debug.log
+# Dependency directories
+node_modules/
+# Environment variables
+.vscode
+# OS specific
+
+# Task files
+# tasks.json
+# tasks/ 

@@ -6,6 +6,8 @@ interface HeroSceneProps {
   scrollRef: React.RefObject<{ progress: number }>;
   /** Whether user is hovering the notebook area */
   hovered: boolean;
+  /** Shared ref with normalized cursor position (-1 to 1) */
+  cursorRef?: React.RefObject<{ x: number; y: number }>;
 }
 
 /**
@@ -13,17 +15,17 @@ interface HeroSceneProps {
  * Default-exported for React.lazy() code splitting — all Three.js code
  * is in this chunk, keeping the initial bundle lightweight.
  */
-export default function HeroScene({ scrollRef, hovered }: HeroSceneProps) {
+export default function HeroScene({ scrollRef, hovered, cursorRef }: HeroSceneProps) {
   return (
     <LandingCanvas
       overlay
       shadows={false}
       postPreset="subtle"
       lightPreset="landing"
-      fov={35}
-      cameraPosition={[0, 1.5, 6]}
+      fov={40}
+      cameraPosition={[0, 0, 7]}
     >
-      <HeroNotebook scrollRef={scrollRef} hovered={hovered} />
+      <HeroNotebook scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} />
     </LandingCanvas>
   );
 }

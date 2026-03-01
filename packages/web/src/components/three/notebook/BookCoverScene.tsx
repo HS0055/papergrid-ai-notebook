@@ -32,8 +32,8 @@ export default function BookCoverScene(props: BookCoverSceneProps) {
     <NotebookCanvas
       lightPreset="warm"
       postPreset="subtle"
-      fov={30}
-      cameraPosition={[2, 1.5, 5]}
+      fov={45}
+      cameraPosition={[1.2, 0.5, 6]}
     >
       <CoverBook {...props} />
     </NotebookCanvas>
@@ -146,14 +146,14 @@ function CoverBook({
       }
     } else {
       // Idle rotation — angled to show spine and depth, gentle sway
-      groupRef.current.rotation.y = Math.sin(t * 0.2) * 0.06 + 0.4;
+      groupRef.current.rotation.y = Math.sin(t * 0.2) * 0.06 + 0.32;
       groupRef.current.rotation.x = -0.1 + Math.sin(t * 0.15) * 0.02;
     }
   });
 
   return (
     <Float speed={1.2} rotationIntensity={0.05} floatIntensity={0.15} floatingRange={[-0.03, 0.03]}>
-      <group position={[-HW * 0.5, -0.15, 0]}>
+      <group position={[-HW * 0.3, -0.1, 0]}>
       <group ref={groupRef}>
         {/* ─── Back Cover ─── */}
         <mesh
@@ -181,12 +181,12 @@ function CoverBook({
             <boxGeometry args={[BOOK_WIDTH + 0.04, BOOK_HEIGHT + 0.04, CT]} />
           </mesh>
 
-          {/* Title on front cover */}
+          {/* Title on front cover — shifted toward spine to avoid clip on rotation */}
           <mesh
-            position={[HW, 0.15, PS / 2 + CT + 0.002]}
+            position={[HW * 0.85, 0.15, PS / 2 + CT + 0.002]}
             material={titleMat}
           >
-            <planeGeometry args={[BOOK_WIDTH * 0.7, BOOK_WIDTH * 0.35]} />
+            <planeGeometry args={[BOOK_WIDTH * 0.55, BOOK_WIDTH * 0.28]} />
           </mesh>
         </group>
 

@@ -15,6 +15,8 @@ interface HeroNotebookProps {
   scrollRef: React.RefObject<{ progress: number }>;
   /** Whether the user is hovering */
   hovered?: boolean;
+  /** Shared ref with normalized cursor position (-1 to 1) */
+  cursorRef?: React.RefObject<{ x: number; y: number }>;
 }
 
 /**
@@ -22,11 +24,14 @@ interface HeroNotebookProps {
  * Lightweight version - no heavy canvas textures for performance.
  * Book opens as user scrolls, shows paper textures inside.
  */
-export function HeroNotebook({ scrollRef, hovered = false }: HeroNotebookProps) {
+export function HeroNotebook({ scrollRef, hovered = false, cursorRef }: HeroNotebookProps) {
   const groupRef = useRef<THREE.Group>(null);
   const frontCoverRef = useRef<THREE.Group>(null);
   const targetOpen = useRef(0);
   const currentOpen = useRef(0);
+  const currentCursorX = useRef(0);
+  const currentCursorY = useRef(0);
+  const currentHoverScale = useRef(1);
 
   // Materials
   const coverMaterial = useCoverMaterial('leather', '#1e1b4b');
@@ -87,6 +92,9 @@ export function HeroNotebook({ scrollRef, hovered = false }: HeroNotebookProps) 
     });
   }, []);
 
+  // Smoothed exit values (avoid per-frame jitter)
+  const currentExit = useRef(0);
+
   // Animation
   useFrame((state, delta) => {
     if (!groupRef.current || !frontCoverRef.current) return;
@@ -94,27 +102,75 @@ export function HeroNotebook({ scrollRef, hovered = false }: HeroNotebookProps) 
     // Read scroll from shared ref — no React re-render
     const scrollProgress = scrollRef.current?.progress ?? 0;
 
-    // Map scroll progress to book open amount:
-    // 0.0-0.20: closed, 0.20-0.60: opening, 0.60+: fully open
-    const openTarget = THREE.MathUtils.clamp((scrollProgress - 0.20) / 0.40, 0, 1);
+    // Map scroll to book open: starts at 5%, fully open by 40%
+    // Earlier start + wider range = book opens sooner and more gradually
+    const openTarget = THREE.MathUtils.clamp((scrollProgress - 0.05) / 0.35, 0, 1);
     targetOpen.current = openTarget;
+
+    // Fast responsive lerp: ~18% catch-up per frame at 60fps (was ~5%)
+    // Math.pow(0.001, delta) at delta=0.016 ≈ 0.89, so factor ≈ 0.11
+    const lerpFactor = 1 - Math.pow(0.001, delta);
     currentOpen.current = THREE.MathUtils.lerp(
       currentOpen.current,
       targetOpen.current,
-      1 - Math.pow(0.05, delta),
+      lerpFactor,
     );
 
     const open = currentOpen.current;
 
-    // Front cover rotation (opens on Y axis around spine)
-    frontCoverRef.current.rotation.y = -open * Math.PI * 0.52;
+    // ── Cursor tilt (fades as book opens) ──
+    const rawCursorX = cursorRef?.current?.x ?? 0;
+    const rawCursorY = cursorRef?.current?.y ?? 0;
+    currentCursorX.current = THREE.MathUtils.lerp(currentCursorX.current, rawCursorX, lerpFactor);
+    currentCursorY.current = THREE.MathUtils.lerp(currentCursorY.current, rawCursorY, lerpFactor);
 
-    // Idle rotation — tilted to show 3D depth, sways gently
+    const cursorWeight = Math.max(0, 1 - open * 2); // fades by 50% open
+    const cursorTiltX = currentCursorY.current * 0.08 * cursorWeight;
+    const cursorTiltY = currentCursorX.current * 0.12 * cursorWeight;
+
+    // Hover scale
+    const targetHoverScale = hovered ? 1.03 : 1.0;
+    currentHoverScale.current = THREE.MathUtils.lerp(currentHoverScale.current, targetHoverScale, lerpFactor);
+
+    // Front cover rotation — smooth ease-out curve for satisfying open feel
+    const openEased = 1 - Math.pow(1 - open, 2.2);
+    frontCoverRef.current.rotation.y = -openEased * Math.PI * 0.52;
+
+    // Idle sway — fades out as book opens for cleaner motion
     const idleTime = state.clock.elapsedTime;
-    const idleSway = open < 0.1 ? Math.sin(idleTime * 0.15) * 0.04 : 0;
-    // Start angled to show spine, rotate toward viewer as book opens
-    groupRef.current.rotation.y = idleSway + THREE.MathUtils.lerp(0.35, open * 0.15, open);
-    groupRef.current.rotation.x = Math.sin(idleTime * 0.1) * 0.01 - 0.12 + open * 0.08;
+    const idleWeight = Math.max(0, 1 - open * 3); // fades by 33% open
+    const idleSway = Math.sin(idleTime * 0.15) * 0.04 * idleWeight;
+
+    // Rotation: start angled to show 3D depth, gently rotate toward viewer
+    groupRef.current.rotation.y = idleSway + THREE.MathUtils.lerp(0.5, 0.08, openEased) + cursorTiltY;
+    groupRef.current.rotation.x = Math.sin(idleTime * 0.1) * 0.015 * idleWeight - 0.15 + openEased * 0.08 + cursorTiltX;
+
+    // ── Exit animation: scale down, drift up, fade out (65%-95%) ──
+    const exitRaw = THREE.MathUtils.clamp((scrollProgress - 0.65) / 0.30, 0, 1);
+    // Smooth the exit value too (prevents jitter on fast scroll)
+    currentExit.current = THREE.MathUtils.lerp(currentExit.current, exitRaw, lerpFactor);
+    // Hermite (smoothstep) easing for buttery exit
+    const e = currentExit.current;
+    const exitEased = e * e * (3 - 2 * e);
+
+    const exitScale = THREE.MathUtils.lerp(1.0, 0.7, exitEased);
+    const exitDrift = exitEased * 0.8; // additive drift, not absolute
+    const exitOpacity = THREE.MathUtils.lerp(1.0, 0.0, exitEased);
+
+    groupRef.current.scale.setScalar(exitScale * currentHoverScale.current);
+    // Add drift to base y offset (don't overwrite Float positioning)
+    groupRef.current.position.y = exitDrift;
+
+    // Fade all materials via traverse (only ~8 meshes, lightweight)
+    groupRef.current.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mat = (child as THREE.Mesh).material;
+        if (mat && !Array.isArray(mat)) {
+          (mat as THREE.MeshStandardMaterial).transparent = true;
+          (mat as THREE.MeshStandardMaterial).opacity = exitOpacity;
+        }
+      }
+    });
   });
 
   const hw = BOOK_WIDTH / 2;
@@ -127,7 +183,7 @@ export function HeroNotebook({ scrollRef, hovered = false }: HeroNotebookProps) 
       floatIntensity={0.2}
       floatingRange={[-0.03, 0.03]}
     >
-      <group position={[0, -0.3, 0]}>
+      <group position={[0.5, -0.5, 0]}>
       <group ref={groupRef}>
         {/* ─── Back Cover (stationary) ─── */}
         <mesh

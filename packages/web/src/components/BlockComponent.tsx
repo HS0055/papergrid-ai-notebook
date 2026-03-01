@@ -2,6 +2,12 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { Block, BlockType, GridCell, NotebookPage } from '@papergrid/core';
 import { Trash2, GripVertical, Plus, Info, Quote, ArrowLeftRight } from 'lucide-react';
 import { MusicStaffBlock } from './MusicStaffBlock';
+import { CalendarBlock } from './planner/CalendarBlock';
+import { WeeklyViewBlock } from './planner/WeeklyViewBlock';
+import { HabitTrackerBlock } from './planner/HabitTrackerBlock';
+import { GoalSectionBlock } from './planner/GoalSectionBlock';
+import { TimeBlockBlock } from './planner/TimeBlockBlock';
+import { DailySectionBlock } from './planner/DailySectionBlock';
 
 interface BlockProps {
   block: Block;
@@ -53,7 +59,7 @@ const getAlignmentClass = (alignment?: string) => {
   }
 };
 
-const getEmphasisClass = (emphasis?: string, colorClasses?: any) => {
+const getEmphasisClass = (emphasis?: string, colorClasses?: ReturnType<typeof getColorClasses>) => {
   switch (emphasis) {
     case 'bold': return 'font-bold';
     case 'italic': return 'italic';
@@ -270,7 +276,10 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
                   <textarea 
                     className="flex-1 bg-transparent resize-none focus:outline-none font-hand text-lg text-gray-800 placeholder-gray-400/50"
                     value={block.matrixData?.[q as keyof typeof block.matrixData] || ''}
-                    onChange={(e) => onChange(block.id, { matrixData: { ...block.matrixData, [q]: e.target.value } as any })}
+                    onChange={(e) => {
+                      const key = q as 'q1' | 'q2' | 'q3' | 'q4';
+                      onChange(block.id, { matrixData: { q1: '', q2: '', q3: '', q4: '', ...block.matrixData, [key]: e.target.value } });
+                    }}
                     placeholder="Write tasks here..."
                     spellCheck={false}
                   />
@@ -360,6 +369,30 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             selectedPitch={selectedPitch}
             selectedDuration={selectedDuration}
           />
+        )}
+
+        {block.type === BlockType.CALENDAR && (
+          <CalendarBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.WEEKLY_VIEW && (
+          <WeeklyViewBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.HABIT_TRACKER && (
+          <HabitTrackerBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.GOAL_SECTION && (
+          <GoalSectionBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.TIME_BLOCK && (
+          <TimeBlockBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.DAILY_SECTION && (
+          <DailySectionBlock block={block} onChange={onChange} colorClasses={colorClasses} />
         )}
       </div>
     </div>

@@ -1,12 +1,109 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
+import gsap from 'gsap';
 
 interface BlockTypesBentoProps {
   onLaunch: () => void;
 }
 
 export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) => {
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const contentRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Detect if device supports hover
+  const supportsHover = useRef(true);
+
+  useEffect(() => {
+    supportsHover.current = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+    // Show content always on touch devices
+    if (!supportsHover.current) {
+      contentRefs.current.forEach((content) => {
+        if (content) {
+          gsap.set(content, { opacity: 1, y: 0 });
+        }
+      });
+    }
+
+    return () => {
+      // Kill all tweens on unmount
+      cardRefs.current.forEach((card) => {
+        if (card) gsap.killTweensOf(card);
+      });
+      contentRefs.current.forEach((content) => {
+        if (content) gsap.killTweensOf(content);
+      });
+    };
+  }, []);
+
+  const handleMouseEnter = (cardIndex: number) => {
+    if (!supportsHover.current) return;
+
+    const card = cardRefs.current[cardIndex];
+    const content = contentRefs.current[cardIndex];
+
+    if (card) {
+      gsap.to(card, {
+        scale: 1.02,
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        duration: 0.3,
+        ease: 'power2.out'
+      });
+    }
+
+    if (content) {
+      const children = content.children;
+      gsap.to(content, {
+        opacity: 1,
+        y: 0,
+        duration: 0.3,
+        ease: 'power2.out'
+      });
+      gsap.to(children, {
+        opacity: 1,
+        y: 0,
+        stagger: 0.05,
+        duration: 0.4,
+        ease: 'power2.out'
+      });
+    }
+  };
+
+  const handleMouseLeave = (cardIndex: number) => {
+    if (!supportsHover.current) return;
+
+    const card = cardRefs.current[cardIndex];
+    const content = contentRefs.current[cardIndex];
+
+    if (card) {
+      gsap.to(card, {
+        scale: 1,
+        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        duration: 0.3,
+        ease: 'power2.out'
+      });
+    }
+
+    if (content) {
+      const children = content.children;
+      gsap.to(children, {
+        opacity: 0,
+        y: -10,
+        stagger: 0.02,
+        duration: 0.2,
+        ease: 'power2.in'
+      });
+      gsap.to(content, {
+        opacity: 0,
+        y: -10,
+        duration: 0.2,
+        delay: 0.1,
+        ease: 'power2.in'
+      });
+    }
+  };
+
   return (
-    <section className="py-24 px-6" style={{ background: 'var(--color-parchment)' }}>
+    <section className="py-24 px-6" style={{ background: '#ffffff' }}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="reveal text-center mb-16">
@@ -29,7 +126,10 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-min">
           {/* Priority Matrix — large 2×2 */}
           <div
-            className="reveal-scale col-span-2 row-span-2 rounded-3xl overflow-hidden p-6 border border-gray-200/60 shadow-sm hover:shadow-lg transition-shadow"
+            ref={(el) => (cardRefs.current[0] = el)}
+            onMouseEnter={() => handleMouseEnter(0)}
+            onMouseLeave={() => handleMouseLeave(0)}
+            className="reveal-scale col-span-2 row-span-2 rounded-3xl overflow-hidden p-6 border border-gray-200/60 shadow-sm transition-shadow relative"
             style={{ background: '#fdfbf7', transitionDelay: '0ms' }}
           >
             <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4 font-sans">Priority Matrix</div>
@@ -48,11 +148,23 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
                 </div>
               ))}
             </div>
+            {/* Hover content */}
+            <div
+              ref={(el) => (contentRefs.current[0] = el)}
+              className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 border border-gray-200 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[10px] font-bold text-indigo-600 mb-1" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Drag & drop tasks</div>
+              <div className="text-[10px] font-bold text-indigo-600" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Auto-prioritize</div>
+            </div>
           </div>
 
           {/* Callout Sticky */}
           <div
-            className="reveal-scale rounded-3xl overflow-hidden p-5 border border-amber-200/80 shadow-sm hover:shadow-md transition-shadow relative"
+            ref={(el) => (cardRefs.current[1] = el)}
+            onMouseEnter={() => handleMouseEnter(1)}
+            onMouseLeave={() => handleMouseLeave(1)}
+            className="reveal-scale rounded-3xl overflow-hidden p-5 border border-amber-200/80 shadow-sm transition-shadow relative"
             style={{ background: '#fef3c7', transitionDelay: '80ms' }}
           >
             <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-5 rounded-sm" style={{ background: 'rgba(217,119,6,0.45)' }} />
@@ -61,11 +173,24 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             <p className="font-hand text-base text-amber-800 leading-relaxed">
               "Don't forget to review the design system before the sprint review!"
             </p>
+            {/* Hover content */}
+            <div
+              ref={(el) => (contentRefs.current[1] = el)}
+              className="mt-3 space-y-1 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[10px] text-amber-700 font-hand" style={{ opacity: 0, transform: 'translateY(-10px)' }}>📌 Pin to top</div>
+              <div className="text-[10px] text-amber-700 font-hand" style={{ opacity: 0, transform: 'translateY(-10px)' }}>🎨 6 sticky colors</div>
+              <div className="text-[10px] text-amber-700 font-hand" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✏️ Quick capture</div>
+            </div>
           </div>
 
           {/* Mood Tracker */}
           <div
-            className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm hover:shadow-md transition-shadow"
+            ref={(el) => (cardRefs.current[2] = el)}
+            onMouseEnter={() => handleMouseEnter(2)}
+            onMouseLeave={() => handleMouseLeave(2)}
+            className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
             style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #fdf4ff 100%)', transitionDelay: '160ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-500 mb-4 font-sans">Mood Tracker</div>
@@ -77,11 +202,24 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
                 </div>
               ))}
             </div>
+            {/* Hover content */}
+            <div
+              ref={(el) => (contentRefs.current[2] = el)}
+              className="mt-4 space-y-1 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[9px] text-indigo-600 font-sans" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Track daily moods</div>
+              <div className="text-[9px] text-indigo-600 font-sans" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Visualize patterns</div>
+              <div className="text-[9px] text-indigo-600 font-sans" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Add journal notes</div>
+            </div>
           </div>
 
           {/* Data Grid / Table */}
           <div
-            className="reveal-scale col-span-2 rounded-3xl overflow-hidden border border-emerald-100 shadow-sm hover:shadow-md transition-shadow"
+            ref={(el) => (cardRefs.current[3] = el)}
+            onMouseEnter={() => handleMouseEnter(3)}
+            onMouseLeave={() => handleMouseLeave(3)}
+            className="reveal-scale col-span-2 rounded-3xl overflow-hidden border border-emerald-100 shadow-sm transition-shadow relative"
             style={{ background: '#f0fdf4', transitionDelay: '240ms' }}
           >
             <div className="px-5 pt-5 pb-2">
@@ -111,22 +249,48 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
                 </tbody>
               </table>
             </div>
+            {/* Hover content */}
+            <div
+              ref={(el) => (contentRefs.current[3] = el)}
+              className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 border border-emerald-200 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[10px] font-bold text-emerald-600 mb-1" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Sort & filter</div>
+              <div className="text-[10px] font-bold text-emerald-600 mb-1" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Export to CSV</div>
+              <div className="text-[10px] font-bold text-emerald-600" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Add formulas</div>
+            </div>
           </div>
 
           {/* Pull Quote */}
           <div
-            className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm hover:shadow-md transition-shadow"
+            ref={(el) => (cardRefs.current[4] = el)}
+            onMouseEnter={() => handleMouseEnter(4)}
+            onMouseLeave={() => handleMouseLeave(4)}
+            className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
             style={{ background: '#fdfbf7', transitionDelay: '320ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-3 font-sans">Pull Quote</div>
             <div className="border-l-4 border-indigo-300 pl-4">
               <p className="font-serif text-lg italic text-gray-700 leading-relaxed">"Clarity of thought begins with clarity of page."</p>
             </div>
+            {/* Hover content */}
+            <div
+              ref={(el) => (contentRefs.current[4] = el)}
+              className="mt-4 space-y-1 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[9px] text-indigo-500 font-sans italic" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Highlight key insights</div>
+              <div className="text-[9px] text-indigo-500 font-sans italic" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Custom border styles</div>
+              <div className="text-[9px] text-indigo-500 font-sans italic" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Attribution support</div>
+            </div>
           </div>
 
           {/* Task List */}
           <div
-            className="reveal-scale rounded-3xl p-5 border border-rose-100 shadow-sm hover:shadow-md transition-shadow"
+            ref={(el) => (cardRefs.current[5] = el)}
+            onMouseEnter={() => handleMouseEnter(5)}
+            onMouseLeave={() => handleMouseLeave(5)}
+            className="reveal-scale rounded-3xl p-5 border border-rose-100 shadow-sm transition-shadow relative"
             style={{ background: '#fff7f7', transitionDelay: '400ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-rose-400 mb-3 font-sans">Task List</div>
@@ -147,6 +311,16 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
                   <span className={`font-hand text-sm ${task.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.text}</span>
                 </div>
               ))}
+            </div>
+            {/* Hover content */}
+            <div
+              ref={(el) => (contentRefs.current[5] = el)}
+              className="mt-3 space-y-1 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[9px] text-rose-500 font-sans" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Nested subtasks</div>
+              <div className="text-[9px] text-rose-500 font-sans" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Due dates & reminders</div>
+              <div className="text-[9px] text-rose-500 font-sans" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Priority levels</div>
             </div>
           </div>
         </div>

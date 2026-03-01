@@ -1,4 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const paperStyles = [
   { id: 'lined', label: 'Lined', cssClass: 'paper-lines', desc: 'Classic ruled lines for writing', bg: '#fdfbf7' },
@@ -20,9 +24,82 @@ interface PaperStylesSectionProps {
 export const PaperStylesSection: React.FC<PaperStylesSectionProps> = ({ onLaunch }) => {
   const [selected, setSelected] = useState('lined');
   const selectedStyle = paperStyles.find(p => p.id === selected);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Grid animation on scroll
+  useEffect(() => {
+    if (!gridRef.current) return;
+
+    const tiles = gridRef.current.children;
+    const count = tiles.length;
+    const center = (count - 1) / 2;
+
+    // Set initial state: subtle rotation outward from center
+    gsap.set(Array.from(tiles), {
+      opacity: 0,
+      y: 30,
+      scale: 0.93,
+      rotateY: (i: number) => {
+        const offset = (i - center) / center; // -1 to +1
+        return -offset * 8; // max 8deg, proportional to distance from center
+      },
+    });
+
+    const ctx = gsap.context(() => {
+      ScrollTrigger.create({
+        trigger: gridRef.current,
+        start: 'top 88%',
+        once: true,
+        onEnter: () => {
+          gsap.to(Array.from(tiles), {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            rotateY: 0,
+            duration: 0.85,
+            stagger: { each: 0.05, from: 'center' },
+            ease: 'power2.out',
+          });
+        },
+      });
+    }, gridRef);
+
+    return () => ctx.revert();
+  }, []);
+
+  // Preview panel crossfade animation on paper change
+  useEffect(() => {
+    if (!previewRef.current || !contentRef.current) return;
+
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline();
+
+      // Crossfade animation: scale + opacity
+      tl.fromTo(
+        previewRef.current,
+        { scale: 0.98, opacity: 0 },
+        { scale: 1.0, opacity: 1, duration: 0.6, ease: 'power2.out' }
+      );
+
+      // Animate handwriting lines with stagger
+      if (contentRef.current) {
+        const lines = contentRef.current.querySelectorAll('.handwriting-line');
+        tl.fromTo(
+          lines,
+          { opacity: 0, y: 10 },
+          { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: 'power1.out' },
+          '-=0.3'
+        );
+      }
+    }, previewRef);
+
+    return () => ctx.revert();
+  }, [selected]);
 
   return (
-    <section id="paper-styles" className="py-24 px-6 bg-white overflow-hidden">
+    <section id="paper-styles" className="py-24 px-6 overflow-hidden" style={{ background: '#fdfbf7' }}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="reveal text-center mb-16">
@@ -40,31 +117,61 @@ export const PaperStylesSection: React.FC<PaperStylesSectionProps> = ({ onLaunch
           </p>
         </div>
 
-        {/* Grid of paper tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-8">
-          {paperStyles.map((style, i) => (
-            <button
-              key={style.id}
-              className={`reveal-scale group relative rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 ${
-                selected === style.id
-                  ? 'ring-2 ring-indigo-500 ring-offset-2 shadow-xl scale-[1.02]'
-                  : 'ring-1 ring-gray-200 hover:ring-indigo-300 hover:shadow-md'
-              }`}
-              style={{ aspectRatio: '3/4', background: style.bg, transitionDelay: `${i * 60}ms` }}
-              onClick={() => setSelected(style.id)}
-              title={style.label}
+        {/* 2-column layout: Grid left, Preview right (stacked on mobile) */}
+        <div className="flex flex-col lg:flex-row gap-8 mb-8">
+          {/* Grid of paper tiles */}
+          <div className="flex-1">
+            <div ref={gridRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-2 xl:grid-cols-3 gap-4" style={{ perspective: '1000px' }}>
+              {paperStyles.map((style, i) => (
+                <button
+                  key={style.id}
+                  className={`group relative rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 ${
+                    selected === style.id
+                      ? 'ring-2 ring-indigo-500 ring-offset-2 shadow-xl scale-[1.02]'
+                      : 'ring-1 ring-gray-200 hover:ring-indigo-300 hover:shadow-md'
+                  }`}
+                  style={{ aspectRatio: '3/4', background: style.bg }}
+                  onClick={() => setSelected(style.id)}
+                  title={style.label}
+                >
+                  <div className={`absolute inset-0 ${style.cssClass}`} style={{ backgroundAttachment: 'local' }} />
+                  <div
+                    className="absolute bottom-0 left-0 right-0 p-3 transition-all duration-200"
+                    style={{
+                      background: selected === style.id ? 'rgba(79,70,229,0.85)' : 'rgba(26,28,35,0.55)',
+                    }}
+                  >
+                    <span className="text-xs font-bold uppercase tracking-widest text-white block">{style.label}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Large Preview Panel */}
+          <div className="flex-1 lg:max-w-md">
+            <div
+              ref={previewRef}
+              className={`relative rounded-2xl overflow-hidden shadow-2xl ${selectedStyle?.cssClass}`}
+              style={{
+                height: '400px',
+                background: selectedStyle?.bg,
+                backgroundAttachment: 'local',
+              }}
             >
-              <div className={`absolute inset-0 ${style.cssClass}`} style={{ backgroundAttachment: 'local' }} />
+              {/* Animated handwriting content */}
               <div
-                className="absolute bottom-0 left-0 right-0 p-3 transition-all duration-200"
-                style={{
-                  background: selected === style.id ? 'rgba(79,70,229,0.85)' : 'rgba(26,28,35,0.55)',
-                }}
+                ref={contentRef}
+                className="absolute inset-0 p-8 flex flex-col justify-center"
+                style={{ fontFamily: 'var(--font-hand)', fontSize: '1.5rem', lineHeight: 1.8 }}
               >
-                <span className="text-xs font-bold uppercase tracking-widest text-white block">{style.label}</span>
+                <p className="handwriting-line text-gray-700">Every paper tells a story.</p>
+                <p className="handwriting-line text-gray-700">Choose the texture that</p>
+                <p className="handwriting-line text-gray-700">matches your mood and</p>
+                <p className="handwriting-line text-gray-700">watch your ideas come alive.</p>
               </div>
-            </button>
-          ))}
+            </div>
+          </div>
         </div>
 
         {/* Selected style info + CTA */}

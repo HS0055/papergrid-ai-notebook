@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { NotebookPage, Block, BlockType } from '@papergrid/core';
 import { BlockComponent } from './BlockComponent';
 import { PianoKeyboard } from './PianoKeyboard';
-import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music } from 'lucide-react';
+import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music, Calendar, CalendarDays, CheckSquare, Target, Clock, Sun } from 'lucide-react';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -113,7 +113,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   // Close paper picker on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (paperPickerRef.current && !paperPickerRef.current.contains(e.target as Node)) {
+      if (paperPickerRef.current && e.target instanceof Node && !paperPickerRef.current.contains(e.target)) {
         setShowPaperPicker(false);
       }
     };
@@ -260,7 +260,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   // ── Block Menu (FAB expansion) ────────────────────────────
   const allowedTypes = PAPER_BLOCK_MAP[page.paperType || 'lined'] || ALL_BLOCK_TYPES;
 
-  const BlockMenu = ({ side }: { side: 'left' | 'right' }) => {
+  const renderBlockMenu = (side: 'left' | 'right') => {
     if (openMenu !== side) return null;
     return (
       <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 anim-fab-pop pointer-events-auto">
@@ -290,9 +290,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   };
 
   // ── FAB Button ────────────────────────────────────────────
-  const FAB = ({ side }: { side: 'left' | 'right' }) => (
+  const renderFAB = (side: 'left' | 'right') => (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-      <BlockMenu side={side} />
+      {renderBlockMenu(side)}
       <button
         onClick={() => setOpenMenu(openMenu === side ? null : side)}
         className={`pointer-events-auto w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 ${
@@ -309,7 +309,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   );
 
   // ── Paper Type Picker Popover ─────────────────────────────
-  const PaperPicker = () => (
+  const renderPaperPicker = () => (
     <div ref={paperPickerRef} className="absolute top-full left-0 mt-1 z-50 anim-popover">
       <div className="bg-white/95 backdrop-blur-md shadow-2xl rounded-xl p-3 border border-gray-200 w-[280px]">
         <div className="grid grid-cols-5 gap-2">
@@ -338,7 +338,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   );
 
   // ── Render a Page Panel ───────────────────────────────────
-  const PagePanel = ({ side, blocks, isLeft }: { side: 'left' | 'right'; blocks: Block[]; isLeft: boolean }) => (
+  const renderPagePanel = (side: 'left' | 'right', blocks: Block[], isLeft: boolean) => (
     <div className={`flex-1 h-full bg-paper ${
       isLeft
         ? 'rounded-t-lg md:rounded-l-lg md:rounded-tr-none border-b md:border-b-0 md:border-r border-black/20'
@@ -380,7 +380,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
               <span>{PAPER_TYPES.find(p => p.value === (page.paperType || 'lined'))?.label || 'Lined'}</span>
               <ChevronDown size={12} className={`transition-transform ${showPaperPicker ? 'rotate-180' : ''}`} />
             </button>
-            {showPaperPicker && <PaperPicker />}
+            {showPaperPicker && renderPaperPicker()}
           </div>
           <div className="flex items-center gap-2 text-xs font-sans text-gray-400 mb-2 uppercase tracking-widest whitespace-nowrap">
             {page.aiGenerated && (
@@ -452,7 +452,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
       )}
 
       {/* FAB */}
-      <FAB side={side} />
+      {renderFAB(side)}
     </div>
   );
 
@@ -484,17 +484,16 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
       <div data-export-target className="w-full max-w-6xl h-full mx-auto bg-slate-800 p-1 md:p-2 rounded-xl shadow-2xl flex flex-col md:flex-row relative">
         {/* Desktop: show both pages | Mobile: show selected page */}
         <div className="hidden md:contents">
-          <PagePanel side="left" blocks={leftBlocks} isLeft={true} />
+          {renderPagePanel('left', leftBlocks, true)}
           <div className="w-1 h-full bg-black/40 shadow-[0_0_10px_rgba(0,0,0,0.5)] z-30" />
-          <PagePanel side="right" blocks={rightBlocks} isLeft={false} />
+          {renderPagePanel('right', rightBlocks, false)}
         </div>
 
         <div className="md:hidden flex-1 flex flex-col">
-          {mobileSide === 'left' ? (
-            <PagePanel side="left" blocks={leftBlocks} isLeft={true} />
-          ) : (
-            <PagePanel side="right" blocks={rightBlocks} isLeft={false} />
-          )}
+          {mobileSide === 'left'
+            ? renderPagePanel('left', leftBlocks, true)
+            : renderPagePanel('right', rightBlocks, false)
+          }
         </div>
       </div>
     </div>

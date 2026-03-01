@@ -1,12 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Book, ArrowRight } from 'lucide-react';
+import { useScrollSpy } from '../../hooks/useScrollSpy';
 
 interface NavBarProps {
   onLaunch: () => void;
 }
 
+const NAV_LINKS = [
+  { id: 'paper-styles', label: 'Paper Styles' },
+  { id: 'ai-feature', label: 'AI Magic' },
+  { id: 'how-it-works', label: 'How It Works' },
+] as const;
+
 export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
   const [scrolled, setScrolled] = useState(false);
+  const sectionIds = useMemo(() => NAV_LINKS.map((l) => l.id), []);
+  const activeSection = useScrollSpy(sectionIds);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -33,9 +42,22 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
 
         {/* Links */}
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-500">
-          <a href="#paper-styles" className="hover:text-indigo-600 transition-colors">Paper Styles</a>
-          <a href="#ai-feature" className="hover:text-indigo-600 transition-colors">AI Magic</a>
-          <a href="#how-it-works" className="hover:text-indigo-600 transition-colors">How It Works</a>
+          {NAV_LINKS.map(({ id, label }) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="hover:text-indigo-600 transition-colors pb-1"
+              style={{
+                borderBottom: activeSection === id
+                  ? '2px solid var(--color-indigo-brand)'
+                  : '2px solid transparent',
+                color: activeSection === id ? 'var(--color-indigo-brand)' : undefined,
+                transition: 'border-color 0.3s ease, color 0.3s ease',
+              }}
+            >
+              {label}
+            </a>
+          ))}
         </div>
 
         {/* CTA */}

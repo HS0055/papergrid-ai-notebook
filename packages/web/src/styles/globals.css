@@ -180,6 +180,25 @@
 }
 
 /* ========================================
+   PAPER DUST PARTICLES (hero→stats transition)
+   ======================================== */
+
+@keyframes paper-dust {
+  0%   { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 0.5; }
+  85%  { opacity: 0.3; }
+  100% { transform: translateY(-140px) translateX(25px) rotate(160deg); opacity: 0; }
+}
+
+.dust-particle {
+  position: absolute;
+  background: rgba(244, 240, 236, 0.35);
+  border-radius: 50%;
+  animation: paper-dust linear infinite;
+  will-change: transform, opacity;
+}
+
+/* ========================================
    SCROLL REVEAL SYSTEM (IntersectionObserver)
    ======================================== */
 
@@ -345,6 +364,73 @@
 }
 
 /* ========================================
+   INK RIPPLE EFFECT
+   ======================================== */
+
+.ink-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ink-ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, rgba(79,70,229,0.25) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: width 0.4s ease-out, height 0.4s ease-out, opacity 0.4s ease-out;
+  pointer-events: none;
+}
+
+.ink-ripple:active::after {
+  width: 300px;
+  height: 300px;
+  opacity: 1;
+  transition: width 0s, height 0s, opacity 0s;
+}
+
+/* ========================================
+   AI DEMO ANIMATIONS (AIFeatureSection)
+   ======================================== */
+
+@keyframes thinkingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  30% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}
+
+.thinking-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4f46e5;
+  animation: thinkingDot 1.4s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ========================================
    PRINT STYLES
    ======================================== */
 
@@ -381,6 +467,56 @@
 }
 
 /* ========================================
+   CONTINUOUS INK PROGRESS LINE
+   ======================================== */
+
+.ink-progress-line {
+  position: fixed;
+  left: 24px;
+  top: 0;
+  width: 2px;
+  height: 100vh;
+  background: var(--color-indigo-brand);
+  transform-origin: top center;
+  z-index: 35;
+  pointer-events: none;
+}
+
+.ink-progress-dot {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-indigo-brand);
+  box-shadow: 0 0 8px rgba(79, 70, 229, 0.6),
+              0 0 16px rgba(79, 70, 229, 0.3);
+}
+
+/* Hide on mobile */
+@media (max-width: 767px) {
+  .ink-progress-line {
+    display: none;
+  }
+}
+
+/* ========================================
+   CAROUSEL SCROLL-SNAP UTILITIES
+   ======================================== */
+
+.carousel-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.carousel-card {
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+
+/* ========================================
    PREFERS REDUCED MOTION
    ======================================== */
 
@@ -394,5 +530,24 @@
   .reveal, .reveal-scale, .reveal-left, .reveal-right {
     opacity: 1;
     transform: none;
+  }
+  .stat-item {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+  .dust-particle {
+    display: none !important;
+  }
+  .ink-ripple::after {
+    display: none !important;
+  }
+  .ink-progress-line {
+    display: none !important;
+  }
+  /* Floating CTA Bar: just appears, no slide animation */
+  [data-floating-cta-bar] {
+    transition: opacity 0.01ms !important;
+    transform: none !important;
   }
 }

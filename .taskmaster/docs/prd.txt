@@ -1,0 +1,445 @@
+# PaperGrid Landing Page — Full Premium Overhaul (Approach C)
+
+## Overview
+Rebuild every section of the PaperGrid AI Notebook landing page to editorial-magazine quality with cinematic continuity from the 3D hero through all content sections. The current state: the hero + StatsStrip transition is polished (dark-to-parchment gradient, scrub-driven counting numbers, paper dust particles), but all sections below StatsStrip feel flat and disconnected from the cinematic 3D experience above.
+
+## Goals
+1. Extend the storytelling narrative from hero through ALL sections (no "flat after hero" problem)
+2. Make every section interactive, not just visually attractive
+3. Eliminate dead weight sections and restructure for better conversion flow
+4. Create a unified color flow and design system across all sections
+5. Add signature interaction patterns (ink ripple, magnetic buttons, cursor tracking)
+6. Achieve editorial-magazine quality comparable to Linear.app, Raycast.com, Framer.com landing pages
+
+## Tech Stack Context
+- React 19 + TypeScript + Vite
+- GSAP + ScrollTrigger for scroll animations
+- React Three Fiber (R3F) for 3D elements
+- Three.js for materials, geometry
+- Tailwind CSS v4 with custom @theme tokens
+- Existing 3D components: HeroNotebook.tsx, HeroScene.tsx, BookCoverScene.tsx, FloatingPapers.tsx (disabled), PostEffects.tsx, PaperMaterial.tsx
+
+## Current Landing Page Structure (in order)
+1. NavBar - sticky navigation
+2. HeroSection - pinned scroll-driven 3D notebook with 3 text phases (350vh)
+3. StatsStrip - dark-to-parchment gradient transition with counting numbers (DONE, polished)
+4. PaperStylesSection - 10 paper type grid with fan entrance
+5. AIFeatureSection - AI layout generation showcase
+6. BlockTypesBento - bento grid of 12 block types
+7. AestheticsSection - ASMR sounds + stickers/washi tape features
+8. HowItWorksSection - 3-step getting started guide
+9. TestimonialsSection - user testimonials
+10. FinalCTA - final call to action
+11. LandingFooter - footer
+
+---
+
+## TASK 1: Fix Hero Scroll Dead Zones
+
+### Problem
+The hero has 2 scroll dead zones where nothing happens:
+- 8-20% scroll: Phase 1 text has exited but Phase 2 hasn't appeared yet
+- 48-54% scroll: Phase 2 has exited but Phase 3 hasn't appeared yet
+
+### Requirements
+- Tighten the phase timing in HeroSection.tsx so phases overlap or connect seamlessly
+- Phase 1: visible 0-12%, exits 12-18%
+- Phase 2: enters 16-22%, visible until 42%, exits 42-50%
+- Phase 3: enters 48-56%, exits 72-82%
+- Reduce total pin from +=250% to +=200% for tighter pacing
+- Each phase transition should have a subtle crossfade (not hard cut)
+
+### Files
+- `packages/web/src/components/landing/HeroSection.tsx`
+
+---
+
+## TASK 2: Cursor-Tracked 3D Notebook Tilt
+
+### Problem
+HeroNotebook.tsx accepts a `hovered` prop but never uses it. The 3D notebook sits passively — no mouse interactivity.
+
+### Requirements
+- Track mouse/cursor position relative to the hero viewport
+- Pass normalized cursor position (-1 to 1, x and y) to HeroNotebook via a shared ref (no re-renders)
+- In HeroNotebook's useFrame: apply subtle tilt based on cursor position
+  - rotateX: cursor.y * 0.08 (max 0.08 radians, ~4.5 degrees)
+  - rotateY: cursor.x * 0.12 (max 0.12 radians, ~7 degrees)
+- Smooth lerp on cursor tracking (same Math.pow(0.001, delta) pattern)
+- Tilt fades out as book opens (multiply by `1 - open` factor)
+- Mobile: disable cursor tracking (touch doesn't have persistent cursor)
+- On hover: slight scale increase (1.0 -> 1.03) with smooth transition
+
+### Files
+- `packages/web/src/components/landing/HeroSection.tsx` (mouse tracking, pass ref)
+- `packages/web/src/components/three/landing/HeroNotebook.tsx` (consume cursor ref, apply tilt)
+- `packages/web/src/components/three/landing/HeroScene.tsx` (pass through cursor ref)
+
+---
+
+## TASK 3: Section Restructure — Kill HowItWorks, Move AI Earlier, Inline Testimonials
+
+### Problem
+- HowItWorksSection is 3 generic steps that add no value (users already understand from watching the hero)
+- AIFeatureSection is buried at position 5 — AI is THE differentiator, should be shown earlier
+- TestimonialsSection is isolated at the bottom where few users reach it
+- Social proof should appear at the decision point, not buried
+
+### Requirements
+- DELETE HowItWorksSection entirely (remove import and component from LandingPage.tsx)
+- MOVE AIFeatureSection to position 3 (right after PaperStylesSection)
+- CREATE inline testimonial cards (2-3 quotes) that appear AFTER AIFeatureSection
+  - Not a separate section — embedded as a reveal element within the flow
+  - Short quotes with name + role, monogram avatar (first letter, colored circle)
+  - Subtle entrance animation (fade + scale from center)
+- New section order:
+  1. NavBar
+  2. HeroSection
+  3. StatsStrip
+  4. PaperStylesSection
+  5. AIFeatureSection (MOVED UP)
+  6. Inline Testimonials (NEW - 2-3 cards, not full section)
+  7. BlockTypesBento
+  8. AestheticsSection
+  9. FinalCTA
+  10. LandingFooter
+
+### Files
+- `packages/web/src/components/LandingPage.tsx` (restructure, remove HowItWorks import)
+- `packages/web/src/components/landing/InlineTestimonials.tsx` (NEW component)
+
+---
+
+## TASK 4: Continuous Ink Progress Line
+
+### Problem
+Sections feel disconnected — no visual thread connecting the page narrative. Each section is an island.
+
+### Requirements
+- Add a thin vertical line along the left edge of the viewport (like a notebook margin line)
+- Fixed position, 2px wide, indigo-brand color with gradient opacity
+- Line "draws" downward as user scrolls (height matches scroll progress)
+- Small dot/circle at the current scroll position (like a pen tip)
+- Subtle glow effect on the dot (indigo shadow)
+- Line starts at the bottom of StatsStrip (not during hero)
+- Fades out at FinalCTA
+- Z-index above sections but below NavBar
+- Mobile: hide on screens < 768px (would be too close to content)
+- Implementation: single fixed div in LandingPage.tsx with GSAP ScrollTrigger controlling scaleY
+
+### Files
+- `packages/web/src/components/LandingPage.tsx` (add ink line element + GSAP animation)
+- `packages/web/src/styles/globals.css` (ink line styles, reduced motion override)
+
+---
+
+## TASK 5: PaperStyles Large Live Preview Panel
+
+### Problem
+PaperStylesSection is just a grid of small thumbnails. Selecting a paper type only updates a small info bar at the bottom. It doesn't feel interactive enough — users can't really see the paper texture.
+
+### Requirements
+- Add a large preview panel (right side on desktop, below grid on mobile) that shows the selected paper style at full size
+- Preview: ~400px tall, full width of its column, with the CSS paper pattern filling it
+- Animated content inside: show a few sample "written" lines (handwriting font) that fade in when paper changes
+- Transition between papers: crossfade with subtle scale (0.98 -> 1.0)
+- Layout: 2-column on desktop (grid left, preview right), stacked on mobile
+- GSAP-driven transition when selection changes (not just CSS transition)
+
+### Files
+- `packages/web/src/components/landing/PaperStylesSection.tsx`
+
+---
+
+## TASK 6: AIFeatureSection Real-Time Typing Simulation
+
+### Problem
+AIFeatureSection just describes the AI feature with static text/images. It doesn't SHOW the AI working. This is the biggest missed "wow" opportunity.
+
+### Requirements
+- Add a demo area showing a simulated AI interaction:
+  - User "types" a prompt (typewriter text effect): "Create a study planner for next week"
+  - After typing completes, show a "thinking" indicator (3 dots pulsing)
+  - Then blocks appear one by one (staggered) showing generated content:
+    - A heading block: "Weekly Study Plan"
+    - A checklist block with 3 items
+    - A grid/table block with days
+  - Each block slides in with the existing blockSlideIn animation
+- All animation is scroll-driven (scrub) or auto-plays when section enters viewport
+- The demo area should look like a mini notebook page with paper lines background
+- No actual API calls — this is a pre-scripted animation
+- Implementation: GSAP timeline with ScrollTrigger, DOM elements styled to look like the app
+
+### Files
+- `packages/web/src/components/landing/AIFeatureSection.tsx`
+
+---
+
+## TASK 7: BlockTypesBento Hover Micro-Interactions
+
+### Problem
+Bento cards are static — hover does nothing interesting. Each card just has a title and icon.
+
+### Requirements
+- On hover, each bento card should:
+  - Scale slightly (1.0 -> 1.02) with shadow increase
+  - Show a brief sample of that block type (e.g., TEXT card shows a few lines appear, CHECKLIST shows checkboxes ticking, GRID shows cells filling)
+  - The sample content animates IN on hover, OUT on leave
+- Implementation: each card has a hidden content div that GSAP reveals on mouseenter
+- Stagger the sample content appearance (0.05s between elements)
+- Mobile: show sample content always visible (no hover on touch)
+- Keep cards the same size — content appears within existing bounds
+
+### Files
+- `packages/web/src/components/landing/BlockTypesBento.tsx`
+
+---
+
+## TASK 8: AestheticsSection Horizontal Carousel
+
+### Problem
+AestheticsSection lists ASMR sounds and stickers/washi tape features but the presentation is standard vertical cards. Not editorial enough.
+
+### Requirements
+- Convert to a horizontal scrolling carousel (drag or scroll-snap)
+- Each card is a "feature moment": large visual + short copy
+- Cards: ASMR Writing Sounds, Paper Textures, Sticker Pack, Washi Tape, Color Themes
+- Auto-scroll hint animation on first view (cards shift 60px left then back)
+- Scroll-snap for clean stopping points
+- Navigation dots or subtle arrows
+- On mobile: full-width cards with horizontal swipe
+- Premium feel: cards have subtle parallax (background moves slower than foreground text)
+
+### Files
+- `packages/web/src/components/landing/AestheticsSection.tsx`
+- `packages/web/src/styles/globals.css` (scroll-snap utilities if needed)
+
+---
+
+## TASK 9: Reintroduce FloatingPapers with LOD System
+
+### Problem
+FloatingPapers.tsx exists but is disabled. It was probably cut for performance. But ambient 3D throughout the page (not just the hero) would make the experience feel premium.
+
+### Requirements
+- Reintroduce FloatingPapers as ambient 3D elements visible during content sections
+- LOD (Level of Detail) system:
+  - When near camera: show paper texture detail
+  - When far: simple flat planes with low-res texture
+  - Reduce to 3-4 papers (not a swarm)
+- Papers float gently in the periphery (left and right edges, z=-2 to -5)
+- Tied to a SEPARATE lightweight R3F canvas that overlays content sections
+  - OR: extend the existing hero canvas to cover more of the page
+- Performance: auto-degrade based on FPS (if < 45fps, hide FloatingPapers)
+- Papers should have subtle parallax with scroll
+- Do NOT show during hero (hero has its own 3D) — start from PaperStylesSection
+
+### Files
+- `packages/web/src/components/three/landing/FloatingPapers.tsx` (rewrite with LOD)
+- `packages/web/src/components/LandingPage.tsx` (add ambient canvas or extend hero canvas)
+- `packages/web/src/components/three/landing/AmbientCanvas.tsx` (NEW - lightweight R3F canvas)
+
+---
+
+## TASK 10: Notebook Bookend in FinalCTA
+
+### Problem
+The 3D notebook opens in the hero but never appears again. The narrative has no closure.
+
+### Requirements
+- Add a small 3D notebook in the FinalCTA section that appears closed
+- As user scrolls into FinalCTA, the notebook CLOSES (reverse of the hero open animation)
+- Creates narrative bookend: "opened your notebook at the start, now close it and make it yours"
+- Lightweight: reuse HeroNotebook component but with reversed scroll mapping
+- Small size (scale 0.5-0.6), positioned to the side of the CTA text
+- Separate tiny R3F canvas (or same ambient canvas from Task 9)
+- On mobile: hide the 3D notebook (just show CTA text)
+
+### Files
+- `packages/web/src/components/landing/FinalCTA.tsx`
+- `packages/web/src/components/three/landing/ClosingNotebook.tsx` (NEW - reversed HeroNotebook)
+
+---
+
+## TASK 11: Unified Color Flow System
+
+### Problem
+Sections alternate between white, parchment, white creating a "ping-pong" effect. No unified color narrative.
+
+### Requirements
+- Define a consistent color flow for the entire page:
+  - Hero: dark (#0f111a)
+  - StatsStrip: dark-to-parchment gradient (ALREADY DONE)
+  - PaperStylesSection: warm white (#fdfbf7) — matches paper background
+  - AIFeatureSection: very subtle warm gray (#f8f6f3)
+  - Inline Testimonials: transparent (inherits from surrounding)
+  - BlockTypesBento: white (#ffffff) with subtle paper texture overlay
+  - AestheticsSection: warm parchment (#F4F0EC)
+  - FinalCTA: dark (#0f111a) — bookends with hero
+  - Footer: darkest (#0a0c14)
+- Each section transition should be smooth (no hard color cliff)
+- Add subtle CSS gradient overlaps between sections (20px overlap zones)
+- Update section backgrounds in each component file
+
+### Files
+- `packages/web/src/components/landing/PaperStylesSection.tsx`
+- `packages/web/src/components/landing/AIFeatureSection.tsx`
+- `packages/web/src/components/landing/BlockTypesBento.tsx`
+- `packages/web/src/components/landing/AestheticsSection.tsx`
+- `packages/web/src/components/landing/FinalCTA.tsx`
+- `packages/web/src/components/landing/LandingFooter.tsx`
+
+---
+
+## TASK 12: Signature Interaction Patterns
+
+### Problem
+No consistent micro-interaction language. Buttons feel generic. No signature "PaperGrid feel" to interactions.
+
+### Requirements
+- **Magnetic buttons**: CTA buttons subtly attract toward cursor within 80px radius, then snap back. Apply to all primary CTA buttons across all sections.
+- **Ink ripple effect**: On click, buttons show an expanding ink-drop ripple (dark indigo, 0.4s) instead of default click effect. CSS-only implementation using ::after pseudo-element.
+- **Scroll-spy NavBar**: Active section highlighted in navbar as user scrolls. Use IntersectionObserver per section. Active link gets indigo underline that slides between items.
+
+### Files
+- `packages/web/src/components/landing/NavBar.tsx` (scroll spy)
+- `packages/web/src/styles/globals.css` (ink ripple, magnetic button utilities)
+- `packages/web/src/hooks/useMagneticButton.ts` (NEW - magnetic button hook)
+- `packages/web/src/hooks/useScrollSpy.ts` (NEW - scroll spy hook)
+
+---
+
+## TASK 13: FinalCTA Typewriter Text Reveal
+
+### Problem
+FinalCTA is a standard CTA with heading + button. Doesn't feel like a culmination.
+
+### Requirements
+- Heading text reveals with typewriter effect (character by character) as section enters viewport
+- Add handwritten annotation SVGs: arrows, underlines, circles around key words
+  - These draw in (stroke-dashoffset animation) after the text completes
+- Handwriting font (Caveat/Patrick Hand) for annotations
+- Subtle paper texture background in the CTA card area
+- "Start creating" button has the magnetic + ink ripple effects from Task 12
+
+### Files
+- `packages/web/src/components/landing/FinalCTA.tsx`
+- `packages/web/src/hooks/useTypewriter.ts` (NEW - typewriter animation hook)
+
+---
+
+## TASK 14: Testimonials Masonry with Monogram Avatars
+
+### Problem
+The existing TestimonialsSection is a separate isolated section. After restructure (Task 3), we're using inline testimonials. But we need to build those inline testimonial cards with premium styling.
+
+### Requirements
+- InlineTestimonials component shows 3 testimonial cards in a row (desktop) or stacked (mobile)
+- Each card has:
+  - Monogram avatar: first letter of name in a colored circle (indigo/amber/leather rotating)
+  - Quote in slightly larger text with opening quotation mark decorative element
+  - Name + role in smaller muted text
+  - Subtle card with border and shadow
+- Cards stagger in from bottom on scroll entrance (GSAP)
+- Handwritten-style quotation marks (use Caveat font)
+
+### Files
+- `packages/web/src/components/landing/InlineTestimonials.tsx` (created in Task 3, enhanced here)
+
+---
+
+## TASK 15: Floating CTA Bar
+
+### Problem
+Users who scroll past the hero may not have a CTA visible. Conversion opportunity lost until they reach FinalCTA at the very bottom.
+
+### Requirements
+- After scrolling past 60% of the page, show a slim floating CTA bar at the bottom
+- Bar: 48px tall, dark background, "Start Creating — Free" text + small CTA button
+- Slides up from bottom (GSAP), dismissible with X button
+- Hides when FinalCTA section is in viewport (don't double up)
+- Hides when user scrolls back to hero
+- Respects prefers-reduced-motion (just appears, no slide)
+- Z-index below modal/popover but above content
+
+### Files
+- `packages/web/src/components/landing/FloatingCTABar.tsx` (NEW)
+- `packages/web/src/components/LandingPage.tsx` (add component)
+
+---
+
+## TASK 16: Design System Unification
+
+### Problem
+Inconsistent spacing, border radii, shadows, and typography across sections. Each section was built independently with inline styles.
+
+### Requirements
+- Audit all sections for consistency:
+  - Section padding: all sections use `py-24 px-6` (or equivalent clamp)
+  - Card border-radius: standardize to `rounded-2xl` (16px) for all cards
+  - Shadow tokens: define 3 levels (sm, md, lg) and use consistently
+  - Typography: section headers use `font-serif font-bold` with consistent clamp sizes
+  - Accent colors: only `--color-indigo-brand`, `--color-leather`, `--color-amber-gold`
+  - Max-width: standardize to `max-w-7xl` for all sections
+- Add shadow and spacing tokens to globals.css @theme block
+- Fix the repeated "italic colored word in headline" pattern — vary heading styles
+
+### Files
+- `packages/web/src/styles/globals.css` (add design tokens)
+- All section component files (consistency pass)
+
+---
+
+## TASK 17: Performance Audit and Optimization
+
+### Problem
+Adding 3D elements, animations, and interactions increases performance risk. Need to ensure 60fps on mid-range devices.
+
+### Requirements
+- Add FPS monitor (development only) — shows current FPS in corner
+- Implement auto-degradation:
+  - If FPS drops below 45 for 2+ seconds: disable FloatingPapers
+  - If FPS drops below 30 for 2+ seconds: disable PostEffects, simplify scroll animations
+- Lazy load heavy components (AmbientCanvas, ClosingNotebook) with React.lazy + Suspense
+- Ensure all GSAP ScrollTrigger instances are cleaned up on unmount
+- Add `will-change` hints to animated elements
+- Verify all `useFrame` loops check `delta` bounds (clamp to prevent spiral of death)
+
+### Files
+- `packages/web/src/hooks/usePerformanceMonitor.ts` (NEW)
+- `packages/web/src/components/LandingPage.tsx` (lazy loading, perf hooks)
+- All components with GSAP (verify cleanup)
+
+---
+
+## TASK 18: Reduced Motion and Accessibility
+
+### Problem
+All new animations need reduced-motion alternatives. Interactive elements need keyboard accessibility.
+
+### Requirements
+- Every new animation has a `prefers-reduced-motion: reduce` override in globals.css
+- Typewriter effect: shows full text immediately
+- Ink progress line: hidden
+- FloatingPapers: hidden
+- Carousel: no auto-scroll, shows as static grid
+- All interactive elements (magnetic buttons, bento cards) have focus-visible styles
+- Carousel is keyboard-navigable (arrow keys)
+- ARIA labels on decorative elements (aria-hidden="true" on ink line, floating papers)
+- Screen reader: skip decorative 3D canvases
+
+### Files
+- `packages/web/src/styles/globals.css` (reduced motion overrides)
+- All new interactive components (ARIA attributes, focus styles)
+
+---
+
+## Dependencies
+- Task 3 (restructure) should be done before Tasks 5, 6, 7, 8 (section redesigns)
+- Task 4 (ink line) depends on Task 3 (need to know final section order)
+- Task 9 (FloatingPapers) depends on Task 17 (need perf monitoring first)
+- Task 10 (closing notebook) depends on Task 9 (shares ambient canvas)
+- Task 12 (interactions) can be done independently
+- Task 14 (testimonials style) depends on Task 3 (creates the component)
+- Task 16 (design system) should be done LAST as a unification pass
+- Task 18 (accessibility) should be done LAST after all animations exist

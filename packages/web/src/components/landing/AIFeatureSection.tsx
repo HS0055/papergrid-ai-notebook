@@ -1,5 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Sparkles, ArrowRight } from 'lucide-react';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const steps = [
   {
@@ -34,6 +38,13 @@ interface AIFeatureSectionProps {
 
 export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) => {
   const [activePromptIdx, setActivePromptIdx] = useState(0);
+  const demoRef = useRef<HTMLDivElement>(null);
+  const typingTextRef = useRef<HTMLSpanElement>(null);
+  const cursorRef = useRef<HTMLSpanElement>(null);
+  const thinkingRef = useRef<HTMLDivElement>(null);
+  const headingBlockRef = useRef<HTMLDivElement>(null);
+  const checklistBlockRef = useRef<HTMLDivElement>(null);
+  const gridBlockRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -42,20 +53,119 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
     return () => clearInterval(timer);
   }, []);
 
+  // AI Demo Animation Timeline
+  useEffect(() => {
+    if (!demoRef.current || !typingTextRef.current) return;
+
+    const ctx = gsap.context(() => {
+      // Initial states
+      gsap.set(thinkingRef.current, { opacity: 0, scale: 0.8 });
+      gsap.set([headingBlockRef.current, checklistBlockRef.current, gridBlockRef.current], {
+        opacity: 0,
+        y: 20,
+        scale: 0.95
+      });
+
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: demoRef.current,
+          start: 'top 70%',
+          once: true, // Only play once
+        },
+      });
+
+      // Phase 1: Typewriter effect (character by character)
+      const promptText = 'Create a study planner for next week';
+      const charCount = { val: 0 };
+
+      tl.to(charCount, {
+        val: promptText.length,
+        duration: 2,
+        ease: 'none',
+        onUpdate: () => {
+          const currentLength = Math.floor(charCount.val);
+          if (typingTextRef.current) {
+            typingTextRef.current.textContent = promptText.substring(0, currentLength);
+          }
+          // Blink cursor during typing
+          if (cursorRef.current) {
+            cursorRef.current.style.opacity = Math.random() > 0.3 ? '1' : '0';
+          }
+        },
+      });
+
+      // Steady cursor after typing
+      tl.to(cursorRef.current, {
+        duration: 0.1,
+        opacity: 1,
+      });
+
+      // Phase 2: Thinking indicator
+      tl.to(cursorRef.current, {
+        opacity: 0,
+        duration: 0.3,
+      }, '+=0.3');
+
+      tl.to(thinkingRef.current, {
+        opacity: 1,
+        scale: 1,
+        duration: 0.4,
+        ease: 'back.out(1.7)',
+      }, '-=0.1');
+
+      // Let it think for a moment
+      tl.to({}, { duration: 1.8 });
+
+      // Phase 3: Hide thinking, show blocks staggered
+      tl.to(thinkingRef.current, {
+        opacity: 0,
+        scale: 0.8,
+        duration: 0.3,
+      });
+
+      // Blocks appear one by one with slide-in animation
+      tl.to(headingBlockRef.current, {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.5,
+        ease: 'back.out(1.7)',
+      }, '+=0.2');
+
+      tl.to(checklistBlockRef.current, {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.5,
+        ease: 'back.out(1.7)',
+      }, '-=0.2');
+
+      tl.to(gridBlockRef.current, {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.5,
+        ease: 'back.out(1.7)',
+      }, '-=0.2');
+    }, demoRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
     <section
       id="ai-feature"
       className="relative py-28 px-6 overflow-hidden"
-      style={{ background: 'var(--color-ink)' }}
+      style={{ background: '#f8f6f3' }}
     >
       {/* Ambient glows */}
       <div
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse, rgba(79,70,229,0.12) 0%, transparent 70%)', filter: 'blur(40px)' }}
+        style={{ background: 'radial-gradient(ellipse, rgba(79,70,229,0.06) 0%, transparent 70%)', filter: 'blur(40px)' }}
       />
       <div
         className="absolute bottom-0 right-1/4 w-[350px] h-[350px] rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse, rgba(217,119,6,0.08) 0%, transparent 70%)', filter: 'blur(60px)' }}
+        style={{ background: 'radial-gradient(ellipse, rgba(217,119,6,0.04) 0%, transparent 70%)', filter: 'blur(60px)' }}
       />
 
       <div className="max-w-7xl mx-auto relative z-10">
@@ -63,13 +173,13 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
         <div className="reveal text-center mb-20">
           <div
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6 border"
-            style={{ background: 'rgba(79,70,229,0.15)', borderColor: 'rgba(79,70,229,0.4)', color: '#a5b4fc' }}
+            style={{ background: 'rgba(79,70,229,0.08)', borderColor: 'rgba(79,70,229,0.2)', color: '#4f46e5' }}
           >
             <Sparkles size={13} />
             Gemini 2.5 Flash
           </div>
-          <h2 className="font-serif font-bold text-white" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', lineHeight: 1.1 }}>
-            Describe it.{' '}<span className="italic" style={{ color: '#818cf8' }}>Get a layout</span>{' '}instantly.
+          <h2 className="font-serif font-bold" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', lineHeight: 1.1, color: 'var(--color-ink)' }}>
+            Describe it.{' '}<span className="italic" style={{ color: '#4f46e5' }}>Get a layout</span>{' '}instantly.
           </h2>
         </div>
 
@@ -78,11 +188,11 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
           <div className="flex-1 space-y-10">
             {steps.map((step, i) => (
               <div key={step.num} className="reveal-left flex items-start gap-6" style={{ transitionDelay: `${i * 150}ms` }}>
-                <span className="font-serif font-bold shrink-0 leading-none" style={{ fontSize: '3rem', color: 'rgba(79,70,229,0.4)' }}>
+                <span className="font-serif font-bold shrink-0 leading-none" style={{ fontSize: '3rem', color: 'rgba(79,70,229,0.25)' }}>
                   {step.num}
                 </span>
                 <div className="pt-2">
-                  <h3 className="font-serif font-bold text-xl mb-2" style={{ color: 'rgba(248,250,252,0.95)' }}>{step.title}</h3>
+                  <h3 className="font-serif font-bold text-xl mb-2" style={{ color: 'var(--color-ink)' }}>{step.title}</h3>
                   <p style={{ color: '#64748b', lineHeight: 1.7 }}>{step.desc}</p>
                 </div>
               </div>
@@ -90,8 +200,8 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
 
             <button
               onClick={onLaunch}
-              className="reveal-left flex items-center gap-2 px-7 py-3.5 font-bold text-white rounded-xl transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', transitionDelay: '450ms' }}
+              className="reveal-left flex items-center gap-2 px-7 py-3.5 font-bold text-white rounded-xl transition-all hover:opacity-90 shadow-lg"
+              style={{ background: 'var(--color-indigo-brand)', transitionDelay: '450ms' }}
             >
               Try it now <ArrowRight size={16} />
             </button>
@@ -100,29 +210,29 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
           {/* Right: Mockup terminal */}
           <div className="reveal-right flex-1 w-full max-w-lg" style={{ transitionDelay: '200ms' }}>
             <div
-              className="rounded-2xl overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.5)]"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(20px)' }}
+              className="rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' }}
             >
               {/* Terminal titlebar */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.2)' }}>
-                <div className="w-3 h-3 rounded-full bg-red-500/70" />
-                <div className="w-3 h-3 rounded-full bg-amber-400/70" />
-                <div className="w-3 h-3 rounded-full bg-emerald-500/70" />
-                <span className="ml-2 text-xs" style={{ color: 'rgba(148,163,184,0.6)' }}>AI Layout Generator</span>
+              <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: '#e5e7eb', background: '#f9fafb' }}>
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <div className="w-3 h-3 rounded-full bg-amber-400" />
+                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                <span className="ml-2 text-xs font-medium" style={{ color: '#64748b' }}>AI Layout Generator</span>
               </div>
 
               {/* Prompt area */}
-              <div className="p-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              <div className="p-5 border-b" style={{ borderColor: '#e5e7eb' }}>
                 <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#4f46e5' }}>Your prompt</div>
-                <div className="font-hand text-lg transition-all duration-500" style={{ color: 'rgba(248,250,252,0.9)', minHeight: '32px' }}>
+                <div className="font-hand text-lg transition-all duration-500" style={{ color: '#1a1c23', minHeight: '32px' }}>
                   {prompts[activePromptIdx]}
-                  <span className="inline-block w-0.5 h-5 ml-0.5 align-middle animate-pulse" style={{ background: '#818cf8' }} />
+                  <span className="inline-block w-0.5 h-5 ml-0.5 align-middle animate-pulse" style={{ background: '#4f46e5' }} />
                 </div>
               </div>
 
               {/* Generated layout preview */}
               <div className="p-5">
-                <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'rgba(148,163,184,0.7)' }}>✦ Generated Layout</div>
+                <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#64748b' }}>✦ Generated Layout</div>
                 <div className="flex gap-3">
                   <div className="flex-1 rounded-lg p-3 paper-lines" style={{ backgroundAttachment: 'local', minHeight: '120px' }}>
                     <div className="font-hand text-sm font-bold text-gray-700 mb-2">Monday</div>
@@ -155,14 +265,115 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
                   onClick={() => setActivePromptIdx(i)}
                   className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
                   style={{
-                    background: activePromptIdx === i ? 'rgba(79,70,229,0.3)' : 'rgba(255,255,255,0.06)',
-                    color: activePromptIdx === i ? '#a5b4fc' : 'rgba(148,163,184,0.7)',
-                    border: `1px solid ${activePromptIdx === i ? 'rgba(79,70,229,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                    background: activePromptIdx === i ? 'rgba(79,70,229,0.12)' : 'rgba(0,0,0,0.03)',
+                    color: activePromptIdx === i ? '#4f46e5' : '#64748b',
+                    border: `1px solid ${activePromptIdx === i ? 'rgba(79,70,229,0.3)' : 'rgba(0,0,0,0.08)'}`,
                   }}
                 >
                   {p}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* AI Demo Area - Real-time typing simulation */}
+        <div ref={demoRef} className="mt-24 max-w-3xl mx-auto">
+          <div className="text-center mb-8">
+            <h3 className="font-serif font-bold text-2xl mb-2" style={{ color: 'var(--color-ink)' }}>
+              See it in action
+            </h3>
+            <p style={{ color: '#64748b' }}>Watch AI generate a complete notebook layout from scratch</p>
+          </div>
+
+          <div
+            className="rounded-2xl overflow-hidden shadow-2xl"
+            style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' }}
+          >
+            {/* Prompt input area */}
+            <div className="p-6 border-b" style={{ borderColor: '#e5e7eb', background: '#f9fafb' }}>
+              <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#4f46e5' }}>
+                Your prompt
+              </div>
+              <div className="font-hand text-lg" style={{ color: '#1a1c23', minHeight: '32px' }}>
+                <span ref={typingTextRef}></span>
+                <span
+                  ref={cursorRef}
+                  className="inline-block w-0.5 h-5 ml-0.5 align-middle"
+                  style={{ background: '#4f46e5', opacity: 0 }}
+                />
+              </div>
+            </div>
+
+            {/* Generated content area */}
+            <div className="p-6 paper-lines" style={{ minHeight: '400px', position: 'relative' }}>
+              {/* Thinking indicator */}
+              <div
+                ref={thinkingRef}
+                className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full"
+                style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.2)' }}
+              >
+                <span className="text-xs font-medium" style={{ color: '#4f46e5' }}>AI thinking</span>
+                <div className="flex gap-1">
+                  <div className="thinking-dot"></div>
+                  <div className="thinking-dot"></div>
+                  <div className="thinking-dot"></div>
+                </div>
+              </div>
+
+              {/* Generated blocks */}
+              <div className="space-y-4">
+                {/* Heading block */}
+                <div
+                  ref={headingBlockRef}
+                  className="p-4 rounded-lg"
+                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(79,70,229,0.2)' }}
+                >
+                  <h4 className="font-hand font-bold text-xl text-gray-800">Weekly Study Plan</h4>
+                </div>
+
+                {/* Checklist block */}
+                <div
+                  ref={checklistBlockRef}
+                  className="p-4 rounded-lg"
+                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(148,163,184,0.2)' }}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded border-2 border-gray-400"></div>
+                      <span className="font-hand text-sm text-gray-700">Monday: Review notes from last week</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded border-2 border-gray-400"></div>
+                      <span className="font-hand text-sm text-gray-700">Wednesday: Practice problems (Ch. 5-7)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded border-2 border-gray-400"></div>
+                      <span className="font-hand text-sm text-gray-700">Friday: Study group session</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grid/table block */}
+                <div
+                  ref={gridBlockRef}
+                  className="p-4 rounded-lg"
+                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(148,163,184,0.2)' }}
+                >
+                  <div className="grid grid-cols-3 gap-2">
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].slice(0, 3).map((day, i) => (
+                      <div
+                        key={i}
+                        className="text-center p-2 rounded"
+                        style={{ background: 'rgba(79,70,229,0.08)' }}
+                      >
+                        <div className="font-hand text-xs font-bold text-gray-600">{day}</div>
+                        <div className="font-hand text-[10px] text-gray-500 mt-1">2-4pm</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

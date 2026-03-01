@@ -134,7 +134,7 @@ Return a JSON object matching the schema.`,
             return;
           }
 
-          const geminiData = await geminiResponse.json() as any;
+          const geminiData: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> } = await geminiResponse.json();
           const generatedText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
 
           if (!generatedText) {

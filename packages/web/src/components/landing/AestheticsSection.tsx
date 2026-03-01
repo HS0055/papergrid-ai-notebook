@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { gsap } from 'gsap';
 
 const aesthetics = [
   {
@@ -106,8 +107,107 @@ interface AestheticsSectionProps {
 }
 
 export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }) => {
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const bgRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const hasShownHintRef = useRef(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // Auto-scroll hint animation on first viewport entry
+  useEffect(() => {
+    if (!carouselRef.current || hasShownHintRef.current) return;
+
+    const carousel = carouselRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !hasShownHintRef.current) {
+          hasShownHintRef.current = true;
+
+          const ctx = gsap.context(() => {
+            gsap.timeline()
+              .to(carousel, {
+                scrollLeft: 60,
+                duration: 0.5,
+                ease: 'power2.out',
+              })
+              .to(carousel, {
+                scrollLeft: 0,
+                duration: 0.6,
+                ease: 'power2.inOut',
+                delay: 0.3,
+              });
+          }, carousel);
+
+          return () => ctx.revert();
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(carousel);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Track active card via IntersectionObserver
+  useEffect(() => {
+    if (!carouselRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = cardRefs.current.indexOf(entry.target as HTMLDivElement);
+            if (index !== -1) {
+              setActiveIndex(index);
+            }
+          }
+        });
+      },
+      {
+        root: carouselRef.current,
+        threshold: 0.6,
+      }
+    );
+
+    cardRefs.current.forEach((card) => {
+      if (card) observer.observe(card);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Parallax effect on scroll
+  useEffect(() => {
+    if (!carouselRef.current) return;
+
+    const handleScroll = () => {
+      cardRefs.current.forEach((card, i) => {
+        if (!card || !bgRefs.current[i]) return;
+
+        const cardRect = card.getBoundingClientRect();
+        const carouselRect = carouselRef.current!.getBoundingClientRect();
+        const cardCenter = cardRect.left + cardRect.width / 2;
+        const carouselCenter = carouselRect.left + carouselRect.width / 2;
+        const offset = (cardCenter - carouselCenter) / carouselRect.width;
+
+        // Subtle parallax: background moves slower than scroll
+        gsap.to(bgRefs.current[i], {
+          x: offset * -20,
+          duration: 0.3,
+          ease: 'power1.out',
+        });
+      });
+    };
+
+    const carousel = carouselRef.current;
+    carousel.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => carousel.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
-    <section className="py-24 px-6 bg-white">
+    <section className="py-24 px-6" style={{ background: '#F4F0EC' }}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="reveal text-center mb-16">
@@ -125,28 +225,45 @@ export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }
           </p>
         </div>
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {/* Horizontal Carousel */}
+        <div
+          ref={carouselRef}
+          className="carousel-container flex gap-6 overflow-x-auto pb-4 mb-8 snap-x snap-mandatory scroll-smooth"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--color-line) transparent',
+          }}
+        >
           {aesthetics.map((a, i) => (
             <div
               key={a.id}
-              className="reveal-scale group relative rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
-              style={{ transitionDelay: `${i * 100}ms` }}
+              ref={(el) => (cardRefs.current[i] = el)}
+              className="carousel-card group relative rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer snap-center shrink-0"
+              style={{
+                width: 'min(85vw, 420px)',
+                minHeight: '480px',
+              }}
               onClick={onLaunch}
             >
-              <div className={`absolute inset-0 ${a.paperClass}`} style={{ background: a.bg, backgroundAttachment: 'local' }} />
+              <div
+                ref={(el) => (bgRefs.current[i] = el)}
+                className={`absolute inset-0 ${a.paperClass}`}
+                style={{ background: a.bg, backgroundAttachment: 'local' }}
+              />
               <div className="absolute inset-0 pointer-events-none" style={{ background: `linear-gradient(to bottom, rgba(255,255,255,0) 40%, ${a.bg}ee 100%)` }} />
 
-              <div className="relative z-10 p-8 flex flex-col h-full" style={{ minHeight: '280px' }}>
-                <div
-                  className="self-start px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-4 border"
-                  style={{ background: a.accentBg, color: a.accentColor, borderColor: `${a.accentColor}30` }}
-                >
-                  {a.tag}
-                </div>
-                <div className="flex-1 mb-6">{a.preview}</div>
+              <div className="relative z-10 p-8 flex flex-col h-full justify-between">
                 <div>
-                  <h3 className="font-serif font-bold text-2xl mb-1" style={{ color: a.accentColor }}>{a.name}</h3>
+                  <div
+                    className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest mb-6 border"
+                    style={{ background: a.accentBg, color: a.accentColor, borderColor: `${a.accentColor}30` }}
+                  >
+                    {a.tag}
+                  </div>
+                  <div className="mb-8">{a.preview}</div>
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-2xl mb-2" style={{ color: a.accentColor }}>{a.name}</h3>
                   <p className="text-sm leading-relaxed" style={{ color: '#64748b' }}>{a.desc}</p>
                 </div>
                 <div
@@ -155,6 +272,30 @@ export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }
                 >→</div>
               </div>
             </div>
+          ))}
+        </div>
+
+        {/* Navigation Dots */}
+        <div className="flex justify-center gap-2">
+          {aesthetics.map((a, i) => (
+            <button
+              key={a.id}
+              onClick={() => {
+                cardRefs.current[i]?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'nearest',
+                  inline: 'center',
+                });
+              }}
+              className="transition-all duration-300"
+              style={{
+                width: activeIndex === i ? '32px' : '8px',
+                height: '8px',
+                borderRadius: '4px',
+                background: activeIndex === i ? 'var(--color-indigo-brand)' : 'var(--color-line)',
+              }}
+              aria-label={`Go to ${a.name}`}
+            />
           ))}
         </div>
       </div>

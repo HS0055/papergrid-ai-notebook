@@ -1,0 +1,271 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Fix Hero Scroll Dead Zones",
+        "description": "Tighten the 3-phase hero scroll timing to eliminate dead zones at 8-20% and 48-54% where nothing is visible. Reduce total pin from +=250% to +=200% for tighter pacing. Add subtle crossfade between phases.",
+        "status": "done",
+        "priority": "high",
+        "dependencies": [],
+        "details": "In HeroSection.tsx, retime the 3 text phases:\n- Phase 1: visible 0-12%, exits 12-18%\n- Phase 2: enters 16-22%, visible until 42%, exits 42-50%\n- Phase 3: enters 48-56%, exits 72-82%\n- Reduce minHeight from 350vh to 300vh, end from +=250% to +=200%\n- Each phase transition should overlap slightly for crossfade (not hard cut)",
+        "testStrategy": "Scroll through hero section slowly — no point should have empty screen. Each phase should seamlessly connect to next. Verify on desktop and mobile.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:38:54.622Z"
+      },
+      {
+        "id": "2",
+        "title": "Cursor-Tracked 3D Notebook Tilt",
+        "description": "Add mouse/cursor tracking to the 3D HeroNotebook so it tilts subtly toward the cursor. The hovered prop exists but is never used — wire it up with a shared cursor ref for zero re-renders.",
+        "status": "done",
+        "priority": "high",
+        "dependencies": [],
+        "details": "1. HeroSection.tsx: Track mouse position with onMouseMove, store normalized coords (-1 to 1) in a shared ref\n2. Pass cursorRef through HeroScene to HeroNotebook\n3. HeroNotebook useFrame: apply rotateX (cursor.y * 0.08) and rotateY (cursor.x * 0.12)\n4. Smooth with same Math.pow(0.001, delta) lerp pattern\n5. Tilt fades as book opens: multiply by (1 - open)\n6. On hover: scale 1.0 -> 1.03\n7. Mobile: disable (no persistent cursor)",
+        "testStrategy": "Move mouse over hero — notebook should tilt toward cursor smoothly. Verify tilt fades when book opens. Check mobile has no tilt.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:38:54.624Z"
+      },
+      {
+        "id": "3",
+        "title": "Section Restructure — Kill HowItWorks, Reorder, Inline Testimonials",
+        "description": "Delete HowItWorksSection, move AIFeatureSection to position 3 (after PaperStyles), create inline testimonial cards (2-3 quotes with monogram avatars) that appear after AIFeature.",
+        "status": "done",
+        "priority": "high",
+        "dependencies": [],
+        "details": "1. LandingPage.tsx: Remove HowItWorksSection import and component\n2. Move AIFeatureSection to after PaperStylesSection\n3. Create InlineTestimonials.tsx component:\n   - 3 cards in a row (desktop), stacked (mobile)\n   - Each: monogram avatar (first letter, colored circle), quote, name+role\n   - GSAP stagger entrance from bottom\n   - Handwritten quotation marks (Caveat font)\n4. New order: NavBar, Hero, Stats, PaperStyles, AI, Testimonials, BlockTypes, Aesthetics, FinalCTA, Footer",
+        "testStrategy": "Verify HowItWorksSection is gone, AI section appears after papers, testimonial cards render with correct layout on desktop and mobile.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:38:54.625Z"
+      },
+      {
+        "id": "4",
+        "title": "Continuous Ink Progress Line",
+        "description": "Add a thin vertical ink line along the left viewport edge that draws downward as user scrolls — like a notebook margin line connecting all sections.",
+        "status": "in-progress",
+        "priority": "medium",
+        "dependencies": [
+          "3"
+        ],
+        "details": "1. LandingPage.tsx: Add fixed-position div (2px wide, indigo-brand)\n2. Line draws via scaleY tied to scroll progress (GSAP ScrollTrigger)\n3. Small dot at current position (pen tip) with indigo glow\n4. Starts at bottom of StatsStrip, fades at FinalCTA\n5. Z-index: above sections, below NavBar\n6. Mobile: hidden below 768px\n7. globals.css: ink-line styles + reduced-motion override (hidden)",
+        "testStrategy": "Scroll page — line should draw smoothly. Verify hidden on mobile. Check reduced-motion hides it.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.048Z"
+      },
+      {
+        "id": "5",
+        "title": "PaperStyles Large Live Preview Panel",
+        "description": "Add a large preview panel to PaperStylesSection showing the selected paper style at full size with animated sample content.",
+        "status": "in-progress",
+        "priority": "medium",
+        "dependencies": [
+          "3"
+        ],
+        "details": "1. 2-column layout: grid left, preview right (stacked on mobile)\n2. Preview: ~400px tall, CSS paper pattern filling it\n3. Animated handwriting-font lines fade in when paper changes\n4. GSAP crossfade transition: scale 0.98->1.0, opacity swap\n5. Sample content: 3-4 lines of placeholder text in Patrick Hand font",
+        "testStrategy": "Click different paper styles — preview should crossfade smoothly. Verify layout stacks on mobile. Sample text should animate in.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.050Z"
+      },
+      {
+        "id": "6",
+        "title": "AIFeatureSection Real-Time Typing Simulation",
+        "description": "Add a demo area showing simulated AI interaction: user types prompt, thinking indicator, then generated blocks appear one by one.",
+        "status": "in-progress",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "details": "1. Demo area styled as mini notebook page (paper-lines background)\n2. Typewriter text: 'Create a study planner for next week'\n3. After typing: 3-dot pulsing thinking indicator\n4. Blocks appear staggered with blockSlideIn animation:\n   - Heading: 'Weekly Study Plan'\n   - Checklist: 3 items\n   - Grid/table with days\n5. ScrollTrigger-driven or auto-play on viewport entry\n6. No actual API calls — pre-scripted GSAP timeline",
+        "testStrategy": "Scroll to AI section — demo should auto-play. Typing should look realistic. Blocks should stagger in smoothly.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.051Z"
+      },
+      {
+        "id": "7",
+        "title": "BlockTypesBento Hover Micro-Interactions",
+        "description": "Add hover micro-interactions to bento cards: scale, shadow increase, and brief sample content that animates in for each block type.",
+        "status": "in-progress",
+        "priority": "medium",
+        "dependencies": [
+          "3"
+        ],
+        "details": "1. On hover: scale 1.0->1.02, shadow increase\n2. Hidden content div revealed by GSAP on mouseenter:\n   - TEXT: few lines appear\n   - CHECKLIST: checkboxes tick\n   - GRID: cells fill in\n   - etc.\n3. Stagger sample content (0.05s between elements)\n4. GSAP reverse on mouseleave\n5. Mobile: show sample content always visible (no hover)\n6. Keep cards same size — content within existing bounds",
+        "testStrategy": "Hover each bento card — sample content should animate in. Leave — should animate out. Mobile: content visible by default.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.053Z"
+      },
+      {
+        "id": "8",
+        "title": "AestheticsSection Horizontal Carousel",
+        "description": "Convert AestheticsSection from vertical cards to a horizontal scrolling carousel with drag/scroll-snap, parallax cards, and navigation.",
+        "status": "in-progress",
+        "priority": "medium",
+        "dependencies": [
+          "3"
+        ],
+        "details": "1. Horizontal scroll container with CSS scroll-snap\n2. Cards: ASMR Sounds, Paper Textures, Sticker Pack, Washi Tape, Color Themes\n3. Each card: large visual + short copy\n4. Auto-scroll hint on first view (shift 60px left then back)\n5. Navigation dots below\n6. Mobile: full-width cards with swipe\n7. Card parallax: background moves slower than foreground\n8. globals.css: scroll-snap utilities if needed",
+        "testStrategy": "Drag/scroll carousel — should snap to cards. Verify dots update. Check mobile swipe. Verify auto-scroll hint plays once.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.054Z"
+      },
+      {
+        "id": "9",
+        "title": "Reintroduce FloatingPapers with LOD System",
+        "description": "Re-enable FloatingPapers.tsx as ambient 3D elements during content sections with LOD (Level of Detail) and auto-degradation for performance.",
+        "status": "in-progress",
+        "priority": "medium",
+        "dependencies": [
+          "17"
+        ],
+        "details": "1. Rewrite FloatingPapers.tsx with LOD:\n   - Near camera: paper texture detail\n   - Far: simple flat planes\n   - 3-4 papers only\n2. Papers float at periphery (left/right edges, z=-2 to -5)\n3. Create AmbientCanvas.tsx: lightweight R3F canvas overlaying content sections\n4. OR extend hero canvas to cover more page\n5. Auto-degrade: if FPS < 45, hide FloatingPapers\n6. Subtle scroll parallax\n7. Don't show during hero — start from PaperStylesSection",
+        "testStrategy": "Scroll past hero — floating papers should appear at edges. Verify LOD switching. Throttle CPU — papers should disappear at low FPS.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.054Z"
+      },
+      {
+        "id": "10",
+        "title": "Notebook Bookend in FinalCTA",
+        "description": "Add a 3D closing notebook to FinalCTA that reverses the hero opening animation — narrative bookend (opened at start, closes at end).",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "9"
+        ],
+        "details": "1. Create ClosingNotebook.tsx: reuse HeroNotebook with reversed scroll mapping\n2. Book starts open, closes as user scrolls into FinalCTA\n3. Small size (scale 0.5-0.6), positioned to side of CTA text\n4. Use same ambient canvas from Task 9 or separate tiny R3F canvas\n5. Mobile: hide 3D notebook, show only CTA text\n6. Lightweight — simple geometry, no post-processing",
+        "testStrategy": "Scroll to FinalCTA — notebook should close smoothly. Verify hidden on mobile. Check performance impact is minimal.",
+        "subtasks": []
+      },
+      {
+        "id": "11",
+        "title": "Unified Color Flow System",
+        "description": "Define and apply a consistent color flow across all sections: dark->parchment->warm white->gray->white->parchment->dark, eliminating the white/parchment ping-pong.",
+        "status": "in-progress",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "details": "Color flow:\n- Hero: #0f111a (dark)\n- StatsStrip: dark-to-parchment gradient (DONE)\n- PaperStyles: #fdfbf7 (warm white)\n- AIFeature: #f8f6f3 (subtle warm gray)\n- Inline Testimonials: transparent\n- BlockTypesBento: #ffffff with paper texture overlay\n- AestheticsSection: #F4F0EC (parchment)\n- FinalCTA: #0f111a (dark, bookends hero)\n- Footer: #0a0c14 (darkest)\n\nAdd 20px gradient overlap zones between sections for smooth transitions.",
+        "testStrategy": "Scroll through entire page — colors should flow naturally with no hard cliffs. Compare before/after screenshots.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.056Z"
+      },
+      {
+        "id": "12",
+        "title": "Signature Interaction Patterns",
+        "description": "Add magnetic CTA buttons (attract toward cursor), ink ripple click effects, and scroll-spy active state in NavBar.",
+        "status": "done",
+        "priority": "medium",
+        "dependencies": [],
+        "details": "1. Create useMagneticButton.ts hook:\n   - Buttons attract toward cursor within 80px radius\n   - Snap back on leave\n   - Apply to all primary CTA buttons\n2. Ink ripple (CSS-only):\n   - ::after pseudo-element expanding ink-drop\n   - Dark indigo, 0.4s duration\n   - globals.css utility class\n3. Create useScrollSpy.ts hook:\n   - IntersectionObserver per section\n   - Active link gets indigo underline\n   - Underline slides between items (GSAP)\n4. NavBar.tsx: integrate scroll spy",
+        "testStrategy": "Hover near CTA buttons — should attract. Click — ink ripple. Scroll — navbar active state follows. All smooth, no jank.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:38:54.625Z"
+      },
+      {
+        "id": "13",
+        "title": "FinalCTA Typewriter Text Reveal",
+        "description": "Add typewriter character-by-character text reveal to FinalCTA heading, followed by handwritten annotation SVGs (arrows, underlines, circles) that draw in.",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "11"
+        ],
+        "details": "1. Create useTypewriter.ts hook:\n   - Reveals text character by character\n   - Configurable speed (40-60ms per char)\n   - ScrollTrigger activation\n2. FinalCTA.tsx:\n   - Heading uses typewriter reveal\n   - After text completes: handwritten SVG annotations draw in\n   - stroke-dashoffset animation on SVG paths\n   - Caveat/Patrick Hand font for annotations\n   - Paper texture background in CTA card\n   - Button uses magnetic + ink ripple from Task 12",
+        "testStrategy": "Scroll to FinalCTA — text types out character by character. SVG annotations draw in after. Verify reduced-motion shows full text immediately.",
+        "subtasks": []
+      },
+      {
+        "id": "14",
+        "title": "Enhanced Inline Testimonials Styling",
+        "description": "Polish the InlineTestimonials component (created in Task 3) with masonry-style layout, monogram avatars, handwritten quotation marks, and premium card styling.",
+        "status": "in-progress",
+        "priority": "medium",
+        "dependencies": [
+          "3"
+        ],
+        "details": "1. Enhance InlineTestimonials.tsx from Task 3:\n   - Monogram avatar: first letter in colored circle (indigo/amber/leather rotating)\n   - Decorative opening quotation mark in Caveat font, oversized, muted color\n   - Quote text slightly larger than body\n   - Name + role in smaller muted text\n   - Card: subtle border, soft shadow, rounded-2xl\n   - GSAP stagger entrance (0.1s between cards)\n2. Desktop: 3 cards in row with slight height variation (masonry feel)\n3. Mobile: full-width stacked",
+        "testStrategy": "Scroll to testimonials — cards should stagger in. Verify monogram colors rotate. Check mobile stacking.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.058Z"
+      },
+      {
+        "id": "15",
+        "title": "Floating CTA Bar",
+        "description": "Add a slim floating CTA bar that appears after 60% scroll, hides when FinalCTA is visible, and provides an always-available conversion path.",
+        "status": "in-progress",
+        "priority": "medium",
+        "dependencies": [
+          "3"
+        ],
+        "details": "1. Create FloatingCTABar.tsx:\n   - 48px tall, dark bg, 'Start Creating — Free' + CTA button\n   - Slides up from bottom (GSAP)\n   - Dismissible with X button\n   - Appears after 60% page scroll\n   - Hides when FinalCTA in viewport\n   - Hides when scrolled back to hero\n   - Z-index: below modal, above content\n2. LandingPage.tsx: add component\n3. Reduced motion: just appears, no slide",
+        "testStrategy": "Scroll past 60% — bar appears. Scroll to FinalCTA — bar hides. Click X — bar dismisses. Scroll to top — bar hides.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:40:04.059Z"
+      },
+      {
+        "id": "16",
+        "title": "Design System Unification",
+        "description": "Audit and standardize spacing, border radii, shadows, typography, and accent colors across all sections. Add design tokens to globals.css.",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "3",
+          "5",
+          "6",
+          "7",
+          "8",
+          "11",
+          "13",
+          "14"
+        ],
+        "details": "1. globals.css @theme: add shadow tokens (sm, md, lg), spacing scale\n2. All sections: py-24 px-6 (or equivalent clamp)\n3. All cards: rounded-2xl (16px)\n4. Section headers: font-serif font-bold with consistent clamp\n5. Accent colors: only indigo-brand, leather, amber-gold\n6. Max-width: max-w-7xl for all sections\n7. Fix repeated 'italic colored word in headline' pattern — vary heading styles\n8. Audit each section file for inline style inconsistencies",
+        "testStrategy": "Visual comparison of all sections — spacing, radii, shadows, fonts should feel unified. No section should look like it belongs to a different site.",
+        "subtasks": []
+      },
+      {
+        "id": "17",
+        "title": "Performance Audit and Optimization",
+        "description": "Add FPS monitoring, auto-degradation for 3D/animations, lazy loading for heavy components, and verify GSAP cleanup.",
+        "status": "done",
+        "priority": "high",
+        "dependencies": [],
+        "details": "1. Create usePerformanceMonitor.ts hook:\n   - Dev-only FPS counter in corner\n   - Track rolling average FPS\n   - Callback when FPS drops below threshold\n2. Auto-degradation:\n   - < 45fps for 2s: disable FloatingPapers\n   - < 30fps for 2s: disable PostEffects, simplify animations\n3. React.lazy + Suspense for: AmbientCanvas, ClosingNotebook\n4. Verify all GSAP ScrollTrigger cleanup on unmount\n5. Add will-change hints to animated elements\n6. Clamp delta in all useFrame loops",
+        "testStrategy": "Profile with Chrome DevTools — maintain 60fps on mid-range device. Throttle CPU 4x — verify auto-degradation kicks in.",
+        "subtasks": [],
+        "updatedAt": "2026-03-01T22:38:54.626Z"
+      },
+      {
+        "id": "18",
+        "title": "Reduced Motion and Accessibility",
+        "description": "Add prefers-reduced-motion overrides for all new animations, keyboard accessibility for interactive elements, and ARIA attributes for decorative elements.",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "12",
+          "13",
+          "15"
+        ],
+        "details": "1. globals.css: reduced-motion overrides for ALL new animations:\n   - Typewriter: show full text immediately\n   - Ink line: hidden\n   - FloatingPapers: hidden\n   - Carousel: no auto-scroll, static grid\n   - Magnetic buttons: disabled\n2. Focus-visible styles on all interactive elements\n3. Carousel: keyboard navigable (arrow keys)\n4. ARIA: aria-hidden='true' on ink line, floating papers, decorative canvases\n5. Screen reader: skip 3D canvases\n6. Test with VoiceOver",
+        "testStrategy": "Enable reduced-motion in OS — all animations should be instant or hidden. Tab through page — all interactive elements focusable. Run axe audit.",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-03-01T22:40:04.059Z",
+      "taskCount": 18,
+      "completedCount": 5,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}

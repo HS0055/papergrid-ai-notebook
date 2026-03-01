@@ -169,14 +169,18 @@ export const Dashboard: React.FC = () => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setNotebooks(parsed);
-          setActiveNotebookId(parsed[0].id);
+        const parsed: unknown = JSON.parse(saved);
+        if (
+          Array.isArray(parsed) &&
+          parsed.length > 0 &&
+          parsed.every((nb: unknown) => typeof nb === 'object' && nb !== null && 'id' in nb && 'pages' in nb)
+        ) {
+          setNotebooks(parsed as Notebook[]);
+          setActiveNotebookId((parsed as Notebook[])[0].id);
           return;
         }
       } catch (e) {
-        console.error("Failed to load saved data");
+        console.error("Failed to load saved data:", e);
       }
     }
     // Default notebook if nothing saved
@@ -360,7 +364,7 @@ export const Dashboard: React.FC = () => {
   // Close export menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+      if (exportMenuRef.current && e.target instanceof Node && !exportMenuRef.current.contains(e.target)) {
         setShowExportMenu(false);
       }
     };
@@ -369,7 +373,7 @@ export const Dashboard: React.FC = () => {
   }, [showExportMenu]);
 
   const handleExportPNG = async () => {
-    const el = document.querySelector('[data-export-target]') as HTMLElement;
+    const el = document.querySelector<HTMLElement>('[data-export-target]');
     if (!el) return;
     try {
       const canvas = await html2canvas(el, { backgroundColor: '#e5e5e5', scale: 2, useCORS: true });
