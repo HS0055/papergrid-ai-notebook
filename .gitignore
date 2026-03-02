@@ -31,6 +31,7 @@ __pycache__
 .env
 .env.*
 !.env.example
+!.env.production
 
 # Convex
 convex/_generated/
@@ -46,3 +47,6 @@ node_modules/
 # tasks.json
 # tasks/ 
 .vercel
+
+# Turbo cache
+.turbo
