@@ -121,6 +121,12 @@ async function getUserFromIdentity(ctx: AuthCtx) {
     .first();
 }
 
+// Strip sensitive fields before returning user data to clients
+function sanitizeUser(user: Record<string, unknown>) {
+  const { passwordHash, ...safe } = user;
+  return safe;
+}
+
 // Get current authenticated user (for components)
 export const getCurrentUser = query({
   args: {
@@ -128,8 +134,10 @@ export const getCurrentUser = query({
   },
   handler: async (ctx, { sessionToken }) => {
     const identityUser = await getUserFromIdentity(ctx);
-    if (identityUser) return identityUser;
-    return await getUserFromSessionToken(ctx, sessionToken);
+    if (identityUser) return sanitizeUser(identityUser);
+    const sessionUser = await getUserFromSessionToken(ctx, sessionToken);
+    if (sessionUser) return sanitizeUser(sessionUser);
+    return null;
   },
 });
 
@@ -227,7 +235,7 @@ export const signupWithEmailPassword = mutation({
 
     const sessionToken = await createSession(ctx, user._id);
 
-    return { sessionToken, user };
+    return { sessionToken, user: sanitizeUser(user) };
   },
 });
 
@@ -268,7 +276,7 @@ export const loginWithEmailPassword = mutation({
     }
 
     const sessionToken = await createSession(ctx, user._id);
-    return { sessionToken, user };
+    return { sessionToken, user: sanitizeUser(user) };
   },
 });
 
@@ -292,7 +300,8 @@ export const logoutWithSession = mutation({
 export const get = query({
   args: { id: v.id("users") },
   handler: async (ctx, { id }) => {
-    return await ctx.db.get(id);
+    const user = await ctx.db.get(id);
+    return user ? sanitizeUser(user) : null;
   },
 });
 
@@ -301,10 +310,11 @@ export const getByEmail = query({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
     const normalizedEmail = normalizeEmail(email);
-    return await ctx.db
+    const user = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
       .first();
+    return user ? sanitizeUser(user) : null;
   },
 });
 
