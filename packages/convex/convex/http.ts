@@ -384,11 +384,37 @@ function matchReferences(
 
 const http = httpRouter();
 
-const defaultCorsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token",
-};
+// Allowed origins for local/dev + production/custom domains + Vercel aliases/previews
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://papergrid.app",
+  "https://www.papergrid.app",
+  "https://papergrid-five.vercel.app",
+  "https://papergrid-hayks-projects-362899dc.vercel.app",
+  "https://papergrid-hayksayadyan155-2492-hayks-projects-362899dc.vercel.app",
+];
+
+function isAllowedVercelPreview(origin: string): boolean {
+  if (!origin.startsWith("https://")) return false;
+  const host = origin.slice("https://".length);
+  return host.startsWith("papergrid-") && host.endsWith(".vercel.app");
+}
+
+function getCorsOrigin(request: Request): string {
+  const origin = request.headers.get("Origin") ?? "";
+  if (!origin) return ALLOWED_ORIGINS[0];
+  if (ALLOWED_ORIGINS.includes(origin) || isAllowedVercelPreview(origin)) return origin;
+  return ALLOWED_ORIGINS[0];
+}
+
+function makeCorsHeaders(request: Request) {
+  return {
+    "Access-Control-Allow-Origin": getCorsOrigin(request),
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token",
+  };
+}
 
 function getSessionTokenFromRequest(request: Request): string | null {
   const authHeader = request.headers.get("Authorization");
@@ -403,11 +429,7 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     // CORS headers
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    };
+    const corsHeaders = makeCorsHeaders(request);
 
     // Handle preflight
     if (request.method === "OPTIONS") {
@@ -415,6 +437,16 @@ http.route({
     }
 
     try {
+      // --- Auth + Usage Gating ---
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const usageResult = await ctx.runMutation(api.users.incrementAiUsage, { sessionToken });
+      if (!usageResult.allowed) {
+        return new Response(
+          JSON.stringify({ error: "Monthly AI generation limit reached. Upgrade your plan for more." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const body = await request.json();
       const { prompt, industry, aesthetic } = body as {
         prompt: string;
@@ -945,11 +977,7 @@ http.route({
   path: "/api/generate-cover",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    };
+    const corsHeaders = makeCorsHeaders(request);
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
@@ -957,9 +985,10 @@ http.route({
 
     try {
       const body = await request.json();
-      const { prompt, aesthetic } = body as {
+      const { prompt, aesthetic, notebookTitle } = body as {
         prompt: string;
         aesthetic?: string;
+        notebookTitle?: string;
       };
 
       const apiKey = process.env.GEMINI_API_KEY;
@@ -971,7 +1000,10 @@ http.route({
       }
 
       const styleContext = aesthetic || "premium leather journal";
-      const imagePrompt = `Create a beautiful, high-quality notebook cover design. The cover should feature: ${prompt}. Style: ${styleContext}. The image should be a top-down view of a premium notebook cover with rich textures, embossed details, and professional finish. Studio lighting, warm ambient glow, 4K quality, cinematic, minimalist and elegant. No text or words on the cover unless specifically requested.`;
+      const titleInstruction = notebookTitle
+        ? `Emboss the title "${notebookTitle}" in elegant gold foil lettering centered on the front cover.`
+        : "Do NOT include any text or words on the cover.";
+      const imagePrompt = `Create a stunning product mockup of a premium hardcover notebook cover, shot from a 3/4 top-down angle on a clean dark surface. The cover design features: ${prompt}. Style: ${styleContext}. ${titleInstruction} The notebook should look like a real physical product photograph — rich textures, subtle shadows, professional studio lighting with warm ambient glow. 4K quality, photorealistic, cinematic depth of field. Show slight wear and character as a premium artisan notebook. The image should be SQUARE (1:1 aspect ratio) and fill the full frame.`;
 
       // Use Gemini 2.0 Flash with image generation
       const geminiPayload = {
@@ -1034,8 +1066,9 @@ http.route({
   path: "/api/auth/login",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
@@ -1046,7 +1079,7 @@ http.route({
       if (!email.trim() || !password) {
         return new Response(JSON.stringify({ error: "email and password are required" }), {
           status: 400,
-          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -1057,13 +1090,13 @@ http.route({
 
       return new Response(JSON.stringify(result), {
         status: 200,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (error) {
       console.error("Auth login error:", error);
       return new Response(JSON.stringify({ error: "Login failed" }), {
         status: 500,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
   }),
@@ -1073,8 +1106,9 @@ http.route({
   path: "/api/auth/signup",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
@@ -1086,7 +1120,7 @@ http.route({
       if (!email.trim() || !password) {
         return new Response(JSON.stringify({ error: "email and password are required" }), {
           status: 400,
-          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -1098,13 +1132,13 @@ http.route({
 
       return new Response(JSON.stringify(result), {
         status: 200,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (error) {
       console.error("Auth signup error:", error);
       return new Response(JSON.stringify({ error: "Signup failed" }), {
         status: 500,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
   }),
@@ -1114,8 +1148,9 @@ http.route({
   path: "/api/auth/me",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
@@ -1124,18 +1159,18 @@ http.route({
       if (!user) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
-          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       return new Response(JSON.stringify({ user }), {
         status: 200,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (error) {
       console.error("Auth me error:", error);
       return new Response(JSON.stringify({ error: "Failed to resolve user" }), {
         status: 500,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
   }),
@@ -1145,8 +1180,9 @@ http.route({
   path: "/api/auth/logout",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
@@ -1156,78 +1192,42 @@ http.route({
       if (!sessionToken) {
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
-          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       await ctx.runMutation(api.users.logoutWithSession, { sessionToken });
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (error) {
       console.error("Auth logout error:", error);
       return new Response(JSON.stringify({ error: "Logout failed" }), {
         status: 500,
-        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
   }),
 });
 
 // Handle CORS preflight for all routes
-http.route({
-  path: "/api/generate-layout",
-  method: "OPTIONS",
-  handler: httpAction(async () => {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
-  }),
-});
-
-http.route({
-  path: "/api/generate-cover",
-  method: "OPTIONS",
-  handler: httpAction(async () => {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
-  }),
-});
-
-http.route({
-  path: "/api/auth/login",
-  method: "OPTIONS",
-  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
-});
-
-http.route({
-  path: "/api/auth/signup",
-  method: "OPTIONS",
-  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
-});
-
-http.route({
-  path: "/api/auth/me",
-  method: "OPTIONS",
-  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
-});
-
-http.route({
-  path: "/api/auth/logout",
-  method: "OPTIONS",
-  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
-});
+for (const path of [
+  "/api/generate-layout",
+  "/api/generate-cover",
+  "/api/auth/login",
+  "/api/auth/signup",
+  "/api/auth/me",
+  "/api/auth/logout",
+]) {
+  http.route({
+    path,
+    method: "OPTIONS",
+    handler: httpAction(async (_ctx, request) => {
+      const corsHeaders = makeCorsHeaders(request);
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }),
+  });
+}
 
 
 export default http;
