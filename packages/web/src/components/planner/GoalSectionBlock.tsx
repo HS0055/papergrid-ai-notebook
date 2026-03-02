@@ -2,6 +2,8 @@ import React from 'react';
 import { Block, GoalSectionData, GoalItem } from '@papergrid/core';
 import { Plus, Check } from 'lucide-react';
 
+type GoalSubItem = GoalItem['subItems'][number];
+
 interface GoalSectionBlockProps {
   block: Block;
   onChange: (id: string, updatedBlock: Partial<Block>) => void;
@@ -47,22 +49,22 @@ export const GoalSectionBlock: React.FC<GoalSectionBlockProps> = ({ block, onCha
     const newGoals = goals.map((g, gi) =>
       gi === goalIndex
         ? {
-            ...g,
-            subItems: g.subItems.map((s, si) => (si === subIndex ? { ...s, text } : s)),
-          }
+          ...g,
+          subItems: g.subItems.map((s, si) => (si === subIndex ? { ...s, text } : s)),
+        }
         : g
     );
     updateGoals(newGoals);
   };
 
   const toggleSubItem = (goalIndex: number, subIndex: number) => {
-    const newGoals = goals.map((g, gi) => {
+    const newGoals = goals.map((g: GoalItem, gi: number) => {
       if (gi !== goalIndex) return g;
-      const newSubItems = g.subItems.map((s, si) =>
+      const newSubItems = g.subItems.map((s: GoalSubItem, si: number) =>
         si === subIndex ? { ...s, checked: !s.checked } : s
       );
       // Auto-calculate progress from sub-item completion
-      const checkedCount = newSubItems.filter(s => s.checked).length;
+      const checkedCount = newSubItems.filter((s: GoalSubItem) => s.checked).length;
       const progress = newSubItems.length > 0 ? Math.round((checkedCount / newSubItems.length) * 100) : 0;
       return { ...g, subItems: newSubItems, progress };
     });
@@ -79,7 +81,7 @@ export const GoalSectionBlock: React.FC<GoalSectionBlockProps> = ({ block, onCha
   };
 
   const addSubItem = (goalIndex: number) => {
-    const newGoals = goals.map((g, gi) =>
+    const newGoals = goals.map((g: GoalItem, gi: number) =>
       gi === goalIndex
         ? { ...g, subItems: [...g.subItems, { text: '', checked: false }] }
         : g
@@ -89,15 +91,15 @@ export const GoalSectionBlock: React.FC<GoalSectionBlockProps> = ({ block, onCha
 
   const removeGoal = (goalIndex: number) => {
     if (goals.length <= 1) return;
-    updateGoals(goals.filter((_, i) => i !== goalIndex));
+    updateGoals(goals.filter((_: GoalItem, i: number) => i !== goalIndex));
   };
 
   const removeSubItem = (goalIndex: number, subIndex: number) => {
     const goal = goals[goalIndex];
     if (!goal || goal.subItems.length <= 1) return;
-    const newGoals = goals.map((g, gi) =>
+    const newGoals = goals.map((g: GoalItem, gi: number) =>
       gi === goalIndex
-        ? { ...g, subItems: g.subItems.filter((_, si) => si !== subIndex) }
+        ? { ...g, subItems: g.subItems.filter((_: GoalSubItem, si: number) => si !== subIndex) }
         : g
     );
     updateGoals(newGoals);
@@ -122,7 +124,7 @@ export const GoalSectionBlock: React.FC<GoalSectionBlockProps> = ({ block, onCha
 
         {/* Goals list */}
         <div className="p-3 flex flex-col gap-4">
-          {goals.map((goal, gi) => (
+          {goals.map((goal: GoalItem, gi: number) => (
             <div key={gi} className="group/goal">
               {/* Goal header row */}
               <div className="flex items-center gap-2" style={{ minHeight: '32px' }}>
@@ -162,7 +164,7 @@ export const GoalSectionBlock: React.FC<GoalSectionBlockProps> = ({ block, onCha
 
               {/* Sub-items */}
               <div className="ml-4 flex flex-col">
-                {goal.subItems.map((sub, si) => (
+                {goal.subItems.map((sub: GoalSubItem, si: number) => (
                   <div
                     key={si}
                     className="flex items-center gap-2 group/sub"
@@ -170,19 +172,17 @@ export const GoalSectionBlock: React.FC<GoalSectionBlockProps> = ({ block, onCha
                   >
                     <button
                       onClick={() => toggleSubItem(gi, si)}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-                        sub.checked
-                          ? `${colorClasses.highlight} ${colorClasses.border} ${colorClasses.text}`
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${sub.checked
+                        ? `${colorClasses.highlight} ${colorClasses.border} ${colorClasses.text}`
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                       aria-label={`${sub.checked ? 'Uncheck' : 'Check'} sub-item`}
                     >
                       {sub.checked && <Check size={10} strokeWidth={3} />}
                     </button>
                     <input
-                      className={`flex-1 bg-transparent font-hand text-sm focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${
-                        sub.checked ? 'text-gray-400 line-through' : 'text-gray-700'
-                      }`}
+                      className={`flex-1 bg-transparent font-hand text-sm focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${sub.checked ? 'text-gray-400 line-through' : 'text-gray-700'
+                        }`}
                       style={{ lineHeight: '32px', height: '32px' }}
                       value={sub.text}
                       onChange={(e) => updateSubItemText(gi, si, e.target.value)}

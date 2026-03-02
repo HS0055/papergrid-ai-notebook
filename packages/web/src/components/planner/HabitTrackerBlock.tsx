@@ -41,9 +41,9 @@ export const HabitTrackerBlock: React.FC<HabitTrackerBlockProps> = ({ block, onC
   const data = block.habitTrackerData ?? getDefaultHabitData();
 
   const toggleCheck = (habitIndex: number, dayIndex: number) => {
-    const newChecked = data.checked.map((row, hi) =>
+    const newChecked = data.checked.map((row: boolean[], hi: number) =>
       hi === habitIndex
-        ? row.map((val, di) => (di === dayIndex ? !val : val))
+        ? row.map((val: boolean, di: number) => (di === dayIndex ? !val : val))
         : [...row]
     );
     onChange(block.id, {
@@ -52,7 +52,7 @@ export const HabitTrackerBlock: React.FC<HabitTrackerBlockProps> = ({ block, onC
   };
 
   const updateHabitName = (habitIndex: number, name: string) => {
-    const newHabits = data.habits.map((h, i) => (i === habitIndex ? name : h));
+    const newHabits = data.habits.map((h: string, i: number) => (i === habitIndex ? name : h));
     onChange(block.id, {
       habitTrackerData: { ...data, habits: newHabits },
     });
@@ -153,11 +153,10 @@ export const HabitTrackerBlock: React.FC<HabitTrackerBlockProps> = ({ block, onC
                         <td key={di} className="p-0 text-center" style={{ height: '32px' }}>
                           <button
                             onClick={() => toggleCheck(hi, di)}
-                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mx-auto ${
-                              isChecked
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mx-auto ${isChecked
                                 ? `${colorClasses.highlight} ${colorClasses.border} ${colorClasses.text}`
                                 : 'border-gray-200 hover:border-gray-300'
-                            }`}
+                              }`}
                             aria-label={`${habit} day ${di + 1} ${isChecked ? 'completed' : 'not completed'}`}
                           >
                             {isChecked && <Check size={12} strokeWidth={3} />}
