@@ -1,0 +1,6 @@
+{
+    "buildCommand": "npx turbo build --filter=@papergrid/web",
+    "outputDirectory": "packages/web/dist",
+    "installCommand": "npm install",
+    "framework": null
+}

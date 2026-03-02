@@ -48,6 +48,7 @@ export default function AmbientCanvas({
         position: 'absolute',
         inset: 0,
         pointerEvents: 'none',
+        touchAction: 'auto',
         zIndex: 0,
         ...style,
       }}
@@ -69,6 +70,7 @@ export default function AmbientCanvas({
         style={{
           background: 'transparent',
           pointerEvents: 'none',
+          touchAction: 'auto',
         }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0);

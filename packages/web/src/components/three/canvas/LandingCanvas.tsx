@@ -54,12 +54,12 @@ export default function LandingCanvas({
   overlay = false,
   mobileLowPower = false,
 }: LandingCanvasProps) {
-  const [dpr, setDpr] = useState(1.5);
+  const [dpr, setDpr] = useState(1.25);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Mobile: cap DPR at 1.0 for GPU savings. Desktop: cap at 1.5.
+  // Mobile: cap DPR below 1.0 for GPU savings. Desktop: cap at 1.5.
   useEffect(() => {
-    const maxDpr = mobileLowPower ? 1.0 : 1.5;
+    const maxDpr = mobileLowPower ? 0.9 : 1.5;
     const deviceDpr = Math.min(window.devicePixelRatio, maxDpr);
     setDpr(deviceDpr);
   }, [mobileLowPower]);
@@ -72,6 +72,7 @@ export default function LandingCanvas({
         position: overlay ? 'absolute' : 'relative',
         inset: overlay ? 0 : undefined,
         pointerEvents: overlay ? 'none' : 'auto',
+        touchAction: 'auto',
         zIndex: overlay ? 1 : undefined,
         ...style,
       }}
@@ -84,6 +85,12 @@ export default function LandingCanvas({
           toneMappingExposure: 1.1,
           alpha: overlay,
           powerPreference: mobileLowPower ? 'low-power' : 'high-performance',
+          precision: mobileLowPower ? 'mediump' : 'highp',
+        }}
+        performance={{
+          min: mobileLowPower ? 0.5 : 0.8,
+          max: 1,
+          debounce: 200,
         }}
         camera={{
           fov,
@@ -95,6 +102,7 @@ export default function LandingCanvas({
         style={{
           background: overlay ? 'transparent' : undefined,
           pointerEvents: overlay ? 'none' : 'auto',
+          touchAction: 'auto',
         }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, overlay ? 0 : 1);
@@ -102,7 +110,7 @@ export default function LandingCanvas({
       >
         <Suspense fallback={null}>
           {/* Shared lighting */}
-          <Lighting preset={lightPreset} />
+          <Lighting preset={lightPreset} isMobile={mobileLowPower} />
 
           {/* Scene content */}
           {children}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, Suspense, lazy, useState } from 'react';
+import React, { useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -28,7 +28,7 @@ export const LandingPage: React.FC = () => {
   const rootRef = useRef<HTMLDivElement>(null);
   const inkLineRef = useRef<HTMLDivElement>(null);
   const contentSectionsRef = useRef<HTMLDivElement>(null);
-  const [scrollProgress, setScrollProgress] = useState(0);
+  const scrollProgressRef = useRef(0);
   const isMobile = useIsMobile();
 
   const handleLaunch = useCallback(() => {
@@ -47,17 +47,34 @@ export const LandingPage: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
-    // Track scroll progress for FloatingPapers parallax
-    const handleScroll = () => {
+    let rafId = 0;
+
+    const updateScrollProgress = () => {
       const scrollY = window.scrollY;
       const windowHeight = window.innerHeight;
       const docHeight = document.documentElement.scrollHeight;
-      const progress = scrollY / (docHeight - windowHeight);
-      setScrollProgress(progress);
+      const denom = Math.max(1, docHeight - windowHeight);
+      const progress = scrollY / denom;
+      scrollProgressRef.current = progress;
+      rafId = 0;
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const handleScroll = () => {
+      if (rafId === 0) {
+        rafId = window.requestAnimationFrame(updateScrollProgress);
+      }
+    };
+
+    updateScrollProgress();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+    return () => {
+      if (rafId !== 0) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
   }, []);
 
   useEffect(() => {
@@ -118,53 +135,54 @@ export const LandingPage: React.FC = () => {
         });
       });
 
-      // ── Section-level scroll animations (continuous scroll narrative) ──
-      // Each major section slides up with parallax as it enters
-      // Skip hero-section (already has its own scroll animation)
-      gsap.utils.toArray<HTMLElement>('section:not(.hero-section)').forEach((section) => {
-        // Parallax: section content moves slightly slower than scroll
-        gsap.fromTo(
-          section.querySelector('.max-w-7xl, .max-w-5xl, .max-w-6xl') || section,
-          { y: 60 },
-          {
-            y: 0,
-            ease: 'none',
-            scrollTrigger: {
-              trigger: section,
-              start: 'top bottom',
-              end: 'top 20%',
-              scrub: 0.5,
-            },
-          },
-        );
-      });
-
-      // ── Staggered children for bento grids and card layouts ──
-      gsap.utils.toArray<HTMLElement>('.reveal-scale').forEach((el) => {
-        const cards = el.querySelectorAll('[class*="rounded"]');
-        if (cards.length > 1) {
+      if (!isMobile) {
+        // ── Section-level scroll animations (continuous scroll narrative) ──
+        // Each major section slides up with parallax as it enters
+        // Skip hero-section (already has its own scroll animation)
+        gsap.utils.toArray<HTMLElement>('section:not(.hero-section)').forEach((section) => {
           gsap.fromTo(
-            Array.from(cards),
-            { y: 30, opacity: 0 },
+            section.querySelector('.max-w-7xl, .max-w-5xl, .max-w-6xl') || section,
+            { y: 60 },
             {
               y: 0,
-              opacity: 1,
-              duration: 0.5,
-              stagger: 0.08,
-              ease: 'power2.out',
+              ease: 'none',
               scrollTrigger: {
-                trigger: el,
-                start: 'top 85%',
-                once: true,
+                trigger: section,
+                start: 'top bottom',
+                end: 'top 20%',
+                scrub: 0.5,
               },
             },
           );
-        }
-      });
+        });
+
+        // ── Staggered children for bento grids and card layouts ──
+        gsap.utils.toArray<HTMLElement>('.reveal-scale').forEach((el) => {
+          const cards = el.querySelectorAll('[class*="rounded"]');
+          if (cards.length > 1) {
+            gsap.fromTo(
+              Array.from(cards),
+              { y: 30, opacity: 0 },
+              {
+                y: 0,
+                opacity: 1,
+                duration: 0.5,
+                stagger: 0.08,
+                ease: 'power2.out',
+                scrollTrigger: {
+                  trigger: el,
+                  start: 'top 85%',
+                  once: true,
+                },
+              },
+            );
+          }
+        });
+      }
 
       // ── Continuous ink progress line ──
       // Draws from top of StatsStrip to bottom of page, controlled by scroll
-      if (inkLineRef.current) {
+      if (inkLineRef.current && !isMobile) {
         gsap.fromTo(
           inkLineRef.current,
           { scaleY: 0 },
@@ -188,7 +206,7 @@ export const LandingPage: React.FC = () => {
     return () => {
       ctx.revert();
     };
-  }, []);
+  }, [isMobile]);
 
   return (
     <div
@@ -218,7 +236,7 @@ export const LandingPage: React.FC = () => {
                   height: '100%',
                 }}
               >
-                <FloatingPapers scrollProgress={scrollProgress} />
+                <FloatingPapers scrollProgressRef={scrollProgressRef} />
               </AmbientCanvas>
             </Suspense>
           </Canvas3DErrorBoundary>

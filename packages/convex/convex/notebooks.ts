@@ -44,7 +44,7 @@ export const update = mutation({
     id: v.id("notebooks"),
     title: v.optional(v.string()),
     coverColor: v.optional(v.string()),
-    bookmarks: v.optional(v.array(v.id("pages"))),
+    bookmarks: v.optional(v.array(v.string())),
     isShared: v.optional(v.boolean()),
   },
   handler: async (ctx, { id, ...fields }) => {

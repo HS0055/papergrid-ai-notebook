@@ -138,6 +138,7 @@ export interface Notebook {
   id: string;
   title: string;
   coverColor: string;
+  coverImageUrl?: string;
   createdAt: string;
   pages: NotebookPage[];
   bookmarks: string[]; // Array of page IDs that are bookmarked

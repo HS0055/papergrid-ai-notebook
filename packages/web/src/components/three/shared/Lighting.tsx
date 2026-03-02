@@ -9,18 +9,20 @@ interface LightingProps {
   followCursor?: boolean;
   /** Overall intensity multiplier */
   intensity?: number;
+  /** Skip cursor tracking on mobile to save GPU cycles */
+  isMobile?: boolean;
 }
 
 /**
  * Shared 3-point lighting rig for all PaperGrid 3D scenes.
  * Key (directional) + Fill (ambient) + Rim (point).
  */
-export function Lighting({ preset = 'landing', followCursor = false, intensity = 1 }: LightingProps) {
+export function Lighting({ preset = 'landing', followCursor = false, intensity = 1, isMobile = false }: LightingProps) {
   const rimRef = useRef<THREE.PointLight>(null);
 
-  // Cursor-following rim light
+  // Cursor-following rim light — disabled on mobile (no pointer, saves GPU)
   useFrame(({ pointer }) => {
-    if (followCursor && rimRef.current) {
+    if (followCursor && !isMobile && rimRef.current) {
       rimRef.current.position.x = THREE.MathUtils.lerp(rimRef.current.position.x, pointer.x * 4, 0.05);
       rimRef.current.position.y = THREE.MathUtils.lerp(rimRef.current.position.y, pointer.y * 3 + 2, 0.05);
     }

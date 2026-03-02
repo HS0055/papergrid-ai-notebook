@@ -1,5 +1,41 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
+import { api } from "./_generated/api";
+
+// Generate a procedural premium SVG data URL as fallback cover
+function buildFallbackCover(prompt: string): string {
+  let hash = 0;
+  for (let i = 0; i < prompt.length; i++) {
+    hash = ((hash << 5) - hash) + prompt.charCodeAt(i);
+    hash |= 0;
+  }
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 30) % 360;
+
+  // Use a noise pattern + organic SVG shapes for a premium look
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="hsl(${hue1},40%,20%)"/>
+          <stop offset="100%" stop-color="hsl(${hue2},40%,30%)"/>
+        </linearGradient>
+        <filter id="n">
+          <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" stitchTiles="stitch"/>
+          <feColorMatrix type="saturate" values="0"/>
+          <feBlend mode="multiply" in2="SourceGraphic"/>
+        </filter>
+      </defs>
+      <rect width="1024" height="1024" fill="url(#g)"/>
+      <rect width="1024" height="1024" fill="white" opacity="0.05" filter="url(#n)"/>
+      <path d="M0 1024 L1024 0 L1024 1024 Z" fill="white" opacity="0.03"/>
+      <rect x="80" y="80" width="864" height="864" rx="4" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <circle cx="512" cy="512" r="300" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="40"/>
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
 
 // ---------------------------------------------------------------------------
 // Embedded reference layouts for few-shot prompting.
@@ -53,7 +89,7 @@ const REFERENCE_LAYOUTS: readonly CompactReference[] = [
     title: "Weekly Planner",
     blocks: [
       { type: "HEADING", content: "Week of ___________", side: "left", color: "slate", emphasis: "bold", alignment: "center" },
-      { type: "GRID", content: "Weekly Schedule", side: "left", color: "slate", gridColumns: ["Day", "Morning", "Afternoon", "Evening"], gridRowCount: 7 },
+      { type: "WEEKLY_VIEW", content: "Weekly Schedule", side: "left", color: "slate", weeklyViewData: { days: [{ label: "Monday", content: "" }, { label: "Tuesday", content: "" }, { label: "Wednesday", content: "" }, { label: "Thursday", content: "" }, { label: "Friday", content: "" }, { label: "Saturday", content: "" }, { label: "Sunday", content: "" }] } },
       { type: "DIVIDER", content: "", side: "right" },
       { type: "HEADING", content: "Focus This Week", side: "right", color: "indigo", emphasis: "bold" },
       { type: "CHECKBOX", content: "Top priority #1", side: "right", checked: false },
@@ -77,7 +113,7 @@ const REFERENCE_LAYOUTS: readonly CompactReference[] = [
       { type: "CHECKBOX", content: "1. _______________", side: "left", checked: false },
       { type: "CHECKBOX", content: "2. _______________", side: "left", checked: false },
       { type: "CHECKBOX", content: "3. _______________", side: "left", checked: false },
-      { type: "GRID", content: "Time Blocks", side: "left", color: "rose", gridColumns: ["Time", "Task / Activity"], gridRowCount: 11 },
+      { type: "TIME_BLOCK", content: "Time Blocks", side: "left", color: "rose", timeBlockData: { startHour: 7, endHour: 17, interval: 60, entries: [{ time: "7:00 AM", content: "" }, { time: "8:00 AM", content: "" }, { time: "9:00 AM", content: "" }, { time: "10:00 AM", content: "" }, { time: "11:00 AM", content: "" }, { time: "12:00 PM", content: "Lunch" }, { time: "1:00 PM", content: "" }, { time: "2:00 PM", content: "" }, { time: "3:00 PM", content: "" }, { time: "4:00 PM", content: "" }, { time: "5:00 PM", content: "" }] } },
       { type: "DIVIDER", content: "", side: "right" },
       { type: "HEADING", content: "Gratitude", side: "right", color: "rose", emphasis: "bold" },
       { type: "TEXT", content: "Today I am grateful for...", side: "right", color: "rose", emphasis: "italic" },
@@ -262,6 +298,24 @@ const REFERENCE_LAYOUTS: readonly CompactReference[] = [
       { type: "QUOTE", content: "\"The best time to plant a tree was 20 years ago. The second best time is now.\"", side: "right", color: "amber", emphasis: "italic", alignment: "center" },
     ],
   },
+  {
+    id: "monthly-planner",
+    niche: "productivity",
+    style: "full page monthly calendar grid with daily typable boxes",
+    aesthetic: "clean",
+    tags: ["monthly", "planner", "calendar", "month", "grid", "planning", "schedule", "typable", "dates"],
+    paperType: "grid",
+    themeColor: "indigo",
+    title: "Monthly Calendar Planner",
+    blocks: [
+      { type: "HEADING", content: "Month: ___________", side: "left", color: "indigo", emphasis: "bold", alignment: "center" },
+      { type: "GRID", content: "", side: "left", color: "indigo", gridColumns: ["Sunday", "Monday", "Tuesday", "Wednesday"], gridRowCount: 5 },
+      { type: "HEADING", content: "Monthly Focus", side: "right", color: "indigo", emphasis: "bold", alignment: "center" },
+      { type: "GRID", content: "", side: "right", color: "indigo", gridColumns: ["Thursday", "Friday", "Saturday"], gridRowCount: 5 },
+      { type: "GOAL_SECTION", content: "Goals", side: "right", color: "indigo", goalSectionData: { goals: [{ text: "Main Goal 1", subItems: [{ text: "Action step", checked: false }] }, { text: "Main Goal 2", subItems: [{ text: "Action step", checked: false }] }] } },
+      { type: "HABIT_TRACKER", content: "Key Habits", side: "right", color: "emerald", habitTrackerData: { habits: ["Workout", "Read", "Meditate"], days: 30, checked: [[false], [false], [false]] } },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -329,6 +383,20 @@ function matchReferences(
 // ---------------------------------------------------------------------------
 
 const http = httpRouter();
+
+const defaultCorsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token",
+};
+
+function getSessionTokenFromRequest(request: Request): string | null {
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    return authHeader.slice("Bearer ".length).trim();
+  }
+  return request.headers.get("X-Session-Token");
+}
 
 http.route({
   path: "/api/generate-layout",
@@ -418,9 +486,8 @@ ${industryContext} ${aestheticContext}
 Current Date: ${currentDate}
 
 User Request: "${prompt}"
-${
-  hasReferences
-    ? `
+${hasReferences
+          ? `
 === REFERENCE EXAMPLES ===
 Here are ${matches.filter((m) => m.score > 0).length} similar high-quality layouts that users love. Use them as inspiration for structure and block composition, but adapt them to the user's specific request:
 
@@ -428,8 +495,8 @@ ${referenceExamples}
 
 === END REFERENCE EXAMPLES ===
 `
-    : ""
-}
+          : ""
+        }
 === DESIGN RULES ===
 1. Act as a world-class editorial designer. Use "layers" of content. Mix TEXT blocks with structured GRID blocks (tables), CALLOUTs, QUOTEs, DIVIDERs, MOOD_TRACKERs, PRIORITY_MATRIXes, and INDEXes.
 2. For "planners", "trackers", or "logs", heavily favor GRID type with specific columns relevant to the industry. Use MOOD_TRACKER for daily journals or wellness logs. Use PRIORITY_MATRIX for task management and Eisenhower matrices.
@@ -454,6 +521,7 @@ ${referenceExamples}
 16. For "goals", "objectives", or "project" requests: use GOAL_SECTION blocks. Pre-populate goalSectionData.goals with 3-4 relevant goals, each with 2-3 sub-items (checked: false).
 17. For "daily", "schedule", or "time" requests: use TIME_BLOCK for hourly schedules (set startHour/endHour/interval and entries) and DAILY_SECTION for structured day views (set sections with "Morning", "Afternoon", "Evening" labels).
 18. IMPORTANT: Prefer the new specialized planner types over GRID workarounds. Use WEEKLY_VIEW instead of a 7-row GRID for weekly schedules. Use HABIT_TRACKER instead of a habits-in-columns GRID. Use TIME_BLOCK instead of a time-slot GRID.
+19. For "monthly planner", calendar, or month-at-a-glance requests: generate a full-page monthly spread using a GRID block with 7 columns ("Sun", "Mon", "Tue", etc.) and 5 empty rows for the weeks, so users have large typable boxes for every day. Do NOT use the mini CALENDAR block for the main calendar grid.
 
 Return a JSON object with: title (string), paperType (enum), themeColor (enum), blocks (array of block objects with type, content, alignment, emphasis, color, side, gridData, moodValue, matrixData, checked, calendarData, weeklyViewData, habitTrackerData, goalSectionData, timeBlockData, dailySectionData).`;
 
@@ -641,7 +709,7 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
       };
 
       const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -718,18 +786,18 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
         const wv = raw as Record<string, unknown>;
         const days = Array.isArray(wv.days)
           ? wv.days.map((d: unknown) => {
-              const day = d as Record<string, unknown>;
-              return {
-                label: typeof day.label === "string" ? day.label : "",
-                content: typeof day.content === "string" ? day.content : "",
-              };
-            })
+            const day = d as Record<string, unknown>;
+            return {
+              label: typeof day.label === "string" ? day.label : "",
+              content: typeof day.content === "string" ? day.content : "",
+            };
+          })
           : [
-              { label: "Monday", content: "" }, { label: "Tuesday", content: "" },
-              { label: "Wednesday", content: "" }, { label: "Thursday", content: "" },
-              { label: "Friday", content: "" }, { label: "Saturday", content: "" },
-              { label: "Sunday", content: "" },
-            ];
+            { label: "Monday", content: "" }, { label: "Tuesday", content: "" },
+            { label: "Wednesday", content: "" }, { label: "Thursday", content: "" },
+            { label: "Friday", content: "" }, { label: "Saturday", content: "" },
+            { label: "Sunday", content: "" },
+          ];
         return { startDate: typeof wv.startDate === "string" ? wv.startDate : undefined, days };
       };
 
@@ -740,8 +808,8 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
         const days = typeof ht.days === "number" ? ht.days : 7;
         const checked = Array.isArray(ht.checked)
           ? ht.checked.map((row: unknown) =>
-              Array.isArray(row) ? row.map((v: unknown) => v === true) : new Array(days).fill(false)
-            )
+            Array.isArray(row) ? row.map((v: unknown) => v === true) : new Array(days).fill(false)
+          )
           : habits.map(() => new Array(days).fill(false));
         return { habits, days, checked };
       };
@@ -751,18 +819,18 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
         const gs = raw as Record<string, unknown>;
         const goals = Array.isArray(gs.goals)
           ? gs.goals.map((g: unknown) => {
-              const goal = g as Record<string, unknown>;
-              return {
-                text: typeof goal.text === "string" ? goal.text : "",
-                subItems: Array.isArray(goal.subItems)
-                  ? goal.subItems.map((si: unknown) => {
-                      const sub = si as Record<string, unknown>;
-                      return { text: typeof sub.text === "string" ? sub.text : "", checked: sub.checked === true };
-                    })
-                  : [],
-                progress: typeof goal.progress === "number" ? goal.progress : undefined,
-              };
-            })
+            const goal = g as Record<string, unknown>;
+            return {
+              text: typeof goal.text === "string" ? goal.text : "",
+              subItems: Array.isArray(goal.subItems)
+                ? goal.subItems.map((si: unknown) => {
+                  const sub = si as Record<string, unknown>;
+                  return { text: typeof sub.text === "string" ? sub.text : "", checked: sub.checked === true };
+                })
+                : [],
+              progress: typeof goal.progress === "number" ? goal.progress : undefined,
+            };
+          })
           : [];
         return { goals };
       };
@@ -776,13 +844,13 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
           interval: (tb.interval === 30 ? 30 : 60) as 30 | 60,
           entries: Array.isArray(tb.entries)
             ? tb.entries.map((e: unknown) => {
-                const entry = e as Record<string, unknown>;
-                return {
-                  time: typeof entry.time === "string" ? entry.time : "",
-                  content: typeof entry.content === "string" ? entry.content : "",
-                  color: typeof entry.color === "string" ? entry.color : undefined,
-                };
-              })
+              const entry = e as Record<string, unknown>;
+              return {
+                time: typeof entry.time === "string" ? entry.time : "",
+                content: typeof entry.content === "string" ? entry.content : "",
+                color: typeof entry.color === "string" ? entry.color : undefined,
+              };
+            })
             : [],
         };
       };
@@ -795,12 +863,12 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
           dayLabel: typeof ds.dayLabel === "string" ? ds.dayLabel : undefined,
           sections: Array.isArray(ds.sections)
             ? ds.sections.map((s: unknown) => {
-                const section = s as Record<string, unknown>;
-                return {
-                  label: typeof section.label === "string" ? section.label : "",
-                  content: typeof section.content === "string" ? section.content : "",
-                };
-              })
+              const section = s as Record<string, unknown>;
+              return {
+                label: typeof section.label === "string" ? section.label : "",
+                content: typeof section.content === "string" ? section.content : "",
+              };
+            })
             : [{ label: "Morning", content: "" }, { label: "Afternoon", content: "" }, { label: "Evening", content: "" }],
         };
       };
@@ -873,6 +941,239 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
   }),
 });
 
+http.route({
+  path: "/api/generate-cover",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    try {
+      const body = await request.json();
+      const { prompt, aesthetic } = body as {
+        prompt: string;
+        aesthetic?: string;
+      };
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return new Response(
+          JSON.stringify({ error: "AI service is not configured" }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const styleContext = aesthetic || "premium leather journal";
+      const imagePrompt = `Create a beautiful, high-quality notebook cover design. The cover should feature: ${prompt}. Style: ${styleContext}. The image should be a top-down view of a premium notebook cover with rich textures, embossed details, and professional finish. Studio lighting, warm ambient glow, 4K quality, cinematic, minimalist and elegant. No text or words on the cover unless specifically requested.`;
+
+      // Use Gemini 2.0 Flash with image generation
+      const geminiPayload = {
+        contents: [{ parts: [{ text: imagePrompt }] }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+        },
+      };
+
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(geminiPayload),
+        }
+      );
+
+      if (!geminiResponse.ok) {
+        const errorText = await geminiResponse.text();
+        console.error("Gemini image gen error:", geminiResponse.status, errorText);
+        // Fallback: procedural gradient
+        const fallbackUrl = buildFallbackCover(prompt);
+        return new Response(JSON.stringify({ imageUrl: fallbackUrl, fallback: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const geminiData = await geminiResponse.json();
+      const parts = geminiData?.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find((p: Record<string, unknown>) => p.inlineData);
+
+      if (imagePart?.inlineData) {
+        const { mimeType, data } = imagePart.inlineData as { mimeType: string; data: string };
+        const dataUrl = `data:${mimeType};base64,${data}`;
+        return new Response(JSON.stringify({ imageUrl: dataUrl }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // No image: fallback
+      const fallbackUrl = buildFallbackCover(prompt);
+      return new Response(JSON.stringify({ imageUrl: fallbackUrl, fallback: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Generate cover error:", error);
+      return new Response(
+        JSON.stringify({ error: "Internal server error" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+http.route({
+  path: "/api/auth/login",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+    }
+
+    try {
+      const body = await request.json();
+      const email = typeof body?.email === "string" ? body.email : "";
+      const password = typeof body?.password === "string" ? body.password : "";
+
+      if (!email.trim() || !password) {
+        return new Response(JSON.stringify({ error: "email and password are required" }), {
+          status: 400,
+          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const result = await ctx.runMutation(api.users.loginWithEmailPassword, {
+        email,
+        password,
+      });
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Auth login error:", error);
+      return new Response(JSON.stringify({ error: "Login failed" }), {
+        status: 500,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/auth/signup",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+    }
+
+    try {
+      const body = await request.json();
+      const email = typeof body?.email === "string" ? body.email : "";
+      const password = typeof body?.password === "string" ? body.password : "";
+      const name = typeof body?.name === "string" ? body.name : undefined;
+
+      if (!email.trim() || !password) {
+        return new Response(JSON.stringify({ error: "email and password are required" }), {
+          status: 400,
+          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const result = await ctx.runMutation(api.users.signupWithEmailPassword, {
+        email,
+        password,
+        name,
+      });
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Auth signup error:", error);
+      return new Response(JSON.stringify({ error: "Signup failed" }), {
+        status: 500,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/auth/me",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+    }
+
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const user = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ user }), {
+        status: 200,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Auth me error:", error);
+      return new Response(JSON.stringify({ error: "Failed to resolve user" }), {
+        status: 500,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/auth/logout",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: defaultCorsHeaders });
+    }
+
+    try {
+      const body = await request.json().catch(() => ({}));
+      const fromBody = typeof body?.sessionToken === "string" ? body.sessionToken : null;
+      const sessionToken = fromBody ?? getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      await ctx.runMutation(api.users.logoutWithSession, { sessionToken });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Auth logout error:", error);
+      return new Response(JSON.stringify({ error: "Logout failed" }), {
+        status: 500,
+        headers: { ...defaultCorsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // Handle CORS preflight for all routes
 http.route({
   path: "/api/generate-layout",
@@ -888,5 +1189,45 @@ http.route({
     });
   }),
 });
+
+http.route({
+  path: "/api/generate-cover",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }),
+});
+
+http.route({
+  path: "/api/auth/login",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
+});
+
+http.route({
+  path: "/api/auth/signup",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
+});
+
+http.route({
+  path: "/api/auth/me",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
+});
+
+http.route({
+  path: "/api/auth/logout",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: defaultCorsHeaders })),
+});
+
 
 export default http;

@@ -57,7 +57,7 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
         ) || []
       } : undefined,
       calendarData: b.type === 'CALENDAR' ? (b.calendarData || { month: new Date().getMonth() + 1, year: new Date().getFullYear(), highlights: [] }) : undefined,
-      weeklyViewData: b.type === 'WEEKLY_VIEW' ? (b.weeklyViewData || { days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => ({ label: d, content: '' })) }) : undefined,
+      weeklyViewData: b.type === 'WEEKLY_VIEW' ? (b.weeklyViewData || { days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => ({ label: d, content: '' })) }) : undefined,
       habitTrackerData: b.type === 'HABIT_TRACKER' ? (b.habitTrackerData || { habits: [], days: 7, checked: [] }) : undefined,
       goalSectionData: b.type === 'GOAL_SECTION' ? (b.goalSectionData || { goals: [] }) : undefined,
       timeBlockData: b.type === 'TIME_BLOCK' ? (b.timeBlockData || { startHour: 8, endHour: 18, interval: 60 as 30 | 60, entries: [] }) : undefined,
@@ -65,14 +65,34 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
     }));
 
     return {
-      title: validated.title,
-      paperType: validated.paperType,
-      themeColor: validated.themeColor,
-      blocks
+      title: validated.title || 'Untitled',
+      paperType: validated.paperType || 'lined',
+      themeColor: validated.themeColor || 'slate',
+      blocks,
     };
-
   } catch (error) {
     console.error("Layout generation failed:", error);
     throw error;
   }
 };
+
+export const generateCover = async (prompt: string, aesthetic?: string): Promise<{ imageUrl: string }> => {
+  try {
+    const response = await fetch(`${API_BASE}/api/generate-cover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, aesthetic }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `API error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Cover generation failed:", error);
+    throw error;
+  }
+};
+

@@ -3,6 +3,49 @@ import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 function geminiProxyPlugin(apiKey: string): Plugin {
+
+  // Generate a procedural gradient SVG cover as fallback
+  function generateFallbackCover(prompt: string, aesthetic?: string): string {
+    // Hash prompt to derive consistent colors
+    let hash = 0;
+    for (let i = 0; i < prompt.length; i++) {
+      hash = ((hash << 5) - hash) + prompt.charCodeAt(i);
+      hash |= 0;
+    }
+    const hue1 = Math.abs(hash % 360);
+    const hue2 = (hue1 + 40 + Math.abs((hash >> 8) % 60)) % 360;
+
+    // Aesthetic-based saturation and lightness
+    const isMinimal = aesthetic?.includes('e-ink') || aesthetic?.includes('minimal');
+    const sat = isMinimal ? '10%' : '45%';
+    const light1 = isMinimal ? '20%' : '25%';
+    const light2 = isMinimal ? '35%' : '40%';
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="hsl(${hue1}, ${sat}, ${light1})"/>
+        <stop offset="100%" stop-color="hsl(${hue2}, ${sat}, ${light2})"/>
+      </linearGradient>
+      <filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feBlend in="SourceGraphic" mode="multiply" result="blend"/></filter>
+      <pattern id="leather" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
+        <rect width="200" height="200" fill="transparent"/>
+        <circle cx="50" cy="50" r="0.5" fill="rgba(255,255,255,0.03)"/>
+        <circle cx="150" cy="100" r="0.4" fill="rgba(255,255,255,0.02)"/>
+        <circle cx="100" cy="150" r="0.6" fill="rgba(255,255,255,0.025)"/>
+      </pattern>
+    </defs>
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#leather)" opacity="0.5"/>
+    <rect width="1024" height="1024" filter="url(#noise)" opacity="0.08"/>
+    <rect x="60" y="60" width="904" height="904" rx="8" fill="none" stroke="rgba(212,165,116,0.15)" stroke-width="2"/>
+    <rect x="80" y="80" width="864" height="864" rx="4" fill="none" stroke="rgba(212,165,116,0.08)" stroke-width="1"/>
+    <line x1="512" y1="120" x2="512" y2="160" stroke="rgba(212,165,116,0.25)" stroke-width="2"/>
+    <line x1="512" y1="864" x2="512" y2="904" stroke="rgba(212,165,116,0.25)" stroke-width="2"/>
+  </svg>`;
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  }
+
   return {
     name: 'gemini-proxy',
     configureServer(server) {
@@ -147,6 +190,97 @@ Return a JSON object matching the schema.`,
           res.end(generatedText);
         } catch (error) {
           console.error('Gemini proxy error:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Internal server error' }));
+        }
+      });
+
+      // ── /api/generate-cover — AI Cover Image Generation ──────────
+      server.middlewares.use('/api/generate-cover', async (req, res) => {
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' });
+          res.end();
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          res.writeHead(405, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(chunk as Buffer);
+          }
+          const body = JSON.parse(Buffer.concat(chunks).toString());
+          const { prompt, aesthetic } = body as { prompt: string; aesthetic?: string };
+
+          if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'prompt is required' }));
+            return;
+          }
+
+          if (!apiKey) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'GEMINI_API_KEY is not configured' }));
+            return;
+          }
+
+          const styleContext = aesthetic || 'premium leather journal';
+          const imagePrompt = `Create a beautiful, high-quality notebook cover design. The cover should feature: ${prompt}. Style: ${styleContext}. The image should be a top-down view of a premium notebook cover with rich textures, embossed details, and professional finish. Studio lighting, warm ambient glow, 4K quality, cinematic, minimalist and elegant. No text or words on the cover unless specifically requested.`;
+
+          // Use Gemini 2.0 Flash with image generation
+          const geminiPayload = {
+            contents: [{
+              parts: [{ text: imagePrompt }],
+            }],
+            generationConfig: {
+              responseModalities: ['TEXT', 'IMAGE'],
+            },
+          };
+
+          const geminiResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(geminiPayload),
+            }
+          );
+
+          if (!geminiResponse.ok) {
+            const errorText = await geminiResponse.text();
+            console.error('Gemini image gen error:', geminiResponse.status, errorText);
+            // Fallback: generate a procedural gradient cover
+            const fallbackUrl = generateFallbackCover(prompt, aesthetic);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ imageUrl: fallbackUrl, fallback: true }));
+            return;
+          }
+
+          const geminiData = await geminiResponse.json();
+          const parts = geminiData?.candidates?.[0]?.content?.parts || [];
+
+          // Find the image part
+          const imagePart = parts.find((p: Record<string, unknown>) => p.inlineData);
+          if (imagePart?.inlineData) {
+            const { mimeType, data } = imagePart.inlineData as { mimeType: string; data: string };
+            const dataUrl = `data:${mimeType};base64,${data}`;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ imageUrl: dataUrl }));
+            return;
+          }
+
+          // No image returned — use fallback
+          console.warn('Gemini returned no image, using fallback');
+          const fallbackUrl = generateFallbackCover(prompt, aesthetic);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ imageUrl: fallbackUrl, fallback: true }));
+        } catch (error) {
+          console.error('Cover generation error:', error);
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Internal server error' }));
         }

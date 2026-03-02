@@ -36,7 +36,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
   const currentHoverScale = useRef(1);
 
   // Materials — mobile uses lower resolution textures
-  const texRes = isMobile ? 256 : 512;
+  const texRes = isMobile ? 128 : 512;
   const coverMaterial = useCoverMaterial('leather', '#1e1b4b');
   const leftPageMaterial = usePaperMaterial({ paperType: 'lined', resolution: texRes });
   const rightPageMaterial = usePaperMaterial({ paperType: 'dotted', resolution: texRes });
@@ -66,24 +66,26 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
 
   // Title texture for cover (lightweight - just text)
   const titleMat = useMemo(() => {
+    const canvasWidth = isMobile ? 256 : 512;
+    const canvasHeight = isMobile ? 128 : 256;
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 256;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
     const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, 512, 256);
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
     ctx.fillStyle = '#d4a574';
-    ctx.font = 'bold 56px "Playfair Display", serif';
+    ctx.font = isMobile ? 'bold 30px "Playfair Display", serif' : 'bold 56px "Playfair Display", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('PaperGrid AI', 256, 100);
+    ctx.fillText('PaperGrid AI', canvasWidth / 2, isMobile ? 50 : 100);
 
-    ctx.font = '22px "Inter", sans-serif';
+    ctx.font = isMobile ? '12px "Inter", sans-serif' : '22px "Inter", sans-serif';
     ctx.fillStyle = '#c4956a';
-    ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', 256, 170);
+    ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', canvasWidth / 2, isMobile ? 84 : 170);
 
     const texture = new THREE.CanvasTexture(canvas);
-    texture.anisotropy = 8;
+    texture.anisotropy = isMobile ? 2 : 8;
     return new THREE.MeshStandardMaterial({
       map: texture,
       transparent: true,
@@ -93,10 +95,14 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
       emissive: '#d4a574',
       emissiveIntensity: 0.03,
     });
-  }, []);
+  }, [isMobile]);
 
   // Smoothed exit values (avoid per-frame jitter)
   const currentExit = useRef(0);
+  // Cached materials array — avoids per-frame traverse of scene graph
+  const cachedMaterials = useRef<THREE.MeshStandardMaterial[]>([]);
+  const materialsCollected = useRef(false);
+  const prevOpacity = useRef(1);
 
   // Animation
   useFrame((state, delta) => {
@@ -170,32 +176,45 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     // Add drift to base y offset (don't overwrite Float positioning)
     groupRef.current.position.y = exitDrift;
 
-    // Fade all materials via traverse (only ~8 meshes, lightweight)
+    // Fade all materials — cached array avoids per-frame scene graph traverse
     // On mobile: skip exit fade (no scroll-driven phases) to save GPU cycles
     if (!isMobile) {
-      groupRef.current.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mat = (child as THREE.Mesh).material;
-          if (mat && !Array.isArray(mat)) {
-            (mat as THREE.MeshStandardMaterial).transparent = true;
-            (mat as THREE.MeshStandardMaterial).opacity = exitOpacity;
+      // Collect materials once on first frame
+      if (!materialsCollected.current && groupRef.current) {
+        const mats: THREE.MeshStandardMaterial[] = [];
+        groupRef.current.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mat = (child as THREE.Mesh).material;
+            if (mat && !Array.isArray(mat) && (mat as THREE.MeshStandardMaterial).opacity !== undefined) {
+              mats.push(mat as THREE.MeshStandardMaterial);
+            }
           }
+        });
+        cachedMaterials.current = mats;
+        materialsCollected.current = true;
+      }
+
+      // Only update opacity when it actually changes (avoid GPU recompilation)
+      const roundedOpacity = Math.round(exitOpacity * 100) / 100;
+      if (Math.abs(roundedOpacity - prevOpacity.current) > 0.005) {
+        prevOpacity.current = roundedOpacity;
+        for (const mat of cachedMaterials.current) {
+          mat.transparent = true;
+          mat.opacity = roundedOpacity;
         }
-      });
+      }
     }
   });
 
   const hw = BOOK_WIDTH / 2;
   const hh = BOOK_HEIGHT / 2;
 
-  return (
-    <Float
-      speed={isMobile ? 0.8 : 1.2}
-      rotationIntensity={isMobile ? 0.03 : 0.06}
-      floatIntensity={isMobile ? 0.1 : 0.2}
-      floatingRange={[-0.03, 0.03]}
-    >
-      <group position={[0.5, -0.5, 0]}>
+  // Mobile: compensate for inner hw offset (all meshes sit at x=hw=1.6) to visually center,
+  // and push well below CTA buttons so it doesn't overlap text content
+  const bookPosition: [number, number, number] = isMobile ? [-hw, -3.8, 0] : [0.5, -0.5, 0];
+
+  const notebookContent = (
+    <group position={bookPosition}>
       <group ref={groupRef}>
         {/* ─── Back Cover (stationary) ─── */}
         <mesh
@@ -273,7 +292,21 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
           </mesh>
         ))}
       </group>
-      </group>
+    </group>
+  );
+
+  if (isMobile) {
+    return notebookContent;
+  }
+
+  return (
+    <Float
+      speed={1.2}
+      rotationIntensity={0.06}
+      floatIntensity={0.2}
+      floatingRange={[-0.03, 0.03]}
+    >
+      {notebookContent}
     </Float>
   );
 }

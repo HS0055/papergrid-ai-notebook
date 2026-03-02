@@ -59,7 +59,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           start: 'top top',
           end: '+=200%',
           pin: pinContainerRef.current,
-          scrub: 0.25,
+          scrub: true,
           onUpdate: (self) => {
             // Only write to ref — NO setState
             scrollRef.current.progress = self.progress;
@@ -77,7 +77,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
       // Phase 1: visible 0-8%, fades out 8-14%
       masterTl.to(
         phase1Ref.current,
-        { opacity: 0, y: -50, duration: 0.06, ease: 'power2.in' },
+        { opacity: 0, y: -50, pointerEvents: 'none', duration: 0.06, ease: 'power2.in' },
         0.08,
       );
 
@@ -85,13 +85,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
       masterTl
         .fromTo(
           phase2Ref.current,
-          { opacity: 0, y: 30 },
-          { opacity: 1, y: 0, duration: 0.08, ease: 'power2.out' },
+          { opacity: 0, y: 30, pointerEvents: 'none' },
+          { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.08, ease: 'power2.out' },
           0.12,
         )
         .to(
           phase2Ref.current,
-          { opacity: 0, y: -30, duration: 0.08, ease: 'power2.in' },
+          { opacity: 0, y: -30, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
           0.38,
         );
 
@@ -99,13 +99,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
       masterTl
         .fromTo(
           phase3Ref.current,
-          { opacity: 0, y: 30 },
-          { opacity: 1, y: 0, duration: 0.10, ease: 'power2.out' },
+          { opacity: 0, y: 30, pointerEvents: 'none' },
+          { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.10, ease: 'power2.out' },
           0.44,
         )
         .to(
           phase3Ref.current,
-          { opacity: 0, y: -25, scale: 0.97, duration: 0.12, ease: 'power2.in' },
+          { opacity: 0, y: -25, scale: 0.97, pointerEvents: 'none', duration: 0.12, ease: 'power2.in' },
           0.72,
         );
     }, sectionRef);
@@ -122,12 +122,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     <section
       ref={sectionRef}
       className="hero-section relative"
-      style={{ minHeight: isMobile ? '100vh' : '300vh' }}
+      style={{ minHeight: isMobile ? 'auto' : '300vh' }}
     >
       {/* Scroll progress indicator — outside pin container to avoid jump */}
       <div
         ref={progressBarRef}
-        className="fixed top-0 left-0 h-[3px] z-50"
+        className="fixed top-0 left-0 h-[3px] z-50 pointer-events-none"
         style={{
           width: '0%',
           background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
@@ -137,40 +137,44 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
 
       <div
         ref={pinContainerRef}
-        className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden px-6 pt-24 pb-16"
+        className={`relative flex flex-col items-center overflow-hidden px-6 ${isMobile ? 'justify-start pt-20 pb-64' : 'justify-center min-h-screen pt-24 pb-16'}`}
         style={{
           background: 'linear-gradient(160deg, #0f111a 0%, #1a1c23 45%, #2a1f3d 70%, #0f111a 100%)',
         }}
-        onMouseMove={(e) => {
+        onMouseMove={isMobile ? undefined : (e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           cursorRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
           cursorRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         }}
-        onMouseLeave={() => {
+        onMouseLeave={isMobile ? undefined : () => {
           cursorRef.current.x = 0;
           cursorRef.current.y = 0;
         }}
       >
         {/* Ambient glow blobs */}
-        <div
-          className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full pointer-events-none"
-          style={{
-            background: 'radial-gradient(ellipse, rgba(79,70,229,0.18) 0%, transparent 70%)',
-            filter: 'blur(40px)',
-          }}
-        />
-        <div
-          className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] rounded-full pointer-events-none"
-          style={{
-            background: 'radial-gradient(ellipse, rgba(217,119,6,0.12) 0%, transparent 70%)',
-            filter: 'blur(60px)',
-          }}
-        />
+        {!isMobile && (
+          <>
+            <div
+              className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full pointer-events-none"
+              style={{
+                background: 'radial-gradient(ellipse, rgba(79,70,229,0.18) 0%, transparent 70%)',
+                filter: 'blur(40px)',
+              }}
+            />
+            <div
+              className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] rounded-full pointer-events-none"
+              style={{
+                background: 'radial-gradient(ellipse, rgba(217,119,6,0.12) 0%, transparent 70%)',
+                filter: 'blur(60px)',
+              }}
+            />
+          </>
+        )}
 
         {/* ── 3D Canvas: overlays entire section ── */}
         <div
           className="absolute inset-0"
-          style={{ zIndex: 5, pointerEvents: 'none' }}
+          style={{ zIndex: 5, pointerEvents: 'none', touchAction: 'auto' }}
         >
           <Canvas3DErrorBoundary>
             <Suspense fallback={null}>
@@ -246,7 +250,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
         <div
           ref={phase2Ref}
           className="absolute inset-0 flex items-center justify-center px-6"
-          style={{ zIndex: 20, opacity: 0, display: isMobile ? 'none' : undefined }}
+          style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
         >
           <div className="text-center max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
@@ -277,7 +281,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
         <div
           ref={phase3Ref}
           className="absolute inset-0 flex items-center justify-center px-6"
-          style={{ zIndex: 20, opacity: 0, display: isMobile ? 'none' : undefined }}
+          style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
         >
           <div className="text-center max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"

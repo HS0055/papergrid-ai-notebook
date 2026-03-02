@@ -27,7 +27,7 @@ export default function HeroScene({ scrollRef, hovered, cursorRef, isMobile = fa
       postPreset={isMobile ? undefined : 'subtle'}
       lightPreset="landing"
       fov={isMobile ? 45 : 40}
-      cameraPosition={isMobile ? [0, 0, 8] : [0, 0, 7]}
+      cameraPosition={isMobile ? [0, -1.5, 14] : [0, 0, 7]}
       mobileLowPower={isMobile}
     >
       <HeroNotebook scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} isMobile={isMobile} />

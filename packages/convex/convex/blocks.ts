@@ -36,6 +36,13 @@ export const create = mutation({
     gridData: v.optional(v.any()),
     matrixData: v.optional(v.any()),
     moodValue: v.optional(v.number()),
+    musicData: v.optional(v.any()),
+    calendarData: v.optional(v.any()),
+    weeklyViewData: v.optional(v.any()),
+    habitTrackerData: v.optional(v.any()),
+    goalSectionData: v.optional(v.any()),
+    timeBlockData: v.optional(v.any()),
+    dailySectionData: v.optional(v.any()),
   },
   handler: async (ctx, { pageId, ...fields }) => {
     // Determine next sortOrder
@@ -69,6 +76,13 @@ export const update = mutation({
     gridData: v.optional(v.any()),
     matrixData: v.optional(v.any()),
     moodValue: v.optional(v.number()),
+    musicData: v.optional(v.any()),
+    calendarData: v.optional(v.any()),
+    weeklyViewData: v.optional(v.any()),
+    habitTrackerData: v.optional(v.any()),
+    goalSectionData: v.optional(v.any()),
+    timeBlockData: v.optional(v.any()),
+    dailySectionData: v.optional(v.any()),
   },
   handler: async (ctx, { id, ...fields }) => {
     const existing = await ctx.db.get(id);
@@ -135,6 +149,13 @@ export const createBatch = mutation({
         gridData: v.optional(v.any()),
         matrixData: v.optional(v.any()),
         moodValue: v.optional(v.number()),
+        musicData: v.optional(v.any()),
+        calendarData: v.optional(v.any()),
+        weeklyViewData: v.optional(v.any()),
+        habitTrackerData: v.optional(v.any()),
+        goalSectionData: v.optional(v.any()),
+        timeBlockData: v.optional(v.any()),
+        dailySectionData: v.optional(v.any()),
       })
     ),
   },

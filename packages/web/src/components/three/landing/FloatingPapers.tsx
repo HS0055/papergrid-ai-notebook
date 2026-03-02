@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState } from 'react';
+import { useRef, useMemo, RefObject } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { usePaperMaterial } from '../shared/PaperMaterial';
@@ -59,10 +59,18 @@ const PAPERS: FloatingPaper[] = [
  * High-detail version has paper texture and curved geometry.
  * Low-detail version is a simple flat plane with solid color.
  */
-function PaperCard({ paper, scrollProgress = 0 }: { paper: FloatingPaper; scrollProgress?: number }) {
+function PaperCard({
+  paper,
+  scrollProgressRef,
+}: {
+  paper: FloatingPaper;
+  scrollProgressRef?: RefObject<number>;
+}) {
   const groupRef = useRef<THREE.Group>(null);
+  const detailedMeshRef = useRef<THREE.Mesh>(null);
+  const simpleMeshRef = useRef<THREE.Mesh>(null);
   const { camera, pointer } = useThree();
-  const [useHighDetail, setUseHighDetail] = useState(true);
+  const useHighDetailRef = useRef(true);
 
   // High-detail: textured paper material
   const detailedMaterial = usePaperMaterial({ paperType: paper.paperType, resolution: 512 });
@@ -123,9 +131,15 @@ function PaperCard({ paper, scrollProgress = 0 }: { paper: FloatingPaper; scroll
     if (!groupRef.current) return;
     const t = state.clock.elapsedTime;
 
-    // LOD: switch based on camera distance
+    // LOD with hysteresis: avoid per-frame React state churn.
     const distance = groupRef.current.position.distanceTo(camera.position);
-    setUseHighDetail(distance < 8);
+    const threshold = useHighDetailRef.current ? 9.0 : 7.5;
+    const nextHighDetail = distance < threshold;
+    if (nextHighDetail !== useHighDetailRef.current) {
+      useHighDetailRef.current = nextHighDetail;
+      if (detailedMeshRef.current) detailedMeshRef.current.visible = nextHighDetail;
+      if (simpleMeshRef.current) simpleMeshRef.current.visible = !nextHighDetail;
+    }
 
     // Organic floating drift
     const basePos = paper.position;
@@ -143,23 +157,25 @@ function PaperCard({ paper, scrollProgress = 0 }: { paper: FloatingPaper; scroll
     groupRef.current.position.y += pointer.y * 0.15 * (paper.position[2] / -3);
 
     // Scroll parallax - papers drift slightly with scroll
+    const scrollProgress = scrollProgressRef?.current ?? 0;
     groupRef.current.position.y -= scrollProgress * 0.5;
   });
 
   return (
     <group ref={groupRef} scale={paper.scale}>
-      {useHighDetail ? (
-        <mesh
-          geometry={detailedGeometry}
-          material={transparentDetailedMat || detailedMaterial}
-          castShadow
-        />
-      ) : (
-        <mesh
-          geometry={simpleGeometry}
-          material={simpleMaterial}
-        />
-      )}
+      <mesh
+        ref={detailedMeshRef}
+        geometry={detailedGeometry}
+        material={transparentDetailedMat || detailedMaterial}
+        castShadow
+        visible
+      />
+      <mesh
+        ref={simpleMeshRef}
+        geometry={simpleGeometry}
+        material={simpleMaterial}
+        visible={false}
+      />
     </group>
   );
 }
@@ -168,7 +184,7 @@ function PaperCard({ paper, scrollProgress = 0 }: { paper: FloatingPaper; scroll
  * Collection of floating paper cards with LOD and performance monitoring.
  * Auto-hides when performance tier is medium or low.
  */
-export function FloatingPapers({ scrollProgress = 0 }: { scrollProgress?: number }) {
+export function FloatingPapers({ scrollProgressRef }: { scrollProgressRef?: RefObject<number> }) {
   const { tier } = usePerformanceMonitor();
 
   // Don't render if performance tier is medium or low
@@ -179,7 +195,7 @@ export function FloatingPapers({ scrollProgress = 0 }: { scrollProgress?: number
   return (
     <group>
       {PAPERS.map((paper, i) => (
-        <PaperCard key={i} paper={paper} scrollProgress={scrollProgress} />
+        <PaperCard key={i} paper={paper} scrollProgressRef={scrollProgressRef} />
       ))}
     </group>
   );

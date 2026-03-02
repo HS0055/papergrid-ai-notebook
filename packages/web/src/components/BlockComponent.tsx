@@ -134,24 +134,23 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
     <div className="group relative flex items-start -ml-16 mb-0 hover:bg-black/5 transition-colors rounded-lg pl-16 pr-2 py-0">
       {/* Block Controls (Hover) */}
       <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
-         <div className="p-1 text-gray-400 cursor-move hover:text-gray-600" {...dragHandleProps}>
-            <GripVertical size={16} />
-         </div>
-         <button onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })} className="p-1 hover:bg-blue-100 rounded text-gray-400 hover:text-blue-500" aria-label="Move block to other page">
-           <ArrowLeftRight size={16} />
-         </button>
-         <button onClick={() => onDelete(block.id)} className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-500" aria-label="Delete block">
-           <Trash2 size={16} />
-         </button>
+        <div className="p-1 text-gray-400 cursor-move hover:text-gray-600" {...dragHandleProps}>
+          <GripVertical size={16} />
+        </div>
+        <button onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })} className="p-1 hover:bg-blue-100 rounded text-gray-400 hover:text-blue-500" aria-label="Move block to other page">
+          <ArrowLeftRight size={16} />
+        </button>
+        <button onClick={() => onDelete(block.id)} className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-500" aria-label="Delete block">
+          <Trash2 size={16} />
+        </button>
       </div>
 
       <div className="w-full relative">
         {block.type === BlockType.HEADING && (
           <div className={`relative ${alignmentClass}`} style={{ minHeight: '32px', marginBottom: '32px' }}>
-             <input
-              className={`w-full bg-transparent text-3xl font-bold font-hand text-gray-800 placeholder-gray-300 focus:outline-none border-none p-0 m-0 ${alignmentClass} ${
-                block.emphasis === 'highlight' ? `${colorClasses.bg} px-4 rounded-lg shadow-sm` : colorClasses.text
-              }`}
+            <input
+              className={`w-full bg-transparent text-3xl font-bold font-hand text-gray-800 placeholder-gray-300 focus:outline-none border-none p-0 m-0 ${alignmentClass} ${block.emphasis === 'highlight' ? `${colorClasses.bg} px-4 rounded-lg shadow-sm` : colorClasses.text
+                }`}
               style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '7px' }}
               value={block.content}
               onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
@@ -190,19 +189,19 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
               style={{ position: 'relative', top: '9px', accentColor: getAccentColor(block.color) }}
             />
             <input
-               className={`flex-1 bg-transparent font-hand text-xl text-gray-800 focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${emphasisClass}`}
-               style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '9px' }}
-               value={block.content}
-               onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
-               onKeyDown={handleKeyDown}
-               placeholder="To-do item"
+              className={`flex-1 bg-transparent font-hand text-xl text-gray-800 focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${emphasisClass}`}
+              style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '9px' }}
+              value={block.content}
+              onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
+              onKeyDown={handleKeyDown}
+              placeholder="To-do item"
             />
           </div>
         )}
 
         {block.type === BlockType.CALLOUT && (
           <div className={`w-full rounded-br-2xl rounded-tl-md rounded-tr-md rounded-bl-md border ${colorClasses.bg} ${colorClasses.border} shadow-[4px_4px_10px_rgba(0,0,0,0.05)] relative group/callout`}
-               style={{ padding: '15px', marginBottom: '32px', boxSizing: 'border-box' }}>
+            style={{ padding: '15px', marginBottom: '32px', boxSizing: 'border-box' }}>
             {/* Washi Tape */}
             <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-12 h-5 ${colorClasses.highlight} opacity-90 rotate-[-2deg] shadow-sm border border-white/40 backdrop-blur-sm z-10`}></div>
             {/* Folded corner effect */}
@@ -252,7 +251,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
           <div className="flex items-center gap-4" style={{ height: '32px', marginBottom: '32px' }}>
             <span className="font-sans text-sm font-bold text-gray-400 uppercase tracking-widest">Mood:</span>
             {['😢', '😕', '😐', '🙂', '😄'].map((emoji, i) => (
-              <button 
+              <button
                 key={i}
                 onClick={() => onChange(block.id, { moodValue: i })}
                 className={`text-2xl transition-all ${block.moodValue === i ? 'grayscale-0 scale-125' : 'grayscale opacity-50 hover:opacity-100 hover:scale-110 hover:grayscale-0'}`}
@@ -273,7 +272,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
               return (
                 <div key={q} className={`p-3 rounded-lg ${colors[i]} border ${borders[i]} min-h-[128px] flex flex-col`}>
                   <div className={`text-[10px] font-bold uppercase ${textColors[i]} mb-2`}>{labels[i]}</div>
-                  <textarea 
+                  <textarea
                     className="flex-1 bg-transparent resize-none focus:outline-none font-hand text-lg text-gray-800 placeholder-gray-400/50"
                     value={block.matrixData?.[q as keyof typeof block.matrixData] || ''}
                     onChange={(e) => {
@@ -309,56 +308,57 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
 
         {block.type === BlockType.GRID && block.gridData && (
           <div className="w-full relative" style={{ marginBottom: '32px' }}>
-             <div className={`bg-white/40 backdrop-blur-[2px] ring-2 ring-inset ${colorClasses.border.replace('border-', 'ring-')} rounded-sm shadow-sm overflow-hidden`} style={{ boxSizing: 'border-box' }}>
-               {/* Grid Header */}
-               {block.content && (
-                  <input 
-                    className={`w-full ${colorClasses.bg} px-4 text-sm font-sans font-bold ${colorClasses.text} border-b ${colorClasses.border} outline-none m-0`}
-                    style={{ height: '32px', lineHeight: '32px', boxSizing: 'border-box' }}
-                    value={block.content}
-                    onChange={(e) => onChange(block.id, { content: e.target.value })}
-                    placeholder="Table Title"
-                  />
-               )}
-               
-               <div className="overflow-x-auto">
-                 <table className="w-full border-collapse">
-                   <thead>
-                     <tr className={`${colorClasses.highlight} border-b-2 ${colorClasses.border}`} style={{ height: '32px' }}>
-                       {block.gridData.columns.map((col, idx) => (
-                         <th key={idx} className={`px-2 text-left font-sans text-xs font-bold uppercase tracking-wider ${colorClasses.text} border-r ${colorClasses.border} last:border-r-0`} style={{ height: '32px', boxSizing: 'border-box' }}>
-                           {col}
-                         </th>
-                       ))}
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {block.gridData.rows.map((row, rIdx) => (
-                       <tr key={rIdx} className={`border-b ${colorClasses.border} last:border-b-0`} style={{ height: '32px' }}>
-                         {row.map((cell, cIdx) => (
-                           <td key={cell.id} className={`border-r ${colorClasses.border} last:border-r-0 p-0 relative`} style={{ height: '32px', boxSizing: 'border-box' }}>
-                             <input
-                               className={`w-full h-full px-2 bg-transparent font-hand text-lg focus:outline-none ${colorClasses.focusBg} m-0 border-none`}
-                               style={{ lineHeight: '32px', boxSizing: 'border-box' }}
-                               value={cell.content}
-                               onChange={(e) => handleGridCellChange(rIdx, cIdx, e.target.value)}
-                             />
-                           </td>
-                         ))}
-                       </tr>
-                     ))}
-                   </tbody>
-                 </table>
-               </div>
-               
-               <button 
-                  onClick={addGridRow}
-                  className={`w-full ${colorClasses.bg} ${colorClasses.hoverHighlight} ${colorClasses.text} text-xs font-sans border-t ${colorClasses.border} flex items-center justify-center gap-1 transition-colors m-0`}
-                  style={{ height: '32px', boxSizing: 'border-box' }}
-               >
-                  <Plus size={12} /> Add Row
-               </button>
-             </div>
+            <div className={`bg-white/40 backdrop-blur-[2px] ring-2 ring-inset ${colorClasses.border.replace('border-', 'ring-')} rounded-sm shadow-sm overflow-hidden`} style={{ boxSizing: 'border-box' }}>
+              {/* Grid Header */}
+              {block.content && (
+                <input
+                  className={`w-full ${colorClasses.bg} px-4 text-sm font-sans font-bold ${colorClasses.text} border-b ${colorClasses.border} outline-none m-0`}
+                  style={{ height: '32px', lineHeight: '32px', boxSizing: 'border-box' }}
+                  value={block.content}
+                  onChange={(e) => onChange(block.id, { content: e.target.value })}
+                  placeholder="Table Title"
+                />
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className={`${colorClasses.highlight} border-b-2 ${colorClasses.border}`} style={{ height: '32px' }}>
+                      {block.gridData.columns.map((col, idx) => (
+                        <th key={idx} className={`px-2 text-left font-sans text-xs font-bold uppercase tracking-wider ${colorClasses.text} border-r ${colorClasses.border} last:border-r-0`} style={{ height: '32px', boxSizing: 'border-box' }}>
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.gridData.rows.map((row, rIdx) => (
+                      <tr key={rIdx} className={`border-b ${colorClasses.border} last:border-b-0`}>
+                        {row.map((cell, cIdx) => (
+                          <td key={cell.id} className={`border-r ${colorClasses.border} last:border-r-0 p-0 relative align-top`} style={{ minHeight: '32px', boxSizing: 'border-box' }}>
+                            <textarea
+                              className={`w-full h-full p-2 bg-transparent font-hand text-lg focus:outline-none ${colorClasses.focusBg} m-0 border-none resize-none align-top overflow-hidden`}
+                              style={{ lineHeight: '32px', minHeight: '64px', boxSizing: 'border-box' }}
+                              value={cell.content}
+                              onChange={(e) => handleGridCellChange(rIdx, cIdx, e.target.value)}
+                              spellCheck={false}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                onClick={addGridRow}
+                className={`w-full ${colorClasses.bg} ${colorClasses.hoverHighlight} ${colorClasses.text} text-xs font-sans border-t ${colorClasses.border} flex items-center justify-center gap-1 transition-colors m-0`}
+                style={{ height: '32px', boxSizing: 'border-box' }}
+              >
+                <Plus size={12} /> Add Row
+              </button>
+            </div>
           </div>
         )}
 

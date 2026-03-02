@@ -177,21 +177,26 @@ export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }
     return () => observer.disconnect();
   }, []);
 
-  // Parallax effect on scroll
+  // Parallax effect on scroll — RAF-throttled to avoid layout thrashing
   useEffect(() => {
     if (!carouselRef.current) return;
 
-    const handleScroll = () => {
+    let rafId = 0;
+    const updateParallax = () => {
+      rafId = 0;
+      const carouselEl = carouselRef.current;
+      if (!carouselEl) return;
+      const carouselRect = carouselEl.getBoundingClientRect();
+      const carouselCenter = carouselRect.left + carouselRect.width / 2;
+
       cardRefs.current.forEach((card, i) => {
         if (!card || !bgRefs.current[i]) return;
-
         const cardRect = card.getBoundingClientRect();
-        const carouselRect = carouselRef.current!.getBoundingClientRect();
         const cardCenter = cardRect.left + cardRect.width / 2;
-        const carouselCenter = carouselRect.left + carouselRect.width / 2;
         const offset = (cardCenter - carouselCenter) / carouselRect.width;
 
-        // Subtle parallax: background moves slower than scroll
+        // Kill previous tween before creating new one
+        gsap.killTweensOf(bgRefs.current[i]);
         gsap.to(bgRefs.current[i], {
           x: offset * -20,
           duration: 0.3,
@@ -200,10 +205,19 @@ export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }
       });
     };
 
+    const handleScroll = () => {
+      if (rafId === 0) {
+        rafId = requestAnimationFrame(updateParallax);
+      }
+    };
+
     const carousel = carouselRef.current;
     carousel.addEventListener('scroll', handleScroll, { passive: true });
 
-    return () => carousel.removeEventListener('scroll', handleScroll);
+    return () => {
+      carousel.removeEventListener('scroll', handleScroll);
+      if (rafId !== 0) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   return (
@@ -237,7 +251,7 @@ export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }
           {aesthetics.map((a, i) => (
             <div
               key={a.id}
-              ref={(el) => (cardRefs.current[i] = el)}
+              ref={(el) => { cardRefs.current[i] = el; }}
               className="carousel-card group relative rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer snap-center shrink-0"
               style={{
                 width: 'min(85vw, 420px)',
@@ -246,7 +260,7 @@ export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }
               onClick={onLaunch}
             >
               <div
-                ref={(el) => (bgRefs.current[i] = el)}
+                ref={(el) => { bgRefs.current[i] = el; }}
                 className={`absolute inset-0 ${a.paperClass}`}
                 style={{ background: a.bg, backgroundAttachment: 'local' }}
               />

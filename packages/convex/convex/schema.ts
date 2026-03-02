@@ -3,21 +3,43 @@ import { v } from "convex/values";
 
 export default defineSchema({
   users: defineTable({
+    // Auth identity link
+    tokenIdentifier: v.optional(v.string()),
     name: v.string(),
     email: v.string(),
+    passwordHash: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
-    plan: v.union(v.literal("free"), v.literal("pro")),
+    plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder")),
+    // Stripe
+    stripeCustomerId: v.optional(v.string()),
+    stripeSubscriptionId: v.optional(v.string()),
+    // Usage tracking
+    aiGenerationsUsed: v.optional(v.number()),
+    aiGenerationsResetAt: v.optional(v.string()),
+    // Preferences
     preferences: v.object({
       defaultAesthetic: v.string(),
       defaultPaperType: v.string(),
     }),
-  }).index("by_email", ["email"]),
+  })
+    .index("by_email", ["email"])
+    .index("by_token", ["tokenIdentifier"])
+    .index("by_stripe_customer", ["stripeCustomerId"]),
+
+  authSessions: defineTable({
+    userId: v.id("users"),
+    token: v.string(),
+    createdAt: v.string(),
+    expiresAt: v.string(),
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"]),
 
   notebooks: defineTable({
     userId: v.id("users"),
     title: v.string(),
     coverColor: v.string(),
-    bookmarks: v.array(v.id("pages")),
+    bookmarks: v.array(v.string()),
     isShared: v.boolean(),
   }).index("by_user", ["userId"]),
 
@@ -28,6 +50,8 @@ export default defineSchema({
     aesthetic: v.optional(v.string()),
     themeColor: v.optional(v.string()),
     sortOrder: v.number(),
+    aiGenerated: v.optional(v.boolean()),
+    createdAt: v.optional(v.string()),
   }).index("by_notebook", ["notebookId"]),
 
   blocks: defineTable({
@@ -43,6 +67,13 @@ export default defineSchema({
     gridData: v.optional(v.any()),
     matrixData: v.optional(v.any()),
     moodValue: v.optional(v.number()),
+    musicData: v.optional(v.any()),
+    calendarData: v.optional(v.any()),
+    weeklyViewData: v.optional(v.any()),
+    habitTrackerData: v.optional(v.any()),
+    goalSectionData: v.optional(v.any()),
+    timeBlockData: v.optional(v.any()),
+    dailySectionData: v.optional(v.any()),
   }).index("by_page", ["pageId"]),
 
   referenceLayouts: defineTable({

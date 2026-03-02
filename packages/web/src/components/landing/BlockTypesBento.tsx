@@ -42,6 +42,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
     const content = contentRefs.current[cardIndex];
 
     if (card) {
+      gsap.killTweensOf(card);
       gsap.to(card, {
         scale: 1.02,
         boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
@@ -52,6 +53,8 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
     if (content) {
       const children = content.children;
+      gsap.killTweensOf(content);
+      gsap.killTweensOf(children);
       gsap.to(content, {
         opacity: 1,
         y: 0,
@@ -75,6 +78,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
     const content = contentRefs.current[cardIndex];
 
     if (card) {
+      gsap.killTweensOf(card);
       gsap.to(card, {
         scale: 1,
         boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
@@ -85,6 +89,8 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
     if (content) {
       const children = content.children;
+      gsap.killTweensOf(content);
+      gsap.killTweensOf(children);
       gsap.to(children, {
         opacity: 0,
         y: -10,
@@ -126,7 +132,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-min">
           {/* Priority Matrix — large 2×2 */}
           <div
-            ref={(el) => (cardRefs.current[0] = el)}
+            ref={(el) => { cardRefs.current[0] = el; }}
             onMouseEnter={() => handleMouseEnter(0)}
             onMouseLeave={() => handleMouseLeave(0)}
             className="reveal-scale col-span-2 row-span-2 rounded-3xl overflow-hidden p-6 border border-gray-200/60 shadow-sm transition-shadow relative"
@@ -150,7 +156,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             </div>
             {/* Hover content */}
             <div
-              ref={(el) => (contentRefs.current[0] = el)}
+              ref={(el) => { contentRefs.current[0] = el; }}
               className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 border border-gray-200 pointer-events-none"
               style={{ opacity: 0, transform: 'translateY(-10px)' }}
             >
@@ -161,7 +167,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
           {/* Callout Sticky */}
           <div
-            ref={(el) => (cardRefs.current[1] = el)}
+            ref={(el) => { cardRefs.current[1] = el; }}
             onMouseEnter={() => handleMouseEnter(1)}
             onMouseLeave={() => handleMouseLeave(1)}
             className="reveal-scale rounded-3xl overflow-hidden p-5 border border-amber-200/80 shadow-sm transition-shadow relative"
@@ -175,7 +181,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             </p>
             {/* Hover content */}
             <div
-              ref={(el) => (contentRefs.current[1] = el)}
+              ref={(el) => { contentRefs.current[1] = el; }}
               className="mt-3 space-y-1 pointer-events-none"
               style={{ opacity: 0, transform: 'translateY(-10px)' }}
             >
@@ -187,7 +193,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
           {/* Mood Tracker */}
           <div
-            ref={(el) => (cardRefs.current[2] = el)}
+            ref={(el) => { cardRefs.current[2] = el; }}
             onMouseEnter={() => handleMouseEnter(2)}
             onMouseLeave={() => handleMouseLeave(2)}
             className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
@@ -204,7 +210,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             </div>
             {/* Hover content */}
             <div
-              ref={(el) => (contentRefs.current[2] = el)}
+              ref={(el) => { contentRefs.current[2] = el; }}
               className="mt-4 space-y-1 pointer-events-none"
               style={{ opacity: 0, transform: 'translateY(-10px)' }}
             >
@@ -216,7 +222,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
           {/* Data Grid / Table */}
           <div
-            ref={(el) => (cardRefs.current[3] = el)}
+            ref={(el) => { cardRefs.current[3] = el; }}
             onMouseEnter={() => handleMouseEnter(3)}
             onMouseLeave={() => handleMouseLeave(3)}
             className="reveal-scale col-span-2 rounded-3xl overflow-hidden border border-emerald-100 shadow-sm transition-shadow relative"
@@ -251,7 +257,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             </div>
             {/* Hover content */}
             <div
-              ref={(el) => (contentRefs.current[3] = el)}
+              ref={(el) => { contentRefs.current[3] = el; }}
               className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 border border-emerald-200 pointer-events-none"
               style={{ opacity: 0, transform: 'translateY(-10px)' }}
             >
@@ -263,7 +269,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
           {/* Pull Quote */}
           <div
-            ref={(el) => (cardRefs.current[4] = el)}
+            ref={(el) => { cardRefs.current[4] = el; }}
             onMouseEnter={() => handleMouseEnter(4)}
             onMouseLeave={() => handleMouseLeave(4)}
             className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
@@ -275,7 +281,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             </div>
             {/* Hover content */}
             <div
-              ref={(el) => (contentRefs.current[4] = el)}
+              ref={(el) => { contentRefs.current[4] = el; }}
               className="mt-4 space-y-1 pointer-events-none"
               style={{ opacity: 0, transform: 'translateY(-10px)' }}
             >
@@ -287,7 +293,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
           {/* Task List */}
           <div
-            ref={(el) => (cardRefs.current[5] = el)}
+            ref={(el) => { cardRefs.current[5] = el; }}
             onMouseEnter={() => handleMouseEnter(5)}
             onMouseLeave={() => handleMouseLeave(5)}
             className="reveal-scale rounded-3xl p-5 border border-rose-100 shadow-sm transition-shadow relative"
@@ -314,7 +320,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             </div>
             {/* Hover content */}
             <div
-              ref={(el) => (contentRefs.current[5] = el)}
+              ref={(el) => { contentRefs.current[5] = el; }}
               className="mt-3 space-y-1 pointer-events-none"
               style={{ opacity: 0, transform: 'translateY(-10px)' }}
             >

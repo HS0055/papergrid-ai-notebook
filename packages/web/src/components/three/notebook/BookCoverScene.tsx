@@ -1,6 +1,6 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Float } from '@react-three/drei';
+import { Float, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import NotebookCanvas from '../canvas/NotebookCanvas';
 import { useCoverMaterial } from '../shared/PaperMaterial';
@@ -15,6 +15,7 @@ const HH = BOOK_HEIGHT / 2;
 
 interface BookCoverSceneProps {
   coverColorClass: string;
+  coverImageUrl?: string;
   title: string;
   pageCount: number;
   isOpening: boolean;
@@ -42,6 +43,7 @@ export default function BookCoverScene(props: BookCoverSceneProps) {
 
 function CoverBook({
   coverColorClass,
+  coverImageUrl,
   title,
   pageCount,
   isOpening,
@@ -52,6 +54,13 @@ function CoverBook({
   const openRef = useRef(0);
   const doneRef = useRef(false);
 
+  // Load custom cover texture if URL is provided
+  const customTexture = coverImageUrl ? useTexture(coverImageUrl) : null;
+  if (customTexture) {
+    customTexture.colorSpace = THREE.SRGBColorSpace;
+    customTexture.anisotropy = 8;
+  }
+
   // Reset open state when isOpening transitions to true
   useEffect(() => {
     if (isOpening) {
@@ -61,7 +70,19 @@ function CoverBook({
   }, [isOpening]);
 
   const coverHex = coverColorToHex(coverColorClass);
-  const coverMat = useCoverMaterial('leather', coverHex);
+  const leatherMat = useCoverMaterial('leather', coverHex);
+
+  // Use custom texture if available, otherwise use leather material
+  const coverMat = useMemo(() => {
+    if (customTexture) {
+      return new THREE.MeshStandardMaterial({
+        map: customTexture,
+        roughness: 0.8,
+        metalness: 0.1,
+      });
+    }
+    return leatherMat;
+  }, [customTexture, leatherMat]);
 
   const pageMat = useMemo(
     () => new THREE.MeshStandardMaterial({ color: '#f5f0e8', roughness: 0.92, metalness: 0 }),
