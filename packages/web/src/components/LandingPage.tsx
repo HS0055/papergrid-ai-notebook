@@ -135,54 +135,54 @@ export const LandingPage: React.FC = () => {
         });
       });
 
-      if (!isMobile) {
-        // ── Section-level scroll animations (continuous scroll narrative) ──
-        // Each major section slides up with parallax as it enters
-        // Skip hero-section (already has its own scroll animation)
-        gsap.utils.toArray<HTMLElement>('section:not(.hero-section)').forEach((section) => {
+      // ── Section-level scroll animations (continuous scroll narrative) ──
+      // Each major section slides up with parallax as it enters
+      // Skip hero-section (already has its own scroll animation)
+      // Mobile: reduced travel distance for subtler effect
+      const sectionTravel = isMobile ? 30 : 60;
+      gsap.utils.toArray<HTMLElement>('section:not(.hero-section)').forEach((section) => {
+        gsap.fromTo(
+          section.querySelector('.max-w-7xl, .max-w-5xl, .max-w-6xl') || section,
+          { y: sectionTravel },
+          {
+            y: 0,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: section,
+              start: 'top bottom',
+              end: isMobile ? 'top 40%' : 'top 20%',
+              scrub: 0.5,
+            },
+          },
+        );
+      });
+
+      // ── Staggered children for bento grids and card layouts ──
+      gsap.utils.toArray<HTMLElement>('.reveal-scale').forEach((el) => {
+        const cards = el.querySelectorAll('[class*="rounded"]');
+        if (cards.length > 1) {
           gsap.fromTo(
-            section.querySelector('.max-w-7xl, .max-w-5xl, .max-w-6xl') || section,
-            { y: 60 },
+            Array.from(cards),
+            { y: 30, opacity: 0 },
             {
               y: 0,
-              ease: 'none',
+              opacity: 1,
+              duration: 0.5,
+              stagger: 0.08,
+              ease: 'power2.out',
               scrollTrigger: {
-                trigger: section,
-                start: 'top bottom',
-                end: 'top 20%',
-                scrub: 0.5,
+                trigger: el,
+                start: 'top 85%',
+                once: true,
               },
             },
           );
-        });
-
-        // ── Staggered children for bento grids and card layouts ──
-        gsap.utils.toArray<HTMLElement>('.reveal-scale').forEach((el) => {
-          const cards = el.querySelectorAll('[class*="rounded"]');
-          if (cards.length > 1) {
-            gsap.fromTo(
-              Array.from(cards),
-              { y: 30, opacity: 0 },
-              {
-                y: 0,
-                opacity: 1,
-                duration: 0.5,
-                stagger: 0.08,
-                ease: 'power2.out',
-                scrollTrigger: {
-                  trigger: el,
-                  start: 'top 85%',
-                  once: true,
-                },
-              },
-            );
-          }
-        });
-      }
+        }
+      });
 
       // ── Continuous ink progress line ──
       // Draws from top of StatsStrip to bottom of page, controlled by scroll
-      if (inkLineRef.current && !isMobile) {
+      if (inkLineRef.current) {
         gsap.fromTo(
           inkLineRef.current,
           { scaleY: 0 },

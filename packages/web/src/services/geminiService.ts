@@ -16,9 +16,14 @@ interface GeneratedLayout {
 
 export const generateLayout = async (prompt: string, industry?: string, aesthetic?: string): Promise<GeneratedLayout> => {
   try {
+    const sessionToken = localStorage.getItem('papergrid_session');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (sessionToken) {
+      headers['Authorization'] = `Bearer ${sessionToken}`;
+    }
     const response = await fetch(`${API_BASE}/api/generate-layout`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ prompt, industry, aesthetic }),
     });
 

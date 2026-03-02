@@ -71,12 +71,21 @@ function generatePaperTexture(
     ctx.fillRect(x, y, 1, 1);
   }
 
-  const lineSpacing = size / 32; // 32 lines per tile
+  const lineSpacing = size / 24; // 24 lines per tile (wider spacing, more visible)
 
   switch (paperType) {
     case 'lined': {
+      // Margin line (red, left side)
+      ctx.strokeStyle = '#fca5a5';
+      ctx.lineWidth = Math.max(2, size / 256);
+      ctx.beginPath();
+      ctx.moveTo(size * 0.08, 0);
+      ctx.lineTo(size * 0.08, size);
+      ctx.stroke();
+
+      // Horizontal lines — thicker for visibility on 3D surfaces
       ctx.strokeStyle = LINE_COLOR;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = Math.max(2, size / 400);
       for (let y = lineSpacing; y < size; y += lineSpacing) {
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -84,8 +93,8 @@ function generatePaperTexture(
         ctx.stroke();
 
         // Normal map: groove for each line
-        nCtx.strokeStyle = 'rgba(120, 120, 255, 0.5)';
-        nCtx.lineWidth = 2;
+        nCtx.strokeStyle = 'rgba(120, 120, 255, 0.6)';
+        nCtx.lineWidth = Math.max(3, size / 300);
         nCtx.beginPath();
         nCtx.moveTo(0, y);
         nCtx.lineTo(size, y);
@@ -125,17 +134,18 @@ function generatePaperTexture(
     }
 
     case 'dotted': {
+      const dotRadius = Math.max(2.5, size / 300);
       ctx.fillStyle = LINE_STRONG;
       for (let x = lineSpacing / 2; x < size; x += lineSpacing) {
         for (let y = lineSpacing / 2; y < size; y += lineSpacing) {
           ctx.beginPath();
-          ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+          ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
           ctx.fill();
 
           // Normal: bump for each dot
           nCtx.fillStyle = 'rgba(140, 140, 255, 0.8)';
           nCtx.beginPath();
-          nCtx.arc(x, y, 3, 0, Math.PI * 2);
+          nCtx.arc(x, y, dotRadius * 2, 0, Math.PI * 2);
           nCtx.fill();
         }
       }
@@ -348,7 +358,7 @@ export function usePaperMaterial(options: PaperMaterialOptions) {
  */
 export function useCoverMaterial(coverType: 'leather' | 'velvet' | 'canvas' | 'linen' | 'kraft', color: string) {
   const material = useMemo(() => {
-    const size = 512;
+    const size = 1024;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -368,20 +378,45 @@ export function useCoverMaterial(coverType: 'leather' | 'velvet' | 'canvas' | 'l
 
     switch (coverType) {
       case 'leather': {
-        // Leather grain texture
-        for (let i = 0; i < size * 10; i++) {
+        // Multi-layer leather grain for richer texture
+        // Layer 1: Fine grain (small, dense marks)
+        for (let i = 0; i < size * 20; i++) {
           const x = Math.random() * size;
           const y = Math.random() * size;
-          const a = Math.random() * 0.08;
+          const a = Math.random() * 0.06;
           ctx.fillStyle = `rgba(0, 0, 0, ${a})`;
-          ctx.fillRect(x, y, Math.random() * 3 + 1, Math.random() * 1 + 0.5);
+          ctx.fillRect(x, y, Math.random() * 2 + 0.5, Math.random() * 1 + 0.3);
         }
-        // Leather normal bumps
+        // Layer 2: Coarser pores (larger, sparser marks)
+        for (let i = 0; i < size * 4; i++) {
+          const x = Math.random() * size;
+          const y = Math.random() * size;
+          const a = Math.random() * 0.1;
+          ctx.fillStyle = `rgba(0, 0, 0, ${a})`;
+          ctx.beginPath();
+          ctx.ellipse(x, y, Math.random() * 3 + 1, Math.random() * 2 + 0.5, Math.random() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Layer 3: Subtle highlight streaks
+        for (let i = 0; i < size * 2; i++) {
+          const x = Math.random() * size;
+          const y = Math.random() * size;
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.03})`;
+          ctx.fillRect(x, y, Math.random() * 5 + 2, 0.5);
+        }
+        // Leather normal bumps — multi-frequency for realistic depth
         const nData = nCtx.getImageData(0, 0, size, size);
-        for (let i = 0; i < nData.data.length; i += 4) {
-          const noise = (Math.random() - 0.5) * 20;
-          nData.data[i] = Math.max(0, Math.min(255, 128 + noise));
-          nData.data[i + 1] = Math.max(0, Math.min(255, 128 + (Math.random() - 0.5) * 20));
+        for (let py = 0; py < size; py++) {
+          for (let px = 0; px < size; px++) {
+            const idx = (py * size + px) * 4;
+            // Fine noise
+            const fine = (Math.random() - 0.5) * 24;
+            // Medium-scale grain pattern
+            const med = Math.sin(px * 0.08 + Math.random() * 0.3) * Math.cos(py * 0.06 + Math.random() * 0.3) * 12;
+            nData.data[idx] = Math.max(0, Math.min(255, 128 + fine + med));
+            nData.data[idx + 1] = Math.max(0, Math.min(255, 128 + (Math.random() - 0.5) * 24 + med * 0.5));
+            nData.data[idx + 2] = Math.max(200, Math.min(255, 245));
+          }
         }
         nCtx.putImageData(nData, 0, 0);
         break;
@@ -450,14 +485,17 @@ export function useCoverMaterial(coverType: 'leather' | 'velvet' | 'canvas' | 'l
     const colorTexture = new THREE.CanvasTexture(canvas);
     colorTexture.wrapS = THREE.RepeatWrapping;
     colorTexture.wrapT = THREE.RepeatWrapping;
-    colorTexture.anisotropy = 8;
+    colorTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    colorTexture.magFilter = THREE.LinearFilter;
+    colorTexture.anisotropy = 16;
 
     const normalTexture = new THREE.CanvasTexture(normalCanvas);
     normalTexture.wrapS = THREE.RepeatWrapping;
     normalTexture.wrapT = THREE.RepeatWrapping;
+    normalTexture.minFilter = THREE.LinearMipmapLinearFilter;
 
     const roughnessMap: Record<string, number> = {
-      leather: 0.7,
+      leather: 0.65,
       velvet: 0.95,
       canvas: 0.8,
       linen: 0.75,
@@ -467,9 +505,9 @@ export function useCoverMaterial(coverType: 'leather' | 'velvet' | 'canvas' | 'l
     return new THREE.MeshStandardMaterial({
       map: colorTexture,
       normalMap: normalTexture,
-      normalScale: new THREE.Vector2(0.5, 0.5),
+      normalScale: new THREE.Vector2(0.8, 0.8),
       roughness: roughnessMap[coverType] ?? 0.8,
-      metalness: coverType === 'leather' ? 0.05 : 0.0,
+      metalness: coverType === 'leather' ? 0.08 : 0.0,
     });
   }, [coverType, color]);
 

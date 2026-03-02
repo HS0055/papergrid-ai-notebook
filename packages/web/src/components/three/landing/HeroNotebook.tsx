@@ -35,9 +35,9 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
   const currentCursorY = useRef(0);
   const currentHoverScale = useRef(1);
 
-  // Materials — mobile uses lower resolution textures
-  const texRes = isMobile ? 128 : 512;
-  const coverMaterial = useCoverMaterial('leather', '#1e1b4b');
+  // Materials — both mobile and desktop use higher resolution for visible quality
+  const texRes = isMobile ? 512 : 1024;
+  const coverMaterial = useCoverMaterial('leather', '#3730a3');
   const leftPageMaterial = usePaperMaterial({ paperType: 'lined', resolution: texRes });
   const rightPageMaterial = usePaperMaterial({ paperType: 'dotted', resolution: texRes });
 
@@ -48,52 +48,66 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     metalness: 0,
   }), []);
 
-  // Spine material (darker indigo)
+  // Spine material (darker than cover, but still visible)
   const spineMat = useMemo(() => new THREE.MeshStandardMaterial({
-    color: '#1a1650',
-    roughness: 0.65,
-    metalness: 0.08,
+    color: '#312e81',
+    roughness: 0.6,
+    metalness: 0.1,
+    emissive: '#312e81',
+    emissiveIntensity: 0.08,
   }), []);
 
-  // Gold emboss material for title & spine lines
+  // Gold emboss material for title & spine lines — bright emissive so it's visible
   const goldMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: '#d4a574',
-    roughness: 0.25,
-    metalness: 0.75,
+    roughness: 0.2,
+    metalness: 0.8,
     emissive: '#d4a574',
-    emissiveIntensity: 0.05,
+    emissiveIntensity: 0.25,
   }), []);
 
-  // Title texture for cover (lightweight - just text)
+  // Title texture for cover — high-res canvas for crisp text on both platforms
   const titleMat = useMemo(() => {
-    const canvasWidth = isMobile ? 256 : 512;
-    const canvasHeight = isMobile ? 128 : 256;
+    const canvasWidth = isMobile ? 512 : 1024;
+    const canvasHeight = isMobile ? 256 : 512;
     const canvas = document.createElement('canvas');
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
+    // Title text
     ctx.fillStyle = '#d4a574';
-    ctx.font = isMobile ? 'bold 30px "Playfair Display", serif' : 'bold 56px "Playfair Display", serif';
+    ctx.font = isMobile ? 'bold 56px "Playfair Display", serif' : 'bold 110px "Playfair Display", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('PaperGrid AI', canvasWidth / 2, isMobile ? 50 : 100);
+    ctx.fillText('PaperGrid AI', canvasWidth / 2, canvasHeight * 0.38);
 
-    ctx.font = isMobile ? '12px "Inter", sans-serif' : '22px "Inter", sans-serif';
+    // Subtitle
+    ctx.font = isMobile ? '20px "Inter", sans-serif' : '40px "Inter", sans-serif';
     ctx.fillStyle = '#c4956a';
-    ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', canvasWidth / 2, isMobile ? 84 : 170);
+    ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', canvasWidth / 2, canvasHeight * 0.65);
+
+    // Decorative line under subtitle
+    ctx.strokeStyle = '#c4956a';
+    ctx.lineWidth = isMobile ? 1 : 2;
+    const lineY = canvasHeight * 0.78;
+    const lineHalf = canvasWidth * 0.25;
+    ctx.beginPath();
+    ctx.moveTo(canvasWidth / 2 - lineHalf, lineY);
+    ctx.lineTo(canvasWidth / 2 + lineHalf, lineY);
+    ctx.stroke();
 
     const texture = new THREE.CanvasTexture(canvas);
-    texture.anisotropy = isMobile ? 2 : 8;
+    texture.anisotropy = isMobile ? 4 : 16;
     return new THREE.MeshStandardMaterial({
       map: texture,
       transparent: true,
       alphaTest: 0.05,
-      roughness: 0.2,
-      metalness: 0.7,
+      roughness: 0.15,
+      metalness: 0.8,
       emissive: '#d4a574',
-      emissiveIntensity: 0.03,
+      emissiveIntensity: 0.2,
     });
   }, [isMobile]);
 
@@ -111,10 +125,11 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     // Read scroll from shared ref — no React re-render
     const scrollProgress = scrollRef.current?.progress ?? 0;
 
-    // Map scroll to book open: starts at 5%, fully open by 40%
-    // Mobile: book stays slightly open (no scroll-driven pinning)
+    // Map scroll to book open — both mobile and desktop are now scroll-driven
+    // Mobile: opens faster (shorter scroll distance), caps at 60% open
+    // Desktop: starts at 5%, fully open by 40%
     const openTarget = isMobile
-      ? 0.25 // Fixed slight open on mobile — shows pages peeking
+      ? THREE.MathUtils.clamp(scrollProgress / 0.6, 0, 0.6)
       : THREE.MathUtils.clamp((scrollProgress - 0.05) / 0.35, 0, 1);
     targetOpen.current = openTarget;
 
@@ -211,7 +226,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
 
   // Mobile: compensate for inner hw offset (all meshes sit at x=hw=1.6) to visually center,
   // and push well below CTA buttons so it doesn't overlap text content
-  const bookPosition: [number, number, number] = isMobile ? [-hw, -3.8, 0] : [0.5, -0.5, 0];
+  const bookPosition: [number, number, number] = isMobile ? [-hw, -4.5, 0] : [0.5, -0.5, 0];
 
   const notebookContent = (
     <group position={bookPosition}>

@@ -10,9 +10,12 @@
     "lint": "turbo lint",
     "dev:web": "turbo dev --filter=@papergrid/web",
     "dev:convex": "turbo dev --filter=@papergrid/convex",
-    "build:web": "turbo build --filter=@papergrid/web"
+    "build:web": "turbo build --filter=@papergrid/web",
+    "scrape": "npx tsx scripts/scrape-references.ts"
   },
   "devDependencies": {
+    "@mendable/firecrawl-js": "^4.15.0",
+    "dotenv": "^17.3.1",
     "turbo": "^2.5.0"
   },
   "packageManager": "npm@10.0.0"

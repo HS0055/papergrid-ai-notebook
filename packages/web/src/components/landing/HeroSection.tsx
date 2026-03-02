@@ -38,26 +38,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
   useEffect(() => {
     if (!sectionRef.current || !pinContainerRef.current) return;
 
-    // Mobile: simpler animation - just fade in Phase 1, no scroll-driven phases
-    if (isMobile) {
-      const ctx = gsap.context(() => {
-        gsap.fromTo(
-          phase1Ref.current,
-          { y: 30, opacity: 0 },
-          { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out', delay: 0.2 },
-        );
-      }, sectionRef);
-      return () => { ctx.revert(); };
-    }
-
     const ctx = gsap.context(() => {
-      // Master ScrollTrigger: pins the hero and drives all animations
-      // +=200% gives 2 viewports of scroll — tighter timing with crossfade transitions
+      // Both mobile and desktop get scroll-driven hero, but with different durations
+      // Mobile: shorter scroll (+=100%), desktop: longer (+=200%)
+      const scrollEnd = isMobile ? '+=100%' : '+=200%';
+
       const masterTl = gsap.timeline({
         scrollTrigger: {
           trigger: sectionRef.current,
           start: 'top top',
-          end: '+=200%',
+          end: scrollEnd,
           pin: pinContainerRef.current,
           scrub: true,
           onUpdate: (self) => {
@@ -74,40 +64,51 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
         },
       });
 
-      // Phase 1: visible 0-8%, fades out 8-14%
-      masterTl.to(
-        phase1Ref.current,
-        { opacity: 0, y: -50, pointerEvents: 'none', duration: 0.06, ease: 'power2.in' },
-        0.08,
-      );
+      if (isMobile) {
+        // Mobile: Phase 1 fades out at 60-80% of scroll, book opens via scrollRef
+        masterTl.to(
+          phase1Ref.current,
+          { opacity: 0, y: -40, pointerEvents: 'none', duration: 0.20, ease: 'power2.in' },
+          0.60,
+        );
+      } else {
+        // Desktop: full 3-phase scroll narrative
 
-      // Phase 2: fades in 12-18% (crossfades with Phase 1 exit), visible until 38%, fades out 38-46%
-      masterTl
-        .fromTo(
-          phase2Ref.current,
-          { opacity: 0, y: 30, pointerEvents: 'none' },
-          { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.08, ease: 'power2.out' },
-          0.12,
-        )
-        .to(
-          phase2Ref.current,
-          { opacity: 0, y: -30, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
-          0.38,
+        // Phase 1: visible 0-8%, fades out 8-14%
+        masterTl.to(
+          phase1Ref.current,
+          { opacity: 0, y: -50, pointerEvents: 'none', duration: 0.06, ease: 'power2.in' },
+          0.08,
         );
 
-      // Phase 3: fades in 44-52% (crossfades with Phase 2 exit), visible 52-72%, fades out 72-84%
-      masterTl
-        .fromTo(
-          phase3Ref.current,
-          { opacity: 0, y: 30, pointerEvents: 'none' },
-          { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.10, ease: 'power2.out' },
-          0.44,
-        )
-        .to(
-          phase3Ref.current,
-          { opacity: 0, y: -25, scale: 0.97, pointerEvents: 'none', duration: 0.12, ease: 'power2.in' },
-          0.72,
-        );
+        // Phase 2: fades in 12-18%, visible until 38%, fades out 38-46%
+        masterTl
+          .fromTo(
+            phase2Ref.current,
+            { opacity: 0, y: 30, pointerEvents: 'none' },
+            { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.08, ease: 'power2.out' },
+            0.12,
+          )
+          .to(
+            phase2Ref.current,
+            { opacity: 0, y: -30, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
+            0.38,
+          );
+
+        // Phase 3: fades in 44-52%, visible 52-72%, fades out 72-84%
+        masterTl
+          .fromTo(
+            phase3Ref.current,
+            { opacity: 0, y: 30, pointerEvents: 'none' },
+            { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.10, ease: 'power2.out' },
+            0.44,
+          )
+          .to(
+            phase3Ref.current,
+            { opacity: 0, y: -25, scale: 0.97, pointerEvents: 'none', duration: 0.12, ease: 'power2.in' },
+            0.72,
+          );
+      }
     }, sectionRef);
 
     // Refresh ScrollTrigger after all contexts are initialized
@@ -122,7 +123,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     <section
       ref={sectionRef}
       className="hero-section relative"
-      style={{ minHeight: isMobile ? 'auto' : '300vh' }}
+      style={{ minHeight: isMobile ? '200vh' : '300vh' }}
     >
       {/* Scroll progress indicator — outside pin container to avoid jump */}
       <div
@@ -137,7 +138,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
 
       <div
         ref={pinContainerRef}
-        className={`relative flex flex-col items-center overflow-hidden px-6 ${isMobile ? 'justify-start pt-20 pb-64' : 'justify-center min-h-screen pt-24 pb-16'}`}
+        className={`relative flex flex-col items-center overflow-hidden px-6 ${isMobile ? 'justify-start min-h-screen pt-20 pb-64' : 'justify-center min-h-screen pt-24 pb-16'}`}
         style={{
           background: 'linear-gradient(160deg, #0f111a 0%, #1a1c23 45%, #2a1f3d 70%, #0f111a 100%)',
         }}

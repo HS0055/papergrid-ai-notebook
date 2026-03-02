@@ -437,10 +437,19 @@ http.route({
     }
 
     try {
-      // --- Auth + Usage Gating ---
-      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
-      const usageResult = await ctx.runMutation(api.users.incrementAiUsage, { sessionToken });
-      if (!usageResult.allowed) {
+      // --- Auth + Usage Gating (graceful: don't block if auth fails) ---
+      let usageAllowed = true;
+      try {
+        const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+        if (sessionToken) {
+          const usageResult = await ctx.runMutation(api.users.incrementAiUsage, { sessionToken });
+          usageAllowed = usageResult.allowed;
+        }
+      } catch (e) {
+        // If auth fails, allow generation but don't track usage
+        console.warn("AI usage gating skipped:", e);
+      }
+      if (!usageAllowed) {
         return new Response(
           JSON.stringify({ error: "Monthly AI generation limit reached. Upgrade your plan for more." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -985,10 +994,9 @@ http.route({
 
     try {
       const body = await request.json();
-      const { prompt, aesthetic, notebookTitle } = body as {
+      const { prompt, aesthetic } = body as {
         prompt: string;
         aesthetic?: string;
-        notebookTitle?: string;
       };
 
       const apiKey = process.env.GEMINI_API_KEY;
@@ -1000,10 +1008,9 @@ http.route({
       }
 
       const styleContext = aesthetic || "premium leather journal";
-      const titleInstruction = notebookTitle
-        ? `Emboss the title "${notebookTitle}" in elegant gold foil lettering centered on the front cover.`
-        : "Do NOT include any text or words on the cover.";
-      const imagePrompt = `Create a stunning product mockup of a premium hardcover notebook cover, shot from a 3/4 top-down angle on a clean dark surface. The cover design features: ${prompt}. Style: ${styleContext}. ${titleInstruction} The notebook should look like a real physical product photograph — rich textures, subtle shadows, professional studio lighting with warm ambient glow. 4K quality, photorealistic, cinematic depth of field. Show slight wear and character as a premium artisan notebook. The image should be SQUARE (1:1 aspect ratio) and fill the full frame.`;
+      // Title is NEVER baked into the image — the 3D BookCoverScene renders it
+      // dynamically as a gold foil text overlay, so name changes are free/instant.
+      const imagePrompt = `Generate a flat, front-facing rectangular notebook cover surface design. This will be used as a texture mapped onto a 3D book model, so it must be perfectly FLAT — no perspective, no 3D angles, no book spine, no shadows of a physical book. Do NOT include any text, words, titles, or lettering whatsoever. The design features: ${prompt}. Style: ${styleContext}. The image should be a seamless, edge-to-edge surface pattern or artwork suitable for wrapping onto a book cover. Rich textures, fine details, premium quality. Portrait orientation (taller than wide, roughly 3:4 ratio). Fill the entire frame with the cover design — no background, no margins, no mockup.`;
 
       // Use Gemini 2.0 Flash with image generation
       const geminiPayload = {
@@ -1092,10 +1099,12 @@ http.route({
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Auth login error:", error);
-      return new Response(JSON.stringify({ error: "Login failed" }), {
-        status: 500,
+      const message = error?.message || error?.data || "Login failed";
+      const status = message.includes("Invalid") || message.includes("no password") ? 401 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -1134,10 +1143,12 @@ http.route({
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Auth signup error:", error);
-      return new Response(JSON.stringify({ error: "Signup failed" }), {
-        status: 500,
+      const message = error?.message || error?.data || "Signup failed";
+      const status = message.includes("already in use") ? 409 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
