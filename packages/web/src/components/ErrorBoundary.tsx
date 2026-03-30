@@ -25,6 +25,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         this.setState({ errorInfo });
         console.error('[PaperGrid Error]', error, errorInfo);
+        // Persist error details to localStorage for debugging
+        try {
+            localStorage.setItem('papergrid_last_error', JSON.stringify({
+                message: error.message,
+                stack: error.stack,
+                componentStack: errorInfo.componentStack,
+                timestamp: new Date().toISOString(),
+            }));
+        } catch { /* ignore serialization errors */ }
     }
 
     handleReset = () => {
@@ -52,12 +61,27 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                         </p>
 
                         {this.state.error && (
-                            <details className="text-left mb-6 bg-gray-50 rounded-xl p-4 border border-gray-100">
+                            <details className="text-left mb-6 bg-gray-50 rounded-xl p-4 border border-gray-100" open>
                                 <summary className="text-xs font-medium text-gray-400 cursor-pointer hover:text-gray-600">
                                     Error details
                                 </summary>
-                                <pre className="text-xs text-red-600 mt-2 overflow-auto max-h-32 font-mono">
+                                <pre className="text-xs text-red-600 mt-2 overflow-auto max-h-32 font-mono whitespace-pre-wrap">
                                     {this.state.error.message}
+                                </pre>
+                                {this.state.error.stack && (
+                                    <pre className="text-[10px] text-gray-500 mt-2 overflow-auto max-h-40 font-mono whitespace-pre-wrap">
+                                        {this.state.error.stack}
+                                    </pre>
+                                )}
+                            </details>
+                        )}
+                        {this.state.errorInfo?.componentStack && (
+                            <details className="text-left mb-6 bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                <summary className="text-xs font-medium text-gray-400 cursor-pointer hover:text-gray-600">
+                                    Component stack
+                                </summary>
+                                <pre className="text-[10px] text-gray-500 mt-2 overflow-auto max-h-40 font-mono whitespace-pre-wrap">
+                                    {this.state.errorInfo.componentStack}
                                 </pre>
                             </details>
                         )}

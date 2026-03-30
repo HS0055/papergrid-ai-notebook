@@ -14,6 +14,12 @@ import {
 import html2canvas from 'html2canvas';
 import { useSoundEffects } from '../hooks/useSoundEffects';
 import { useAuth } from '../hooks/useAuth';
+import {
+  loadNotebooksFromStorage,
+  prepareCoverImageForStorage,
+  saveNotebooksToStorage,
+} from '../utils/notebookStorage';
+import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
 const BookCoverScene = lazy(() => import('./three/notebook/BookCoverScene'));
@@ -181,57 +187,103 @@ export const Dashboard: React.FC = () => {
 
   // Load from local storage
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+    let cancelled = false;
+
+    const load = async () => {
       try {
-        const parsed: unknown = JSON.parse(saved);
-        if (
-          Array.isArray(parsed) &&
-          parsed.length > 0 &&
-          parsed.every((nb: unknown) => typeof nb === 'object' && nb !== null && 'id' in nb && 'pages' in nb)
-        ) {
-          setNotebooks(parsed as Notebook[]);
-          setActiveNotebookId((parsed as Notebook[])[0].id);
+        const stored = await loadNotebooksFromStorage(STORAGE_KEY);
+        if (!cancelled && stored && stored.length > 0) {
+          setNotebooks(stored);
+          setActiveNotebookId(stored[0].id);
           return;
         }
       } catch (e) {
         console.error("Failed to load saved data:", e);
       }
-    }
-    // Default notebook if nothing saved
-    const defaultNb: Notebook = {
-      id: 'nb-1',
-      title: 'My Journal',
-      coverColor: 'bg-indigo-900',
-      createdAt: new Date().toISOString(),
-      bookmarks: [],
-      pages: [{
-        id: 'init-1',
-        title: 'Welcome',
+
+      if (cancelled) return;
+
+      const defaultNb: Notebook = {
+        id: 'nb-1',
+        title: 'My Journal',
+        coverColor: 'bg-indigo-900',
         createdAt: new Date().toISOString(),
-        paperType: 'lined',
-        blocks: [
-          { id: 'b1', type: BlockType.HEADING, content: 'Welcome to PaperGrid', side: 'left' },
-          { id: 'b2', type: BlockType.TEXT, content: 'This is a digital notebook that feels real. The text sits right on the lines.', side: 'left' },
-          { id: 'b3', type: BlockType.CHECKBOX, content: 'Try the AI Generator for structured layouts', checked: false, side: 'right' },
-        ]
-      }]
+        bookmarks: [],
+        pages: [{
+          id: 'init-1',
+          title: 'Welcome',
+          createdAt: new Date().toISOString(),
+          paperType: 'lined',
+          blocks: [
+            { id: 'b1', type: BlockType.HEADING, content: 'Welcome to PaperGrid', side: 'left' },
+            { id: 'b2', type: BlockType.TEXT, content: 'This is a digital notebook that feels real. The text sits right on the lines.', side: 'left' },
+            { id: 'b3', type: BlockType.CHECKBOX, content: 'Try the AI Generator for structured layouts', checked: false, side: 'right' },
+          ]
+        }]
+      };
+      setNotebooks([defaultNb]);
+      setActiveNotebookId(defaultNb.id);
     };
-    setNotebooks([defaultNb]);
-    setActiveNotebookId(defaultNb.id);
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Save to local storage
   useEffect(() => {
     if (notebooks.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notebooks));
+      void saveNotebooksToStorage(STORAGE_KEY, notebooks).catch((error) => {
+        console.error('Failed to persist notebooks:', error);
+        addToast('Could not save notebook changes locally.', 'error');
+      });
     }
-  }, [notebooks]);
+  }, [addToast, notebooks]);
 
   const activeNotebook = notebooks.find(n => n.id === activeNotebookId) || notebooks[0];
   const activePage = activeNotebook && activePageIndex >= 0 && activePageIndex < activeNotebook.pages.length
     ? activeNotebook.pages[activePageIndex]
     : null;
+
+  const renderFlatCoverFallback = () => (
+    <div
+      className={`w-full h-full max-h-[800px] ${activeNotebook.coverColor} rounded-r-3xl rounded-l-md shadow-2xl relative cursor-pointer group transition-transform duration-300 hover:scale-[1.01] overflow-hidden`}
+      onClick={activeNotebook.pages.length > 0 ? handleOpenCover : undefined}
+    >
+      {activeNotebook.coverImageUrl && (
+        <>
+          <div
+            className="absolute inset-0 bg-center bg-cover"
+            style={{ backgroundImage: `url("${activeNotebook.coverImageUrl}")` }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-black/45" />
+        </>
+      )}
+      <div className="absolute left-0 top-0 bottom-0 w-12 bg-black/20 rounded-l-md border-r border-white/10" />
+      <div className="absolute left-10 top-0 bottom-0 w-px bg-white/20" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center p-8 md:p-12 text-center">
+        <input
+          className="bg-transparent text-white/90 text-4xl md:text-6xl font-serif font-bold text-center border-b border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full"
+          value={activeNotebook.title}
+          onChange={(e) => {
+            setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, title: e.target.value } : nb));
+          }}
+          onClick={(e) => e.stopPropagation()}
+        />
+        <div className="mt-6 text-white/60 font-sans tracking-widest uppercase text-sm">
+          {activeNotebook.pages.length} Spreads
+        </div>
+        {activeNotebook.pages.length > 0 && (
+          <div className="mt-8 opacity-0 group-hover:opacity-100 transition-opacity text-white/80 flex items-center gap-2 bg-black/20 px-4 py-2 rounded-full">
+            <span>Click to open</span>
+            <ChevronRight size={16} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   const handleUpdatePage = (updatedPage: NotebookPage) => {
     setNotebooks(prev => prev.map(nb => {
@@ -310,14 +362,28 @@ export const Dashboard: React.FC = () => {
     sfx.pageFlip();
   };
 
-  // 3D cover: trigger open animation
+  // 3D cover: trigger open animation (with safety timeout)
+  const openTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleOpen3DCover = useCallback(() => {
     if (!activeNotebook || activeNotebook.pages.length === 0) return;
     setIsOpening(true);
+    // Safety: if 3D animation doesn't complete in 2s, force-open anyway
+    if (openTimeoutRef.current) clearTimeout(openTimeoutRef.current);
+    openTimeoutRef.current = setTimeout(() => {
+      setIsOpening(false);
+      setCoverFading(false);
+      setPageDirection('right');
+      setActivePageIndex(0);
+    }, 2000);
   }, [activeNotebook]);
 
   // 3D cover animation complete → fade out 3D, then switch to page view
   const handleCoverOpenComplete = useCallback(() => {
+    // Cancel safety timeout — animation completed normally
+    if (openTimeoutRef.current) {
+      clearTimeout(openTimeoutRef.current);
+      openTimeoutRef.current = null;
+    }
     setIsOpening(false);
     setCoverFading(true);
     setTimeout(() => {
@@ -362,12 +428,13 @@ export const Dashboard: React.FC = () => {
     if (!activePage) return;
     setNotebooks(prev => prev.map(nb => {
       if (nb.id !== activeNotebookId) return nb;
-      const isBookmarked = nb.bookmarks.includes(activePage.id);
+      const bookmarks = nb.bookmarks ?? [];
+      const isBookmarked = bookmarks.includes(activePage.id);
       return {
         ...nb,
         bookmarks: isBookmarked
-          ? nb.bookmarks.filter(id => id !== activePage.id)
-          : [...nb.bookmarks, activePage.id]
+          ? bookmarks.filter(id => id !== activePage.id)
+          : [...bookmarks, activePage.id]
       };
     }));
   };
@@ -443,7 +510,7 @@ export const Dashboard: React.FC = () => {
 
   // Bookmarked pages for active notebook
   const bookmarkedPages = activeNotebook
-    ? activeNotebook.pages.filter(p => activeNotebook.bookmarks.includes(p.id))
+    ? activeNotebook.pages.filter(p => (activeNotebook.bookmarks ?? []).includes(p.id))
     : [];
 
   // Page indicator label
@@ -458,10 +525,18 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in">
+      {/* Sidebar backdrop (mobile) */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-10 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
         className={`${isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'}
-        bg-[#1a1c23] text-gray-300 transition-all duration-300 ease-in-out flex flex-col border-r border-gray-800 absolute z-20 md:relative h-full shadow-2xl`}
+        bg-[#1a1c23] text-gray-300 transition-all duration-300 ease-in-out flex flex-col border-r border-gray-800 absolute z-20 md:relative h-full shadow-2xl overflow-hidden`}
       >
         <div className="p-6 flex items-center gap-3 text-white border-b border-gray-800/50">
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -494,7 +569,10 @@ export const Dashboard: React.FC = () => {
                 : 'hover:bg-gray-800/50 hover:text-gray-100'
                 }`}
             >
-              <div className={`w-4 h-6 rounded-sm ${nb.coverColor} shadow-sm border border-white/10`} />
+              <div
+                className={`w-4 h-6 rounded-sm ${nb.coverColor} shadow-sm border border-white/10 bg-cover bg-center shrink-0`}
+                style={nb.coverImageUrl ? { backgroundImage: `url("${nb.coverImageUrl}")` } : undefined}
+              />
               <div className="overflow-hidden flex-1">
                 <div className="truncate font-medium text-sm">{nb.title || "Untitled"}</div>
                 <div className="text-[10px] text-gray-500 mt-0.5">{nb.pages.length} spreads</div>
@@ -622,25 +700,25 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Navigation & Actions */}
-        <div className="absolute top-4 right-4 z-30 flex gap-2">
+        <div className="absolute top-4 right-4 z-30 flex gap-1.5 md:gap-2">
           {activePage && (
             <>
               <button
                 onClick={toggleBookmark}
-                className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${activeNotebook.bookmarks.includes(activePage.id)
+                className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${(activeNotebook.bookmarks ?? []).includes(activePage.id)
                   ? 'bg-amber-100 border-amber-300 text-amber-600'
                   : 'bg-white/80 border-gray-200 text-gray-700 hover:bg-white'
                   }`}
-                aria-label={activeNotebook.bookmarks.includes(activePage.id) ? 'Remove bookmark' : 'Bookmark page'}
+                aria-label={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? 'Remove bookmark' : 'Bookmark page'}
               >
-                <Bookmark size={20} fill={activeNotebook.bookmarks.includes(activePage.id) ? "currentColor" : "none"} />
+                <Bookmark size={20} fill={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? "currentColor" : "none"} />
               </button>
               <button
                 onClick={() => setIsGeneratorOpen(true)}
-                className="py-2 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-medium shadow-lg shadow-indigo-900/50 transition-all transform hover:scale-[1.02]"
+                className="py-2 px-3 md:px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium shadow-lg shadow-indigo-900/50 transition-all transform hover:scale-[1.02]"
               >
                 <Sparkles size={16} />
-                <span>AI Layout</span>
+                <span className="hidden sm:inline">AI Layout</span>
               </button>
               <div className="relative" ref={exportMenuRef}>
                 <button
@@ -681,10 +759,11 @@ export const Dashboard: React.FC = () => {
           {activePageIndex >= 0 && (
             <button
               onClick={handlePageBack}
-              className="absolute left-0 md:-left-12 top-1/2 -translate-y-1/2 z-40 p-3 bg-white/80 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:-translate-x-1 hover:shadow-xl"
+              className="absolute -left-2 md:-left-12 top-1/2 -translate-y-1/2 z-40 p-2 md:p-3 bg-white/90 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:-translate-x-1 hover:shadow-xl"
               aria-label="Previous page"
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={20} className="md:hidden" />
+              <ChevronLeft size={24} className="hidden md:block" />
             </button>
           )}
 
@@ -701,57 +780,36 @@ export const Dashboard: React.FC = () => {
                 style={{ opacity: coverFading ? 0 : 1 }}
               >
                 <Suspense
-                  fallback={
-                    /* Flat CSS Cover (shown while 3D loads) */
-                    <div
-                      className={`w-full h-full max-h-[800px] ${activeNotebook.coverColor} rounded-r-3xl rounded-l-md shadow-2xl relative cursor-pointer group transition-transform duration-300 hover:scale-[1.01]`}
-                      onClick={activeNotebook.pages.length > 0 ? handleOpenCover : undefined}
-                    >
-                      <div className="absolute left-0 top-0 bottom-0 w-12 bg-black/20 rounded-l-md border-r border-white/10" />
-                      <div className="absolute left-10 top-0 bottom-0 w-px bg-white/20" />
-                      <div className="absolute inset-0 flex flex-col items-center justify-center p-8 md:p-12 text-center">
-                        <input
-                          className="bg-transparent text-white/90 text-4xl md:text-6xl font-serif font-bold text-center border-b border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full"
-                          value={activeNotebook.title}
-                          onChange={(e) => {
-                            setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, title: e.target.value } : nb));
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div className="mt-6 text-white/60 font-sans tracking-widest uppercase text-sm">
-                          {activeNotebook.pages.length} Spreads
-                        </div>
-                        {activeNotebook.pages.length > 0 && (
-                          <div className="mt-8 opacity-0 group-hover:opacity-100 transition-opacity text-white/80 flex items-center gap-2 bg-black/20 px-4 py-2 rounded-full">
-                            <span>Click to open</span>
-                            <ChevronRight size={16} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  }
+                  fallback={renderFlatCoverFallback()}
                 >
                   {/* 3D Book Cover + DOM overlay */}
                   <div
                     className="relative w-full h-full max-h-[800px] rounded-2xl"
                     style={{ overflow: 'hidden' }}
                   >
-                    <BookCoverScene
-                      coverColorClass={activeNotebook.coverColor}
-                      coverImageUrl={activeNotebook.coverImageUrl}
-                      title={activeNotebook.title}
-                      pageCount={activeNotebook.pages.length}
-                      isOpening={isOpening}
-                      onOpenComplete={handleCoverOpenComplete}
-                    />
+                    <Canvas3DErrorBoundary fallback={renderFlatCoverFallback()} resetKey={activeNotebookId}>
+                      <BookCoverScene
+                        coverColorClass={activeNotebook.coverColor}
+                        coverImageUrl={activeNotebook.coverImageUrl}
+                        title={activeNotebook.title}
+                        pageCount={activeNotebook.pages.length}
+                        isOpening={isOpening}
+                        onOpenComplete={handleCoverOpenComplete}
+                      />
+                    </Canvas3DErrorBoundary>
                     {/* DOM overlay for title editing, color picker, CTA */}
                     <div
-                      className="absolute inset-0 flex flex-col items-center justify-end pb-10 md:pb-14 px-8 text-center pointer-events-none"
+                      className="absolute inset-0 flex flex-col items-center justify-end pb-6 md:pb-10 px-6 text-center pointer-events-none"
                       style={{ zIndex: 20 }}
                     >
+                      {/* Gradient scrim so controls are always legible over any cover image */}
+                      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
+
+                      <div className="relative z-10 flex flex-col items-center w-full">
+                      {/* Title — always shown, looks "printed" on the cover */}
                       <input
                         className="pointer-events-auto bg-transparent text-white text-3xl md:text-5xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md"
-                        style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}
+                        style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
                         value={activeNotebook.title}
                         onChange={(e) => {
                           setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, title: e.target.value } : nb));
@@ -759,48 +817,42 @@ export const Dashboard: React.FC = () => {
                       />
 
                       <div
-                        className="mt-3 text-white/50 font-sans tracking-widest uppercase text-xs"
-                        style={{ textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}
+                        className="mt-2 text-white/60 font-sans tracking-widest uppercase text-xs"
+                        style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
                       >
                         {activeNotebook.pages.length} Spreads
                       </div>
 
                       {/* Cover Customization Panel */}
-                      <div className="pointer-events-auto flex flex-col items-center gap-4 mt-6">
-                        <div className="flex items-center gap-2 px-5 py-3 bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-black/40 transition-all duration-500 hover:border-white/20">
-                          <Palette size={16} className="text-indigo-400" />
-                          <div className="w-px h-4 bg-white/10 mx-1" />
+                      <div className="pointer-events-auto flex flex-col items-center gap-3 mt-6 w-full max-w-md px-4">
+                        {/* Color Swatches — wrapping grid for all colors */}
+                        <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-3 bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-black/40">
+                          <Palette size={14} className="text-indigo-400 shrink-0" />
+                          {COVER_COLORS.map(color => (
+                            <button
+                              key={color}
+                              onClick={() => handleCoverColorChange(color)}
+                              className={`w-6 h-6 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color && !activeNotebook.coverImageUrl
+                                ? 'border-white scale-125 shadow-lg shadow-white/20'
+                                : 'border-white/10 hover:border-white/40 hover:scale-110'
+                                }`}
+                            />
+                          ))}
+                        </div>
 
-                          {/* Color Swatches */}
-                          <div className="flex items-center gap-1.5 mr-2">
-                            {COVER_COLORS.slice(0, 6).map(color => (
-                              <button
-                                key={color}
-                                onClick={() => handleCoverColorChange(color)}
-                                className={`w-6 h-6 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color && !activeNotebook.coverImageUrl
-                                  ? 'border-white scale-125 shadow-lg shadow-white/20'
-                                  : 'border-white/10 hover:border-white/40 hover:scale-110'
-                                  }`}
-                              />
-                            ))}
-                          </div>
-
-                          <div className="w-px h-4 bg-white/10 mx-1" />
-
-                          {/* AI Cover Button */}
+                        {/* AI Cover Actions */}
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => setShowCoverModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600/80 to-violet-600/80 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600/80 to-violet-600/80 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
                           >
                             <Wand2 size={14} />
                             <span>AI Cover</span>
                           </button>
-
-                          {/* Remove AI Cover */}
                           {activeNotebook.coverImageUrl && (
                             <button
                               onClick={() => handleCoverColorChange(activeNotebook.coverColor)}
-                              className="px-3 py-2 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-white/40 hover:text-red-400 rounded-xl text-xs transition-all"
+                              className="px-3 py-2.5 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-white/40 hover:text-red-400 rounded-xl text-xs transition-all"
                               title="Remove AI cover"
                             >
                               ✕
@@ -837,6 +889,7 @@ export const Dashboard: React.FC = () => {
                           </div>
                         </div>
                       )}
+                      </div>{/* end relative z-10 wrapper */}
                     </div>
                   </div>
                 </Suspense>
@@ -883,10 +936,11 @@ export const Dashboard: React.FC = () => {
           {activePageIndex !== -1 && activePageIndex < activeNotebook.pages.length && (
             <button
               onClick={handlePageForward}
-              className="absolute right-0 md:-right-12 top-1/2 -translate-y-1/2 z-40 p-3 bg-white/80 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:translate-x-1 hover:shadow-xl"
+              className="absolute -right-2 md:-right-12 top-1/2 -translate-y-1/2 z-40 p-2 md:p-3 bg-white/90 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:translate-x-1 hover:shadow-xl"
               aria-label="Next page"
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={20} className="md:hidden" />
+              <ChevronRight size={24} className="hidden md:block" />
             </button>
           )}
 
@@ -945,11 +999,18 @@ export const Dashboard: React.FC = () => {
             setIsGeneratingCover(false);
           }
         }}
-        onApply={(imageUrl) => {
-          setNotebooks(prev => prev.map(nb =>
-            nb.id === activeNotebookId ? { ...nb, coverImageUrl: imageUrl } : nb
-          ));
-          addToast('AI Cover applied!', 'success');
+        onApply={async (imageUrl) => {
+          try {
+            const storageReadyImage = await prepareCoverImageForStorage(imageUrl);
+            setNotebooks(prev => prev.map(nb =>
+              nb.id === activeNotebookId ? { ...nb, coverImageUrl: storageReadyImage } : nb
+            ));
+            addToast('AI Cover applied!', 'success');
+          } catch (error) {
+            console.error('Failed to apply AI cover:', error);
+            addToast('Failed to apply cover', 'error');
+            throw error instanceof Error ? error : new Error('Failed to apply cover');
+          }
         }}
         currentCoverUrl={activeNotebook?.coverImageUrl}
         isGenerating={isGeneratingCover}

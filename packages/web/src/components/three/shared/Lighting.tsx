@@ -31,12 +31,12 @@ export function Lighting({ preset = 'landing', followCursor = false, intensity =
   const presets = {
     landing: {
       keyColor: '#f8fafc',
-      keyIntensity: 2.0,
-      keyPosition: [5, 8, 5] as [number, number, number],
-      fillIntensity: 0.45,
+      keyIntensity: 2.4,
+      keyPosition: [4, 8, 6] as [number, number, number],
+      fillIntensity: 0.5,
       rimColor: '#d4a574',
-      rimIntensity: 0.8,
-      rimPosition: [-3, 3, -4] as [number, number, number],
+      rimIntensity: 1.0,
+      rimPosition: [-4, 3, -3] as [number, number, number],
       shadowMapSize: 1024,
     },
     notebook: {
@@ -71,7 +71,7 @@ export function Lighting({ preset = 'landing', followCursor = false, intensity =
     },
   };
 
-  const p = presets[preset];
+  const p = presets[preset] ?? presets.landing;
 
   return (
     <>

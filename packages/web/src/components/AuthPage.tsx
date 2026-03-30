@@ -77,6 +77,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onSignup, onGoogleL
                         </button>
                     </div>
 
+                    <p className="mb-5 text-xs leading-relaxed text-white/45">
+                        {mode === 'login'
+                            ? 'Log in with the email and password you created during Sign Up.'
+                            : 'Create a password-based account with any email. Passwords must be at least 8 characters.'}
+                    </p>
+
                     {/* Error */}
                     {error && (
                         <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm">

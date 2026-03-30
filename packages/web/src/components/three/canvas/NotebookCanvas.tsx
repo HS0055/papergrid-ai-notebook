@@ -1,4 +1,4 @@
-import { Suspense, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Preload } from '@react-three/drei';
 import * as THREE from 'three';
@@ -83,12 +83,10 @@ export default function NotebookCanvas({
           }
         }}
       >
-        <Suspense fallback={null}>
-          <Lighting preset={lightPreset} followCursor={!overlay} />
-          {children}
-          <PostEffects preset={postPreset} />
-          <Preload all />
-        </Suspense>
+        <Lighting preset={lightPreset} followCursor={!overlay} />
+        {children}
+        <PostEffects preset={postPreset} />
+        <Preload all />
       </Canvas>
     </div>
   );

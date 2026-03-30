@@ -3,7 +3,6 @@ import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
 function geminiProxyPlugin(apiKey: string): Plugin {
-
   // Generate a procedural gradient SVG cover as fallback
   function generateFallbackCover(prompt: string, aesthetic?: string): string {
     // Hash prompt to derive consistent colors
@@ -21,7 +20,7 @@ function geminiProxyPlugin(apiKey: string): Plugin {
     const light1 = isMinimal ? '20%' : '25%';
     const light2 = isMinimal ? '35%' : '40%';
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1280" viewBox="0 0 960 1280">
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0%" stop-color="hsl(${hue1}, ${sat}, ${light1})"/>
@@ -35,13 +34,13 @@ function geminiProxyPlugin(apiKey: string): Plugin {
         <circle cx="100" cy="150" r="0.6" fill="rgba(255,255,255,0.025)"/>
       </pattern>
     </defs>
-    <rect width="1024" height="1024" fill="url(#bg)"/>
-    <rect width="1024" height="1024" fill="url(#leather)" opacity="0.5"/>
-    <rect width="1024" height="1024" filter="url(#noise)" opacity="0.08"/>
-    <rect x="60" y="60" width="904" height="904" rx="8" fill="none" stroke="rgba(212,165,116,0.15)" stroke-width="2"/>
-    <rect x="80" y="80" width="864" height="864" rx="4" fill="none" stroke="rgba(212,165,116,0.08)" stroke-width="1"/>
-    <line x1="512" y1="120" x2="512" y2="160" stroke="rgba(212,165,116,0.25)" stroke-width="2"/>
-    <line x1="512" y1="864" x2="512" y2="904" stroke="rgba(212,165,116,0.25)" stroke-width="2"/>
+    <rect width="960" height="1280" fill="url(#bg)"/>
+    <rect width="960" height="1280" fill="url(#leather)" opacity="0.5"/>
+    <rect width="960" height="1280" filter="url(#noise)" opacity="0.08"/>
+    <rect x="60" y="60" width="840" height="1160" rx="8" fill="none" stroke="rgba(212,165,116,0.15)" stroke-width="2"/>
+    <rect x="84" y="84" width="792" height="1112" rx="4" fill="none" stroke="rgba(212,165,116,0.08)" stroke-width="1"/>
+    <line x1="480" y1="140" x2="480" y2="184" stroke="rgba(212,165,116,0.25)" stroke-width="2"/>
+    <line x1="480" y1="1096" x2="480" y2="1140" stroke="rgba(212,165,116,0.25)" stroke-width="2"/>
   </svg>`;
     return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
   }
@@ -230,9 +229,9 @@ Return a JSON object matching the schema.`,
           }
 
           const styleContext = aesthetic || 'premium leather journal';
-          const imagePrompt = `Create a beautiful, high-quality notebook cover design. The cover should feature: ${prompt}. Style: ${styleContext}. The image should be a top-down view of a premium notebook cover with rich textures, embossed details, and professional finish. Studio lighting, warm ambient glow, 4K quality, cinematic, minimalist and elegant. No text or words on the cover unless specifically requested.`;
+          const imagePrompt = `Generate a flat, front-facing notebook cover artwork for a realistic 3D journal model. Design brief: ${prompt}. Style: ${styleContext}. Important: this is a cover texture, not a product mockup. Show only the cover surface artwork with no perspective, no angled book, no visible spine, no desk, no background scene, and no camera tilt. Keep the composition vertically centered with a safe margin so important details do not touch the edges. Use rich material cues like leather, linen, foil, embossing, debossing, fabric grain, ink, or ornamental pattern, but keep everything perfectly flat and printable. The design must not look empty: include a clear focal composition such as a centered emblem, medallion, geometric motif, botanical cluster, or framed ornamental border, with visible contrast against the base material. Avoid plain blank covers, large empty areas, or nearly-solid textures unless the prompt explicitly asks for minimalism. Portrait composition, roughly 3:4 ratio, premium craftsmanship, elegant lighting baked into the artwork only. Do not include text, letters, logos, or words unless the prompt explicitly asks for them.`;
 
-          // Use Gemini 2.0 Flash with image generation
+          // Use the current Gemini native image generation model
           const geminiPayload = {
             contents: [{
               parts: [{ text: imagePrompt }],
@@ -243,7 +242,7 @@ Return a JSON object matching the schema.`,
           };
 
           const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

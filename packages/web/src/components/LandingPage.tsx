@@ -190,7 +190,7 @@ export const LandingPage: React.FC = () => {
             scaleY: 1,
             ease: 'none',
             scrollTrigger: {
-              trigger: 'body',
+              trigger: document.documentElement,
               start: 'top top',
               end: 'bottom bottom',
               scrub: 0.3,

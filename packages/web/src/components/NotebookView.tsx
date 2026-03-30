@@ -1,12 +1,40 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { NotebookPage, Block, BlockType } from '@papergrid/core';
 import { BlockComponent } from './BlockComponent';
 import { PianoKeyboard } from './PianoKeyboard';
-import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music, Calendar, CalendarDays, CheckSquare, Target, Clock, Sun } from 'lucide-react';
+import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music, Calendar, CalendarDays, CheckSquare, Target, Clock, Sun, AlertTriangle } from 'lucide-react';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+
+// Per-block error boundary: isolates render crashes to a single block
+class BlockErrorBoundary extends Component<
+  { blockType: string; blockId: string; children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { blockType: string; blockId: string; children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`[PaperGrid] Block render crash — type=${this.props.blockType} id=${this.props.blockId}`, error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 mb-1">
+          <AlertTriangle size={14} />
+          <span>Block "{this.props.blockType}" failed to render: {this.state.error?.message}</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface SoundCallbacks {
   penScratch: () => void;
@@ -426,20 +454,22 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
                 <SortableBlock key={block.id} id={block.id}>
                   {({ dragHandleProps }) => (
                     <div data-block-id={block.id} className={block.id === newBlockId ? 'anim-block-enter' : ''}>
-                      <BlockComponent
-                        block={block}
-                        onChange={handleBlockChange}
-                        onDelete={handleBlockDelete}
-                        allPages={allPages}
-                        onNavigate={onNavigate}
-                        focused={block.id === focusedBlockId}
-                        onInsertAfter={(type) => insertBlockAfter(block.id, type, side)}
-                        selectedPitch={page.paperType === 'music' ? selectedPitch : undefined}
-                        selectedDuration={page.paperType === 'music' ? selectedDuration : undefined}
-                        dragHandleProps={dragHandleProps}
-                        onPenScratch={sounds?.penScratch}
-                        onCheckboxClick={sounds?.checkboxClick}
-                      />
+                      <BlockErrorBoundary blockType={block.type} blockId={block.id}>
+                        <BlockComponent
+                          block={block}
+                          onChange={handleBlockChange}
+                          onDelete={handleBlockDelete}
+                          allPages={allPages}
+                          onNavigate={onNavigate}
+                          focused={block.id === focusedBlockId}
+                          onInsertAfter={(type) => insertBlockAfter(block.id, type, side)}
+                          selectedPitch={page.paperType === 'music' ? selectedPitch : undefined}
+                          selectedDuration={page.paperType === 'music' ? selectedDuration : undefined}
+                          dragHandleProps={dragHandleProps}
+                          onPenScratch={sounds?.penScratch}
+                          onCheckboxClick={sounds?.checkboxClick}
+                        />
+                      </BlockErrorBoundary>
                     </div>
                   )}
                 </SortableBlock>

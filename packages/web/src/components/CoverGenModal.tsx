@@ -3,12 +3,14 @@ import {
     Sparkles, X, Wand2, Image as ImageIcon,
     Paintbrush, BookOpen, Leaf, Moon, Sun, Gem, Flame, Palette
 } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
+import { ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 interface CoverGenModalProps {
     isOpen: boolean;
     onClose: () => void;
     onGenerate: (prompt: string, aesthetic?: string) => Promise<{ imageUrl: string }>;
-    onApply: (imageUrl: string) => void;
+    onApply: (imageUrl: string) => void | Promise<void>;
     currentCoverUrl?: string;
     isGenerating: boolean;
 }
@@ -45,6 +47,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
     const [aesthetic, setAesthetic] = useState('leather');
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isApplying, setIsApplying] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -54,6 +57,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
         if (!isOpen) {
             setPreviewUrl(null);
             setError(null);
+            setIsApplying(false);
         }
     }, [isOpen]);
 
@@ -63,6 +67,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
             return;
         }
         setError(null);
+        triggerHaptic.impact(ImpactStyle.Medium); // Initial impact for starting generation
         try {
             const style = AESTHETIC_STYLES.find(s => s.id === aesthetic);
             const fullAesthetic = style ? `${style.label} — ${style.desc}` : aesthetic;
@@ -71,19 +76,32 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
                 throw new Error('No image returned');
             }
             setPreviewUrl(data.imageUrl);
+            triggerHaptic.notification(NotificationType.Success); // Tactile success feedback
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to generate cover');
+            triggerHaptic.notification(NotificationType.Error);
         }
     };
 
-    const handleApply = () => {
+    const handleApply = async () => {
         if (previewUrl) {
-            onApply(previewUrl);
-            onClose();
+            triggerHaptic.impact(ImpactStyle.Heavy); // Affirmative impact
+            setError(null);
+            setIsApplying(true);
+            try {
+                await onApply(previewUrl);
+                onClose();
+            } catch (e) {
+                setError(e instanceof Error ? e.message : 'Failed to apply cover');
+                triggerHaptic.notification(NotificationType.Error);
+            } finally {
+                setIsApplying(false);
+            }
         }
     };
 
     const handleSuggestionClick = (suggestion: typeof PROMPT_SUGGESTIONS[0]) => {
+        triggerHaptic.impact(ImpactStyle.Light);
         setPrompt(suggestion.prompt);
         setPreviewUrl(null);
     };
@@ -108,7 +126,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
                         </div>
                         <div>
                             <h2 className="text-lg font-bold text-white">AI Cover Designer</h2>
-                            <p className="text-xs text-white/40">Powered by Gemini 2.0 Flash</p>
+                            <p className="text-xs text-white/40">Powered by Gemini Image</p>
                         </div>
                     </div>
                     <button
@@ -148,7 +166,10 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
                             {AESTHETIC_STYLES.map((style) => (
                                 <button
                                     key={style.id}
-                                    onClick={() => setAesthetic(style.id)}
+                                    onClick={() => {
+                                        setAesthetic(style.id);
+                                        triggerHaptic.impact(ImpactStyle.Light);
+                                    }}
                                     className={`px-3 py-2.5 rounded-xl text-left transition-all ${aesthetic === style.id
                                         ? 'bg-indigo-600/20 border-indigo-500/40 border text-white'
                                         : 'bg-white/[0.03] border border-white/5 text-white/50 hover:text-white/70 hover:border-white/10'
@@ -190,7 +211,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
                             <label className="text-xs font-medium text-white/50 uppercase tracking-wider mb-2 block">
                                 Preview
                             </label>
-                            <div className="relative aspect-square max-w-[300px] mx-auto rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03]">
+                            <div className="relative aspect-[3/4] max-w-[240px] mx-auto rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03]">
                                 {isGenerating ? (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                                         <div className="relative">
@@ -222,15 +243,16 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
                     {previewUrl && !isGenerating && (
                         <button
                             onClick={handleApply}
-                            className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all"
+                            disabled={isApplying}
+                            className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <ImageIcon size={16} />
-                            Apply to Cover
+                            {isApplying ? 'Applying...' : 'Apply to Cover'}
                         </button>
                     )}
                     <button
                         onClick={handleGenerate}
-                        disabled={isGenerating || !prompt.trim()}
+                        disabled={isGenerating || isApplying || !prompt.trim()}
                         className={`${previewUrl && !isGenerating ? 'flex-1' : 'w-full'} py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                         {isGenerating ? (

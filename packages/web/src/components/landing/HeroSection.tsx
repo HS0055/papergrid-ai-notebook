@@ -152,20 +152,27 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           cursorRef.current.y = 0;
         }}
       >
-        {/* Ambient glow blobs */}
+        {/* Ambient glow blobs — centered to frame notebook */}
         {!isMobile && (
           <>
             <div
-              className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full pointer-events-none"
+              className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse, rgba(79,70,229,0.18) 0%, transparent 70%)',
-                filter: 'blur(40px)',
+                background: 'radial-gradient(ellipse, rgba(79,70,229,0.2) 0%, transparent 65%)',
+                filter: 'blur(50px)',
               }}
             />
             <div
-              className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] rounded-full pointer-events-none"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse, rgba(217,119,6,0.12) 0%, transparent 70%)',
+                background: 'radial-gradient(ellipse, rgba(124,58,237,0.1) 0%, transparent 70%)',
+                filter: 'blur(80px)',
+              }}
+            />
+            <div
+              className="absolute bottom-1/4 right-1/3 w-[350px] h-[350px] rounded-full pointer-events-none"
+              style={{
+                background: 'radial-gradient(ellipse, rgba(217,119,6,0.1) 0%, transparent 70%)',
                 filter: 'blur(60px)',
               }}
             />
@@ -187,8 +194,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
         {/* ── Phase 1: Main headline ── */}
         <div
           ref={phase1Ref}
-          className="relative text-center max-w-5xl mx-auto"
-          style={{ zIndex: 20 }}
+          className="relative w-full max-w-6xl mx-auto text-center"
+          style={{
+            zIndex: 20,
+            paddingTop: isMobile ? 0 : '1rem',
+            paddingBottom: isMobile ? 0 : '18rem',
+          }}
         >
           {/* Badge */}
           <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-8 border"
@@ -205,7 +216,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           {/* Headline */}
           <h1
             className="font-serif font-bold tracking-tight mb-6 leading-[1.05] text-white"
-            style={{ fontSize: 'clamp(3.5rem, 9vw, 7.5rem)' }}
+            style={{
+              fontSize: 'clamp(3.5rem, 9vw, 7.5rem)',
+              maxWidth: isMobile ? undefined : '11ch',
+              marginInline: 'auto',
+            }}
           >
             <span className="hero-word block">The notebook</span>
             <span className="hero-word block" style={{ color: '#818cf8' }}>that thinks</span>
@@ -253,7 +268,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           className="absolute inset-0 flex items-center justify-center px-6"
           style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
         >
-          <div className="text-center max-w-3xl">
+          <div
+            className="text-center max-w-3xl rounded-3xl px-10 py-12"
+            style={{
+              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
               style={{
                 background: 'rgba(217,119,6,0.15)',
@@ -284,7 +305,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           className="absolute inset-0 flex items-center justify-center px-6"
           style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
         >
-          <div className="text-center max-w-3xl">
+          <div
+            className="text-center max-w-3xl rounded-3xl px-10 py-12"
+            style={{
+              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
               style={{
                 background: 'rgba(16,185,129,0.15)',
@@ -317,11 +344,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </div>
         </div>
 
-        {/* ── Notebook hover target (desktop only) ── */}
+        {/* ── Notebook hover target (desktop only) — centered ── */}
         {!isMobile && (
           <div
-            className="relative w-full max-w-5xl mx-auto mt-16"
-            style={{ height: '420px', zIndex: 15 }}
+            className="absolute inset-x-0 bottom-0 top-[26%]"
+            style={{ zIndex: 15 }}
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
           />

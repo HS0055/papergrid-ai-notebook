@@ -185,7 +185,9 @@ export const AILayoutResponseSchema = z.object({
     side: z.enum(['left', 'right']).optional().default('left'),
     gridData: z.object({
       columns: z.array(z.string()),
-      rows: z.array(z.array(z.string())),
+      rows: z.array(z.array(
+        z.union([z.string(), z.object({ id: z.string(), content: z.string() })])
+      )),
     }).optional().nullable(),
     moodValue: z.number().min(0).max(4).optional(),
     matrixData: MatrixDataSchema.optional(),

@@ -29,11 +29,14 @@ interface HeroNotebookProps {
 export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile = false }: HeroNotebookProps) {
   const groupRef = useRef<THREE.Group>(null);
   const frontCoverRef = useRef<THREE.Group>(null);
+  const titleGlowRef = useRef<THREE.PointLight>(null);
   const targetOpen = useRef(0);
   const currentOpen = useRef(0);
   const currentCursorX = useRef(0);
   const currentCursorY = useRef(0);
   const currentHoverScale = useRef(1);
+  const currentLateralShift = useRef(0);
+  const currentDepthShift = useRef(0);
 
   // Materials — both mobile and desktop use higher resolution for visible quality
   const texRes = isMobile ? 512 : 1024;
@@ -57,13 +60,13 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     emissiveIntensity: 0.08,
   }), []);
 
-  // Gold emboss material for title & spine lines — bright emissive so it's visible
+  // Gold emboss material for title & spine lines — brighter emissive for prominence
   const goldMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: '#d4a574',
-    roughness: 0.2,
-    metalness: 0.8,
+    roughness: 0.15,
+    metalness: 0.85,
     emissive: '#d4a574',
-    emissiveIntensity: 0.25,
+    emissiveIntensity: 0.35,
   }), []);
 
   // Title texture for cover — high-res canvas for crisp text on both platforms
@@ -104,10 +107,10 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
       map: texture,
       transparent: true,
       alphaTest: 0.05,
-      roughness: 0.15,
-      metalness: 0.8,
+      roughness: 0.12,
+      metalness: 0.85,
       emissive: '#d4a574',
-      emissiveIntensity: 0.2,
+      emissiveIntensity: 0.3,
     });
   }, [isMobile]);
 
@@ -143,6 +146,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     );
 
     const open = currentOpen.current;
+    const glowStrength = hovered ? Math.max(0, 1 - open * 0.7) : 0;
 
     // ── Cursor tilt (fades as book opens, disabled on mobile) ──
     let cursorTiltX = 0;
@@ -158,12 +162,51 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
       cursorTiltY = currentCursorX.current * 0.12 * cursorWeight;
     }
 
+    titleMat.emissiveIntensity = THREE.MathUtils.lerp(
+      titleMat.emissiveIntensity,
+      0.3 + glowStrength * 0.42,
+      lerpFactor,
+    );
+    goldMat.emissiveIntensity = THREE.MathUtils.lerp(
+      goldMat.emissiveIntensity,
+      0.35 + glowStrength * 0.28,
+      lerpFactor,
+    );
+    spineMat.emissiveIntensity = THREE.MathUtils.lerp(
+      spineMat.emissiveIntensity,
+      0.08 + glowStrength * 0.08,
+      lerpFactor,
+    );
+
+    if (titleGlowRef.current) {
+      titleGlowRef.current.intensity = THREE.MathUtils.lerp(
+        titleGlowRef.current.intensity,
+        0.2 + glowStrength * 1.9,
+        lerpFactor,
+      );
+      titleGlowRef.current.position.x = THREE.MathUtils.lerp(
+        titleGlowRef.current.position.x,
+        hw + currentCursorX.current * 0.32,
+        lerpFactor,
+      );
+      titleGlowRef.current.position.y = THREE.MathUtils.lerp(
+        titleGlowRef.current.position.y,
+        0.34 + currentCursorY.current * 0.18,
+        lerpFactor,
+      );
+    }
+
     // Hover scale
-    const targetHoverScale = hovered ? 1.03 : 1.0;
+    const targetHoverScale = hovered ? 1.06 : 1.0;
     currentHoverScale.current = THREE.MathUtils.lerp(currentHoverScale.current, targetHoverScale, lerpFactor);
 
     // Front cover rotation — smooth ease-out curve for satisfying open feel
     const openEased = 1 - Math.pow(1 - open, 2.2);
+    const revealProgress = THREE.MathUtils.clamp(scrollProgress / (isMobile ? 0.12 : 0.08), 0, 1);
+    const revealEased = 1 - Math.pow(1 - revealProgress, 3);
+
+    // Stronger staged reveal: book starts smaller, pushes forward, then settles.
+    const scrollScale = THREE.MathUtils.lerp(0.88, 1.08, Math.min(openEased * 1.8, 1));
     frontCoverRef.current.rotation.y = -openEased * Math.PI * 0.52;
 
     // Idle sway — fades out as book opens for cleaner motion
@@ -171,9 +214,24 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     const idleWeight = Math.max(0, 1 - open * 3); // fades by 33% open
     const idleSway = Math.sin(idleTime * 0.15) * 0.04 * idleWeight;
 
-    // Rotation: start angled to show 3D depth, gently rotate toward viewer
-    groupRef.current.rotation.y = idleSway + THREE.MathUtils.lerp(0.5, 0.08, openEased) + cursorTiltY;
-    groupRef.current.rotation.x = Math.sin(idleTime * 0.1) * 0.015 * idleWeight - 0.15 + openEased * 0.08 + cursorTiltX;
+    // Rotation: start with a pleasant 3/4 angle, rotate toward viewer as book opens
+    groupRef.current.rotation.y =
+      idleSway +
+      THREE.MathUtils.lerp(0.68, 0.12, openEased) -
+      (1 - revealEased) * 0.12 +
+      cursorTiltY;
+    groupRef.current.rotation.x =
+      Math.sin(idleTime * 0.1) * 0.02 * idleWeight -
+      0.08 +
+      openEased * 0.05 +
+      cursorTiltX;
+
+    // Scroll-driven motion path: pull notebook into view, then lift as it opens.
+    const targetLateralShift = THREE.MathUtils.lerp(0.78, 0.18, Math.min(openEased * 1.25, 1));
+    const targetDepthShift = THREE.MathUtils.lerp(0.82, 0.1, revealEased);
+    currentLateralShift.current = THREE.MathUtils.lerp(currentLateralShift.current, targetLateralShift, lerpFactor);
+    currentDepthShift.current = THREE.MathUtils.lerp(currentDepthShift.current, targetDepthShift, lerpFactor);
+    const scrollDrift = THREE.MathUtils.lerp(-0.15, 0.5, openEased);
 
     // ── Exit animation: scale down, drift up, fade out (65%-95%) ──
     const exitRaw = THREE.MathUtils.clamp((scrollProgress - 0.65) / 0.30, 0, 1);
@@ -183,13 +241,15 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     const e = currentExit.current;
     const exitEased = e * e * (3 - 2 * e);
 
-    const exitScale = THREE.MathUtils.lerp(1.0, 0.7, exitEased);
-    const exitDrift = exitEased * 0.8; // additive drift, not absolute
+    const exitScale = THREE.MathUtils.lerp(1.0, 0.65, exitEased);
+    const exitDrift = exitEased * 1.2;
     const exitOpacity = THREE.MathUtils.lerp(1.0, 0.0, exitEased);
 
-    groupRef.current.scale.setScalar(exitScale * currentHoverScale.current);
-    // Add drift to base y offset (don't overwrite Float positioning)
-    groupRef.current.position.y = exitDrift;
+    groupRef.current.scale.setScalar(exitScale * currentHoverScale.current * scrollScale);
+    groupRef.current.position.x = currentLateralShift.current;
+    groupRef.current.position.z = currentDepthShift.current;
+    // Combine reveal drift + exit drift for smooth continuous motion
+    groupRef.current.position.y = scrollDrift + exitDrift;
 
     // Fade all materials — cached array avoids per-frame scene graph traverse
     // On mobile: skip exit fade (no scroll-driven phases) to save GPU cycles
@@ -226,7 +286,8 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
 
   // Mobile: compensate for inner hw offset (all meshes sit at x=hw=1.6) to visually center,
   // and push well below CTA buttons so it doesn't overlap text content
-  const bookPosition: [number, number, number] = isMobile ? [-hw, -4.5, 0] : [0.5, -0.5, 0];
+  // Desktop: start below hero text, center horizontally (hw offset compensates for spine-origin geometry)
+  const bookPosition: [number, number, number] = isMobile ? [-hw, -4.5, 0] : [-hw + 1.7, -2.35, 0];
 
   const notebookContent = (
     <group position={bookPosition}>
@@ -260,6 +321,14 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
 
         {/* ─── Front Cover (opens) - pivots at x=0 ─── */}
         <group ref={frontCoverRef}>
+          <pointLight
+            ref={titleGlowRef}
+            color="#f6cf96"
+            intensity={0.2}
+            distance={3}
+            decay={2}
+            position={[hw, 0.34, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.24]}
+          />
           <mesh
             position={[hw, 0, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS / 2]}
             castShadow

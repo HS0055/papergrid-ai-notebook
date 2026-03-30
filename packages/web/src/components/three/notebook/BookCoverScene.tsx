@@ -1,11 +1,22 @@
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Float, useTexture, Environment, ContactShadows } from '@react-three/drei';
+import { Float } from '@react-three/drei';
 import * as THREE from 'three';
 import NotebookCanvas from '../canvas/NotebookCanvas';
 import { useCoverMaterial } from '../shared/PaperMaterial';
 import { BOOK_WIDTH, BOOK_HEIGHT } from '../shared/BookGeometry';
 import { coverColorToHex } from '../../../utils/coverColors';
+import { triggerHaptic } from '../../../utils/haptics';
+
+/** Debounce a value — only updates after `delay` ms of inactivity. */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
 
 // ─── Constants ────────────────────────────────────────────
 const CT = 0.08; // cover thickness
@@ -31,15 +42,45 @@ interface BookCoverSceneProps {
 export default function BookCoverScene(props: BookCoverSceneProps) {
   return (
     <NotebookCanvas
-      lightPreset="studio"
+      lightPreset="notebook"
       postPreset="subtle"
       fov={40}
       cameraPosition={[0, 0, 7.5]}
     >
-      <Environment preset="city" environmentIntensity={0.6} />
       <CoverBook {...props} />
     </NotebookCanvas>
   );
+}
+
+/** Load a texture without Suspense — returns null while loading or on error. */
+function useSafeTexture(url: string | undefined): THREE.Texture | null {
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const urlRef = useRef(url);
+
+  useEffect(() => {
+    urlRef.current = url;
+    if (!url) { setTexture(null); return; }
+
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      url,
+      (tex) => {
+        if (urlRef.current !== url) { tex.dispose(); return; } // stale
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 8;
+        setTexture(tex);
+      },
+      undefined,
+      () => {
+        // Loading failed — silently fall back to no custom texture
+        if (urlRef.current === url) setTexture(null);
+      },
+    );
+
+    return () => { urlRef.current = undefined; };
+  }, [url]);
+
+  return texture;
 }
 
 function CoverBook({
@@ -55,20 +96,15 @@ function CoverBook({
   const openRef = useRef(0);
   const doneRef = useRef(false);
 
-  // Always call useTexture (Rules of Hooks) — use a 1x1 transparent placeholder when no cover
-  const PLACEHOLDER = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRU5ErkJggg==';
-  const loadedTexture = useTexture(coverImageUrl || PLACEHOLDER);
-  const customTexture = coverImageUrl ? loadedTexture : null;
-  if (customTexture) {
-    customTexture.colorSpace = THREE.SRGBColorSpace;
-    customTexture.anisotropy = 8;
-  }
+  // Load custom cover texture safely (no Suspense, no crash on failure)
+  const customTexture = useSafeTexture(coverImageUrl);
 
   // Reset open state when isOpening transitions to true
   useEffect(() => {
     if (isOpening) {
       openRef.current = 0;
       doneRef.current = false;
+      triggerHaptic.impact();
     }
   }, [isOpening]);
 
@@ -78,10 +114,12 @@ function CoverBook({
   // Use custom texture if available, otherwise use leather material
   const coverMat = useMemo(() => {
     if (customTexture) {
-      return new THREE.MeshStandardMaterial({
+      return new THREE.MeshPhysicalMaterial({
         map: customTexture,
-        roughness: 0.8,
-        metalness: 0.1,
+        roughness: 0.72,
+        metalness: 0.08,
+        clearcoat: 0.14,
+        clearcoatRoughness: 0.8,
       });
     }
     return leatherMat;
@@ -105,19 +143,27 @@ function CoverBook({
   const goldMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#ffc87c', // Warmer gold
-        roughness: 0.15,
-        metalness: 1.0,   // Full metal for reflections
-        emissive: '#4a3010',
-        emissiveIntensity: 0.1,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.2,
+        color: '#ffc87c',
+        roughness: 0.3,
+        metalness: 0.5,
+        emissive: '#c4956a',
+        emissiveIntensity: 0.35,
       }),
     [],
   );
 
+  // Debounce title to avoid recreating the CanvasTexture on every keystroke
+  const debouncedTitle = useDebouncedValue(title, 300);
+
   // Gold embossed title + page count texture
+  const titleMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const titleMat = useMemo(() => {
+    // Dispose previous material & texture to prevent GPU memory leak
+    if (titleMatRef.current) {
+      titleMatRef.current.map?.dispose();
+      titleMatRef.current.dispose();
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 256;
@@ -128,8 +174,7 @@ function CoverBook({
     ctx.font = 'bold 44px "Playfair Display", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    // Truncate title to fit within texture
-    let displayTitle = title || 'Untitled';
+    let displayTitle = debouncedTitle || 'Untitled';
     while (ctx.measureText(displayTitle).width > 440 && displayTitle.length > 3) {
       displayTitle = displayTitle.slice(0, -2) + '\u2026';
     }
@@ -141,19 +186,20 @@ function CoverBook({
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.anisotropy = 8;
-    // Fix orientation for mapping onto the book cover
     texture.center.set(0.5, 0.5);
 
-    return new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       map: texture,
       transparent: true,
       alphaTest: 0.05,
-      roughness: 0.15,
-      metalness: 0.9,
-      emissive: '#2a1a08',
-      emissiveIntensity: 0.2, // Boosted to make text pop against dark journals
+      roughness: 0.35,
+      metalness: 0.4,
+      emissive: '#c4956a',
+      emissiveIntensity: 0.45,
     });
-  }, [title, pageCount]);
+    titleMatRef.current = mat;
+    return mat;
+  }, [debouncedTitle, pageCount]);
 
   useFrame((state, delta) => {
     if (!groupRef.current || !frontCoverRef.current) return;
@@ -213,13 +259,16 @@ function CoverBook({
               <boxGeometry args={[BOOK_WIDTH + 0.04, BOOK_HEIGHT + 0.04, CT]} />
             </mesh>
 
-            {/* Title on front cover — shifted toward spine to avoid clip on rotation */}
-            <mesh
-              position={[HW * 0.85, 0.15, PS / 2 + CT + 0.002]}
-              material={titleMat}
-            >
-              <planeGeometry args={[BOOK_WIDTH * 0.55, BOOK_WIDTH * 0.28]} />
-            </mesh>
+            {/* Title on front cover — only shown when no custom cover image
+                (custom covers use the DOM overlay title instead to avoid double-text) */}
+            {!customTexture && (
+              <mesh
+                position={[HW * 0.85, 0.15, PS / 2 + CT + 0.002]}
+                material={titleMat}
+              >
+                <planeGeometry args={[BOOK_WIDTH * 0.55, BOOK_WIDTH * 0.28]} />
+              </mesh>
+            )}
           </group>
 
           {/* ─── Spine ─── */}
@@ -234,16 +283,11 @@ function CoverBook({
             </mesh>
           ))}
 
-          {/* ─── Premium Contact Shadows ─── */}
-          <ContactShadows
-            position={[0, -HH - 0.1, 0]}
-            opacity={0.65}
-            scale={10}
-            blur={1.5}
-            far={1.5}
-            resolution={512}
-            color="#000000"
-          />
+          {/* Shadow plane (lightweight replacement for ContactShadows) */}
+          <mesh position={[HW * 0.5, -HH - 0.08, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[6, 4]} />
+            <meshStandardMaterial color="#000000" transparent opacity={0.18} />
+          </mesh>
         </group>
       </group>
     </Float>

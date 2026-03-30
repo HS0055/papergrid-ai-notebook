@@ -14,7 +14,7 @@ function buildFallbackCover(prompt: string): string {
 
   // Use a noise pattern + organic SVG shapes for a premium look
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
+    <svg xmlns="http://www.w3.org/2000/svg" width="960" height="1280" viewBox="0 0 960 1280">
       <defs>
         <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="hsl(${hue1},40%,20%)"/>
@@ -26,11 +26,11 @@ function buildFallbackCover(prompt: string): string {
           <feBlend mode="multiply" in2="SourceGraphic"/>
         </filter>
       </defs>
-      <rect width="1024" height="1024" fill="url(#g)"/>
-      <rect width="1024" height="1024" fill="white" opacity="0.05" filter="url(#n)"/>
-      <path d="M0 1024 L1024 0 L1024 1024 Z" fill="white" opacity="0.03"/>
-      <rect x="80" y="80" width="864" height="864" rx="4" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-      <circle cx="512" cy="512" r="300" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="40"/>
+      <rect width="960" height="1280" fill="url(#g)"/>
+      <rect width="960" height="1280" fill="white" opacity="0.05" filter="url(#n)"/>
+      <path d="M0 1280 L960 120 L960 1280 Z" fill="white" opacity="0.03"/>
+      <rect x="76" y="76" width="808" height="1128" rx="4" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+      <circle cx="480" cy="640" r="280" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="40"/>
     </svg>
   `.trim();
 
@@ -387,7 +387,11 @@ const http = httpRouter();
 // Allowed origins for local/dev + production/custom domains + Vercel aliases/previews
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
+  "http://127.0.0.1:3000",
   "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "capacitor://localhost",
+  "ionic://localhost",
   "https://papergrid.app",
   "https://www.papergrid.app",
   "https://papergrid-five.vercel.app",
@@ -414,6 +418,18 @@ function makeCorsHeaders(request: Request) {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token",
   };
+}
+
+// Extract clean error message from Convex mutation errors.
+// Convex wraps thrown errors as "Uncaught Error: <message>\n    at handler (...)"
+function extractErrorMessage(error: any, fallback: string): string {
+  const raw: string = error?.message || error?.data || fallback;
+  // Strip "Uncaught Error: " prefix
+  let msg = raw.replace(/^Uncaught Error:\s*/i, "");
+  // Strip stack trace (everything from first newline)
+  const newlineIdx = msg.indexOf("\n");
+  if (newlineIdx !== -1) msg = msg.slice(0, newlineIdx);
+  return msg.trim() || fallback;
 }
 
 function getSessionTokenFromRequest(request: Request): string | null {
@@ -1010,9 +1026,9 @@ http.route({
       const styleContext = aesthetic || "premium leather journal";
       // Title is NEVER baked into the image — the 3D BookCoverScene renders it
       // dynamically as a gold foil text overlay, so name changes are free/instant.
-      const imagePrompt = `Generate a flat, front-facing rectangular notebook cover surface design. This will be used as a texture mapped onto a 3D book model, so it must be perfectly FLAT — no perspective, no 3D angles, no book spine, no shadows of a physical book. Do NOT include any text, words, titles, or lettering whatsoever. The design features: ${prompt}. Style: ${styleContext}. The image should be a seamless, edge-to-edge surface pattern or artwork suitable for wrapping onto a book cover. Rich textures, fine details, premium quality. Portrait orientation (taller than wide, roughly 3:4 ratio). Fill the entire frame with the cover design — no background, no margins, no mockup.`;
+      const imagePrompt = `Generate a flat, front-facing notebook cover surface design for a realistic 3D journal model. This must read as real cover artwork once mapped onto the notebook, so keep it perfectly FLAT: no perspective, no angled book, no book spine, no desk, no props, no mockup, no physical shadows outside the artwork. Do NOT include any text, words, titles, initials, or lettering unless explicitly requested. The design features: ${prompt}. Style: ${styleContext}. Use premium surface details such as leather grain, linen weave, foil stamping, embossing, debossing, ornamental pattern, painted artwork, or refined texture. The cover must have a visible focal composition, for example a centered emblem, medallion, decorative frame, botanical motif, or art-deco geometry, with enough contrast to read clearly on the notebook. Avoid plain blank covers, very dark near-solid fills, or large empty areas unless the prompt explicitly asks for minimalism. Keep the main composition vertically centered with a safe margin so important details are not clipped near the trim. Portrait orientation, taller than wide, roughly 3:4 ratio. Fill the frame with the cover surface only.`;
 
-      // Use Gemini 2.0 Flash with image generation
+      // Use the current Gemini native image generation model
       const geminiPayload = {
         contents: [{ parts: [{ text: imagePrompt }] }],
         generationConfig: {
@@ -1032,30 +1048,36 @@ http.route({
       if (!geminiResponse.ok) {
         const errorText = await geminiResponse.text();
         console.error("Gemini image gen error:", geminiResponse.status, errorText);
-        // Fallback: procedural gradient
-        const fallbackUrl = buildFallbackCover(prompt);
-        return new Response(JSON.stringify({ imageUrl: fallbackUrl, fallback: true }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        let detail = `Gemini API error ${geminiResponse.status}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          detail = parsed?.error?.message || detail;
+        } catch { /* keep default */ }
+        return new Response(
+          JSON.stringify({ error: detail }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const geminiData = await geminiResponse.json();
       const parts = geminiData?.candidates?.[0]?.content?.parts || [];
       const imagePart = parts.find((p: Record<string, unknown>) => p.inlineData);
 
-      if (imagePart?.inlineData) {
-        const { mimeType, data } = imagePart.inlineData as { mimeType: string; data: string };
-        const dataUrl = `data:${mimeType};base64,${data}`;
-        return new Response(JSON.stringify({ imageUrl: dataUrl }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!imagePart?.inlineData) {
+        // Check for blocked content or missing image
+        const blockReason = geminiData?.candidates?.[0]?.finishReason;
+        const feedback = geminiData?.promptFeedback?.blockReason;
+        const reason = feedback || blockReason || "unknown";
+        console.error("Gemini returned no image. Reason:", reason, JSON.stringify(geminiData).slice(0, 500));
+        return new Response(
+          JSON.stringify({ error: `AI could not generate image (${reason}). Try a different prompt.` }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      // No image: fallback
-      const fallbackUrl = buildFallbackCover(prompt);
-      return new Response(JSON.stringify({ imageUrl: fallbackUrl, fallback: true }), {
+      const { mimeType, data } = imagePart.inlineData as { mimeType: string; data: string };
+      const dataUrl = `data:${mimeType};base64,${data}`;
+      return new Response(JSON.stringify({ imageUrl: dataUrl }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1063,7 +1085,7 @@ http.route({
       console.error("Generate cover error:", error);
       return new Response(
         JSON.stringify({ error: "Internal server error" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
   }),
@@ -1101,7 +1123,7 @@ http.route({
       });
     } catch (error: any) {
       console.error("Auth login error:", error);
-      const message = error?.message || error?.data || "Login failed";
+      const message = extractErrorMessage(error, "Login failed");
       const status = message.includes("Invalid") || message.includes("no password") ? 401 : 500;
       return new Response(JSON.stringify({ error: message }), {
         status,
@@ -1145,7 +1167,7 @@ http.route({
       });
     } catch (error: any) {
       console.error("Auth signup error:", error);
-      const message = error?.message || error?.data || "Signup failed";
+      const message = extractErrorMessage(error, "Signup failed");
       const status = message.includes("already in use") ? 409 : 500;
       return new Response(JSON.stringify({ error: message }), {
         status,

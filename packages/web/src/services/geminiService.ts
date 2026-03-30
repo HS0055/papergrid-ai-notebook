@@ -14,6 +14,44 @@ interface GeneratedLayout {
   blocks: Block[];
 }
 
+const normalizeGeneratedCover = async (imageUrl: string): Promise<string> => {
+  if (
+    typeof window === 'undefined' ||
+    !imageUrl.startsWith('data:image/') ||
+    imageUrl.startsWith('data:image/svg+xml')
+  ) {
+    return imageUrl;
+  }
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.decoding = 'async';
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Failed to decode generated cover image.'));
+      element.src = imageUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return imageUrl;
+    }
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    return canvas.toDataURL('image/jpeg', 0.92);
+  } catch (error) {
+    console.warn('Failed to normalize generated cover image:', error);
+    return imageUrl;
+  }
+};
+
 export const generateLayout = async (prompt: string, industry?: string, aesthetic?: string): Promise<GeneratedLayout> => {
   try {
     const sessionToken = localStorage.getItem('papergrid_session');
@@ -57,8 +95,10 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
       matrixData: b.type === 'PRIORITY_MATRIX' ? (b.matrixData || { q1: '', q2: '', q3: '', q4: '' }) : undefined,
       gridData: b.gridData ? {
         columns: b.gridData.columns || [],
-        rows: b.gridData.rows?.map((row: string[]) =>
-          row.map((cellText: string) => ({ id: generateId(), content: cellText || "" }))
+        rows: b.gridData.rows?.map((row: Array<string | { id: string; content: string }>) =>
+          row.map((cell) =>
+            typeof cell === 'string' ? { id: generateId(), content: cell || "" } : cell
+          )
         ) || []
       } : undefined,
       calendarData: b.type === 'CALENDAR' ? (b.calendarData || { month: new Date().getMonth() + 1, year: new Date().getFullYear(), highlights: [] }) : undefined,
@@ -94,10 +134,18 @@ export const generateCover = async (prompt: string, aesthetic?: string): Promise
       throw new Error(errorData.error || `API error: ${response.status}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+
+    if (!data?.imageUrl) {
+      throw new Error('No image returned');
+    }
+
+    return {
+      ...data,
+      imageUrl: await normalizeGeneratedCover(data.imageUrl),
+    };
   } catch (error) {
     console.error("Cover generation failed:", error);
     throw error;
   }
 };
-

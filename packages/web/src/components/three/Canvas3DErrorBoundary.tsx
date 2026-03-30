@@ -3,6 +3,8 @@ import React from 'react';
 interface Props {
   children: React.ReactNode;
   fallback?: React.ReactNode;
+  /** Change this key to reset the error state (e.g. when switching notebooks) */
+  resetKey?: string;
 }
 
 interface State {
@@ -12,7 +14,8 @@ interface State {
 /**
  * Error boundary specifically for 3D Canvas components.
  * Catches WebGL crashes, missing module errors, etc.
- * Renders nothing (or a fallback) instead of crashing the page.
+ * Renders the fallback instead of crashing the page.
+ * Resets automatically when resetKey changes.
  */
 export class Canvas3DErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
@@ -22,6 +25,12 @@ export class Canvas3DErrorBoundary extends React.Component<Props, State> {
 
   static getDerivedStateFromError(): State {
     return { hasError: true };
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false });
+    }
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {

@@ -390,3 +390,23 @@ export const incrementAiUsage = mutation({
     return { allowed: true, used: used + 1 };
   },
 });
+
+// Admin: reset a user's password by email (dev use only)
+export const resetPassword = mutation({
+  args: {
+    email: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, { email, newPassword }) => {
+    assertPassword(newPassword);
+    const normalizedEmail = normalizeEmail(email);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .first();
+    if (!user) throw new Error("User not found");
+    const passwordHash = await hashPassword(newPassword);
+    await ctx.db.patch(user._id, { passwordHash });
+    return { success: true, email: normalizedEmail };
+  },
+});
