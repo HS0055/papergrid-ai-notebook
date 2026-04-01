@@ -4,6 +4,7 @@ import { Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { usePaperMaterial, useCoverMaterial } from '../shared/PaperMaterial';
 import { BOOK_WIDTH, BOOK_HEIGHT } from '../shared/BookGeometry';
+import { InsidePagesContent } from './InsidePagesContent';
 
 // ─── Constants ────────────────────────────────────────────
 const COVER_THICKNESS = 0.08;
@@ -120,6 +121,8 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
   const cachedMaterials = useRef<THREE.MeshStandardMaterial[]>([]);
   const materialsCollected = useRef(false);
   const prevOpacity = useRef(1);
+  // Shared open value readable by InsidePagesContent without re-render
+  const openRef = useRef(0);
 
   // Animation
   useFrame((state, delta) => {
@@ -144,6 +147,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
       targetOpen.current,
       lerpFactor,
     );
+    openRef.current = currentOpen.current;
 
     const open = currentOpen.current;
     const glowStrength = hovered ? Math.max(0, 1 - open * 0.7) : 0;
@@ -318,6 +322,13 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
         >
           <planeGeometry args={[BOOK_WIDTH - 0.1, BOOK_HEIGHT - 0.1]} />
         </mesh>
+        {/* ─── AI content glows into view as book opens ─── */}
+        <group
+          position={[hw, 0, PAGE_STACK_THICKNESS / 2 + 0.005]}
+          rotation={[0, Math.PI, 0]}
+        >
+          <InsidePagesContent openRef={openRef} isMobile={isMobile} />
+        </group>
 
         {/* ─── Front Cover (opens) - pivots at x=0 ─── */}
         <group ref={frontCoverRef}>

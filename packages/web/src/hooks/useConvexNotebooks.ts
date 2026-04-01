@@ -21,6 +21,7 @@ function authHeaders(): Record<string, string> {
  */
 export function useConvexNotebooks() {
     const loadingRef = useRef(false);
+    const syncingRef = useRef(false);
 
     const loadNotebooks = useCallback(async (): Promise<Notebook[] | null> => {
         const token = getToken();
@@ -42,6 +43,7 @@ export function useConvexNotebooks() {
         }
     }, []);
 
+    /** Save a single notebook. Returns the Convex document ID on success. */
     const saveNotebook = useCallback(async (notebook: Notebook): Promise<string | null> => {
         const token = getToken();
         if (!token || !API_BASE) return null;
@@ -60,6 +62,33 @@ export function useConvexNotebooks() {
         }
     }, []);
 
+    /**
+     * Sync ALL notebooks to Convex. Returns a map of localId → convexId
+     * for any notebooks whose IDs changed (new notebooks created in Convex).
+     */
+    const syncAllNotebooks = useCallback(async (notebooks: Notebook[]): Promise<Map<string, string>> => {
+        const token = getToken();
+        const idMap = new Map<string, string>();
+        if (!token || !API_BASE || syncingRef.current) return idMap;
+
+        syncingRef.current = true;
+        try {
+            for (const nb of notebooks) {
+                try {
+                    const convexId = await saveNotebook(nb);
+                    if (convexId && convexId !== nb.id) {
+                        idMap.set(nb.id, convexId);
+                    }
+                } catch {
+                    // Continue syncing other notebooks
+                }
+            }
+        } finally {
+            syncingRef.current = false;
+        }
+        return idMap;
+    }, [saveNotebook]);
+
     const deleteNotebook = useCallback(async (id: string): Promise<boolean> => {
         const token = getToken();
         if (!token || !API_BASE) return false;
@@ -76,5 +105,12 @@ export function useConvexNotebooks() {
         }
     }, []);
 
-    return { loadNotebooks, saveNotebook, deleteNotebook, isLoading: loadingRef };
+    return {
+        loadNotebooks,
+        saveNotebook,
+        syncAllNotebooks,
+        deleteNotebook,
+        isLoading: loadingRef,
+        isSyncing: syncingRef,
+    };
 }

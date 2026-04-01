@@ -114,17 +114,16 @@ export const StatsStrip: React.FC = () => {
       ref={sectionRef}
       className="relative overflow-hidden"
       style={{
-        // Clean dark-to-parchment gradient — shorter, crisper transition
+        // Clean dark-to-parchment gradient — crisp brand-aligned transition
         background: `linear-gradient(
           to bottom,
           #0f111a 0%,
-          #0f111a 20%,
-          #1a1832 35%,
-          #2d2548 48%,
-          #584a6a 60%,
-          #9b8fa0 72%,
-          #d4ccc4 84%,
-          #F4F0EC 94%,
+          #0f111a 30%,
+          #1e1b4b 55%,
+          #3730a3 68%,
+          #a5b4fc 78%,
+          #d6d3d1 88%,
+          #F4F0EC 95%,
           #F4F0EC 100%
         )`,
         paddingTop: 'clamp(60px, 10vh, 100px)',
@@ -163,7 +162,7 @@ export const StatsStrip: React.FC = () => {
           {/* Section tagline */}
           <p
             className="text-center text-sm font-semibold uppercase tracking-[0.2em] mb-10"
-            style={{ color: 'rgba(255,255,255,0.35)' }}
+            style={{ color: 'rgba(255,255,255,0.55)' }}
           >
             Everything you need to create
           </p>

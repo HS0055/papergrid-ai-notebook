@@ -65,7 +65,7 @@ export const InlineTestimonials: React.FC = () => {
   }, []);
 
   return (
-    <div ref={containerRef} className="py-16 px-6">
+    <div ref={containerRef} className="py-16 px-6" style={{ background: '#f8f6f3' }}>
       <div className="max-w-5xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {testimonials.map((t, i) => (

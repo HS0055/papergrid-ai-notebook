@@ -580,17 +580,7 @@ ${referenceExamples}
 18. IMPORTANT: Prefer the new specialized planner types over GRID workarounds. Use WEEKLY_VIEW instead of a 7-row GRID for weekly schedules. Use HABIT_TRACKER instead of a habits-in-columns GRID. Use TIME_BLOCK instead of a time-slot GRID.
 19. For "monthly planner", calendar, or month-at-a-glance requests: generate a full-page monthly spread using a GRID block with 7 columns ("Sun", "Mon", "Tue", etc.) and 5 empty rows for the weeks, so users have large typable boxes for every day. Do NOT use the mini CALENDAR block for the main calendar grid.
 
-=== MULTI-PAGE GENERATION ===
-20. You MUST return a JSON object with a "pages" array. Each page has: title, paperType, themeColor, and blocks.
-21. For MOST requests, return exactly 1 page in the pages array.
-22. Generate MULTIPLE pages (2-8) only when the request naturally calls for it:
-    - "weekly planner" → 1 overview page + 7 daily pages (8 total)
-    - "weekly meal planner" → 1 shopping list page + 7 day pages
-    - "project tracker" or "sprint" → 1 overview/kanban page + detail pages per phase
-    - "travel itinerary" for multi-day trips → 1 overview + 1 page per day
-    - "study planner" with multiple subjects → 1 schedule page + 1 per subject
-23. Each page in a multi-page set should have a DIFFERENT title and can have a different paperType/themeColor for variety.
-24. Pages should be COORDINATED — they form a cohesive set, not random unrelated layouts. The first page is typically an overview or index.`;
+Return a JSON object with: title (string), paperType (enum), themeColor (enum), blocks (array of block objects with type, content, alignment, emphasis, color, side, gridData, moodValue, matrixData, checked, calendarData, weeklyViewData, habitTrackerData, goalSectionData, timeBlockData, dailySectionData).`;
 
       const geminiPayload = {
         contents: [
@@ -662,6 +652,17 @@ ${referenceExamples}
                         month: { type: "NUMBER" },
                         year: { type: "NUMBER" },
                         highlights: { type: "ARRAY", items: { type: "NUMBER" } },
+                        events: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              day: { type: "NUMBER" },
+                              title: { type: "STRING" },
+                              color: { type: "STRING" },
+                            },
+                          },
+                        },
                       },
                       nullable: true,
                     },
@@ -676,6 +677,16 @@ ${referenceExamples}
                             properties: {
                               label: { type: "STRING" },
                               content: { type: "STRING" },
+                              tasks: {
+                                type: "ARRAY",
+                                items: {
+                                  type: "OBJECT",
+                                  properties: {
+                                    text: { type: "STRING" },
+                                    checked: { type: "BOOLEAN" },
+                                  },
+                                },
+                              },
                             },
                           },
                         },
@@ -845,6 +856,16 @@ ${referenceExamples}
           month: typeof cal.month === "number" ? cal.month : new Date().getMonth() + 1,
           year: typeof cal.year === "number" ? cal.year : new Date().getFullYear(),
           highlights: Array.isArray(cal.highlights) ? cal.highlights.filter((n: unknown) => typeof n === "number") : [],
+          events: Array.isArray(cal.events)
+            ? cal.events.map((e: unknown) => {
+              const ev = e as Record<string, unknown>;
+              return {
+                day: typeof ev.day === "number" ? ev.day : 1,
+                title: typeof ev.title === "string" ? ev.title : "",
+                color: typeof ev.color === "string" ? ev.color : undefined,
+              };
+            })
+            : [],
         };
       };
 
@@ -857,13 +878,22 @@ ${referenceExamples}
             return {
               label: typeof day.label === "string" ? day.label : "",
               content: typeof day.content === "string" ? day.content : "",
+              tasks: Array.isArray(day.tasks)
+                ? day.tasks.map((t: unknown) => {
+                  const task = t as Record<string, unknown>;
+                  return {
+                    text: typeof task.text === "string" ? task.text : "",
+                    checked: task.checked === true,
+                  };
+                })
+                : [],
             };
           })
           : [
-            { label: "Monday", content: "" }, { label: "Tuesday", content: "" },
-            { label: "Wednesday", content: "" }, { label: "Thursday", content: "" },
-            { label: "Friday", content: "" }, { label: "Saturday", content: "" },
-            { label: "Sunday", content: "" },
+            { label: "Monday", content: "", tasks: [] }, { label: "Tuesday", content: "", tasks: [] },
+            { label: "Wednesday", content: "", tasks: [] }, { label: "Thursday", content: "", tasks: [] },
+            { label: "Friday", content: "", tasks: [] }, { label: "Saturday", content: "", tasks: [] },
+            { label: "Sunday", content: "", tasks: [] },
           ];
         return { startDate: typeof wv.startDate === "string" ? wv.startDate : undefined, days };
       };

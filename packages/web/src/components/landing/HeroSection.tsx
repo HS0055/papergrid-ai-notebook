@@ -193,7 +193,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           style={{
             zIndex: 20,
             paddingTop: isMobile ? 0 : '1rem',
-            paddingBottom: isMobile ? 0 : '18rem',
+            paddingBottom: isMobile ? 0 : '10rem',
           }}
         >
           {/* Badge */}

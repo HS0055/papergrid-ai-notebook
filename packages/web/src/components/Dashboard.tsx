@@ -193,39 +193,60 @@ export const Dashboard: React.FC = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Load notebooks: try Convex (if authenticated), fall back to localStorage
+  // Track whether initial load is complete to avoid syncing stale data
+  const initialLoadDone = useRef(false);
+
+  // Load notebooks — Convex is source of truth when authenticated
   useEffect(() => {
     let cancelled = false;
+    initialLoadDone.current = false;
 
     const load = async () => {
-      // Try loading from Convex if user is authenticated
+      // 1) Authenticated → Convex is the ONLY source of truth
       if (auth.isAuthenticated) {
         try {
           const cloudNbs = await convex.loadNotebooks();
           if (!cancelled && cloudNbs && cloudNbs.length > 0) {
             setNotebooks(cloudNbs);
             setActiveNotebookId(cloudNbs[0].id);
+            // Cache to localStorage for offline
+            void saveNotebooksToStorage(storageKey, cloudNbs).catch(() => {});
+            initialLoadDone.current = true;
             return;
           }
         } catch (e) {
           console.error("Failed to load from Convex:", e);
         }
-      }
-
-      // Fall back to local storage
-      try {
-        const stored = await loadNotebooksFromStorage(storageKey);
-        if (!cancelled && stored && stored.length > 0) {
-          setNotebooks(stored);
-          setActiveNotebookId(stored[0].id);
-          return;
+        // Convex returned empty or failed — try localStorage as offline cache
+        try {
+          const stored = await loadNotebooksFromStorage(storageKey);
+          if (!cancelled && stored && stored.length > 0) {
+            setNotebooks(stored);
+            setActiveNotebookId(stored[0].id);
+            initialLoadDone.current = true;
+            return;
+          }
+        } catch {
+          // ignore
         }
-      } catch (e) {
-        console.error("Failed to load saved data:", e);
+      } else {
+        // 2) Not authenticated → localStorage only
+        try {
+          const stored = await loadNotebooksFromStorage(storageKey);
+          if (!cancelled && stored && stored.length > 0) {
+            setNotebooks(stored);
+            setActiveNotebookId(stored[0].id);
+            initialLoadDone.current = true;
+            return;
+          }
+        } catch {
+          // ignore
+        }
       }
 
       if (cancelled) return;
 
+      // 3) Nothing found anywhere — create default notebook
       const defaultNb: Notebook = {
         id: 'nb-1',
         title: 'My Journal',
@@ -246,6 +267,7 @@ export const Dashboard: React.FC = () => {
       };
       setNotebooks([defaultNb]);
       setActiveNotebookId(defaultNb.id);
+      initialLoadDone.current = true;
     };
 
     void load();
@@ -255,9 +277,9 @@ export const Dashboard: React.FC = () => {
     };
   }, [auth.isAuthenticated, storageKey]);
 
-  // Save to local storage (user-scoped)
+  // Save to localStorage (user-scoped) on every change
   useEffect(() => {
-    if (notebooks.length > 0) {
+    if (notebooks.length > 0 && initialLoadDone.current) {
       void saveNotebooksToStorage(storageKey, notebooks).catch((error) => {
         console.error('Failed to persist notebooks:', error);
         addToast('Could not save notebook changes locally.', 'error');
@@ -265,20 +287,26 @@ export const Dashboard: React.FC = () => {
     }
   }, [addToast, notebooks, storageKey]);
 
-  // Sync active notebook to Convex (debounced)
+  // Sync ALL notebooks to Convex (debounced, remap IDs)
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!auth.isAuthenticated || notebooks.length === 0) return;
-    const nb = notebooks.find(n => n.id === activeNotebookId);
-    if (!nb) return;
+    if (!auth.isAuthenticated || notebooks.length === 0 || !initialLoadDone.current) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(() => {
-      void convex.saveNotebook(nb);
-    }, 2000);
+    syncTimerRef.current = setTimeout(async () => {
+      const idMap = await convex.syncAllNotebooks(notebooks);
+      // Remap any local IDs to Convex IDs so future syncs are updates, not creates
+      if (idMap.size > 0) {
+        setNotebooks(prev => prev.map(nb => {
+          const newId = idMap.get(nb.id);
+          return newId ? { ...nb, id: newId } : nb;
+        }));
+        setActiveNotebookId(prev => idMap.get(prev) ?? prev);
+      }
+    }, 3000);
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [auth.isAuthenticated, notebooks, activeNotebookId]);
+  }, [auth.isAuthenticated, notebooks]);
 
   const activeNotebook = notebooks.find(n => n.id === activeNotebookId) || notebooks[0];
   const activePage = activeNotebook && activePageIndex >= 0 && activePageIndex < activeNotebook.pages.length

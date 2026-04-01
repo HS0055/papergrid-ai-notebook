@@ -313,6 +313,17 @@ export const AestheticsSection: React.FC<AestheticsSectionProps> = ({ onLaunch }
           ))}
         </div>
       </div>
+      {/* Seamless gradient into dark FinalCTA — no separate divider needed */}
+      <div
+        style={{
+          height: '120px',
+          marginTop: '4rem',
+          marginLeft: '-1.5rem',
+          marginRight: '-1.5rem',
+          marginBottom: '-1px',
+          background: 'linear-gradient(to bottom, #F4F0EC 0%, #2a1f3d 55%, #0f111a 100%)',
+        }}
+      />
     </section>
   );
 };
