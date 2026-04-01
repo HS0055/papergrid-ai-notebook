@@ -1,0 +1,17 @@
+{
+  "id": "ai-layout-v2_20260330",
+  "title": "AI Layout Generation v2 — Richer Blocks + Smarter AI",
+  "type": "feature",
+  "status": "complete",
+  "created": "2026-03-30T00:00:00Z",
+  "updated": "2026-03-31T00:00:00Z",
+  "phases": {
+    "total": 4,
+    "completed": 4
+  },
+  "tasks": {
+    "total": 22,
+    "completed": 22
+  },
+  "commits": []
+}

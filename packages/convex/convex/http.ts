@@ -580,7 +580,17 @@ ${referenceExamples}
 18. IMPORTANT: Prefer the new specialized planner types over GRID workarounds. Use WEEKLY_VIEW instead of a 7-row GRID for weekly schedules. Use HABIT_TRACKER instead of a habits-in-columns GRID. Use TIME_BLOCK instead of a time-slot GRID.
 19. For "monthly planner", calendar, or month-at-a-glance requests: generate a full-page monthly spread using a GRID block with 7 columns ("Sun", "Mon", "Tue", etc.) and 5 empty rows for the weeks, so users have large typable boxes for every day. Do NOT use the mini CALENDAR block for the main calendar grid.
 
-Return a JSON object with: title (string), paperType (enum), themeColor (enum), blocks (array of block objects with type, content, alignment, emphasis, color, side, gridData, moodValue, matrixData, checked, calendarData, weeklyViewData, habitTrackerData, goalSectionData, timeBlockData, dailySectionData).`;
+=== MULTI-PAGE GENERATION ===
+20. You MUST return a JSON object with a "pages" array. Each page has: title, paperType, themeColor, and blocks.
+21. For MOST requests, return exactly 1 page in the pages array.
+22. Generate MULTIPLE pages (2-8) only when the request naturally calls for it:
+    - "weekly planner" → 1 overview page + 7 daily pages (8 total)
+    - "weekly meal planner" → 1 shopping list page + 7 day pages
+    - "project tracker" or "sprint" → 1 overview/kanban page + detail pages per phase
+    - "travel itinerary" for multi-day trips → 1 overview + 1 page per day
+    - "study planner" with multiple subjects → 1 schedule page + 1 per subject
+23. Each page in a multi-page set should have a DIFFERENT title and can have a different paperType/themeColor for variety.
+24. Pages should be COORDINATED — they form a cohesive set, not random unrelated layouts. The first page is typically an overview or index.`;
 
       const geminiPayload = {
         contents: [
@@ -930,15 +940,15 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
         };
       };
 
-      const blocks = (layoutData.blocks || []).map(
-        (b: Record<string, unknown>, index: number) => ({
+      const hydrateBlocks = (rawBlocks: Record<string, unknown>[], fallbackColor: string) =>
+        rawBlocks.map((b, index) => ({
           id: generateId(),
           type: b.type || "TEXT",
           content: b.content || "",
           checked: typeof b.checked === "boolean" ? b.checked : false,
           alignment: b.alignment || "left",
           emphasis: b.emphasis || "none",
-          color: b.color || layoutData.themeColor || "rose",
+          color: b.color || fallbackColor || "rose",
           side: b.side || "left",
           sortOrder: index,
           moodValue:
@@ -974,15 +984,24 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
             b.type === "DAILY_SECTION"
               ? parseDailySectionData(b.dailySectionData)
               : undefined,
-        })
-      );
+        }));
 
-      const result = {
-        title: layoutData.title,
-        paperType: layoutData.paperType,
-        themeColor: layoutData.themeColor,
-        blocks,
-      };
+      // Multi-page support: AI returns { pages: [...] }
+      const rawPages: Record<string, unknown>[] = Array.isArray(layoutData.pages)
+        ? layoutData.pages
+        : [layoutData];
+
+      const pages = rawPages.map((page: Record<string, unknown>) => ({
+        title: (page.title as string) || "Untitled",
+        paperType: (page.paperType as string) || "lined",
+        themeColor: (page.themeColor as string) || "slate",
+        blocks: hydrateBlocks(
+          (Array.isArray(page.blocks) ? page.blocks : []) as Record<string, unknown>[],
+          (page.themeColor as string) || "slate"
+        ),
+      }));
+
+      const result = { pages };
 
       return new Response(JSON.stringify(result), {
         status: 200,
@@ -1243,6 +1262,290 @@ http.route({
   }),
 });
 
+// ── Notebook sync: full load ──────────────────────────────
+http.route({
+  path: "/api/notebooks",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const user = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const notebooks = await ctx.runQuery(api.notebooks.listByUser, {
+        userId: user._id as any,
+        sessionToken,
+      });
+
+      const full = [];
+      for (const nb of notebooks) {
+        const pages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nb._id });
+        const pagesWithBlocks = [];
+        for (const page of pages) {
+          const blocks = await ctx.runQuery(api.blocks.listByPage, { pageId: page._id });
+          pagesWithBlocks.push({
+            id: page._id,
+            title: page.title,
+            createdAt: page.createdAt || "",
+            paperType: page.paperType,
+            aesthetic: page.aesthetic,
+            themeColor: page.themeColor,
+            blocks: blocks.map((b: any) => ({
+              id: b._id,
+              type: b.type,
+              content: b.content,
+              side: b.side,
+              checked: b.checked,
+              alignment: b.alignment,
+              emphasis: b.emphasis,
+              color: b.color,
+              gridData: b.gridData,
+              matrixData: b.matrixData,
+              moodValue: b.moodValue,
+              musicData: b.musicData,
+              calendarData: b.calendarData,
+              weeklyViewData: b.weeklyViewData,
+              habitTrackerData: b.habitTrackerData,
+              goalSectionData: b.goalSectionData,
+              timeBlockData: b.timeBlockData,
+              dailySectionData: b.dailySectionData,
+            })),
+          });
+        }
+        full.push({
+          id: nb._id,
+          title: nb.title,
+          coverColor: nb.coverColor,
+          coverImageUrl: (nb as any).coverImageUrl || undefined,
+          bookmarks: nb.bookmarks,
+          createdAt: (nb as any).createdAt || "",
+          pages: pagesWithBlocks,
+        });
+      }
+
+      return new Response(JSON.stringify({ notebooks: full }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Notebooks load error:", error);
+      return new Response(JSON.stringify({ error: "Failed to load notebooks" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+// ── Notebook sync: save one notebook with all pages + blocks ──
+http.route({
+  path: "/api/notebooks/save",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const user = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const body = await request.json();
+      const notebook = body?.notebook;
+      if (!notebook || !notebook.title) {
+        return new Response(JSON.stringify({ error: "notebook object required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const nbId = await ctx.runMutation(api.notebooks.create, {
+        userId: user._id as any,
+        title: notebook.title,
+        coverColor: notebook.coverColor || "bg-indigo-900",
+        sessionToken,
+      });
+
+      for (const page of notebook.pages || []) {
+        const pageId = await ctx.runMutation(api.pages.create, {
+          notebookId: nbId,
+          title: page.title || "Untitled",
+          paperType: page.paperType || "lined",
+          aesthetic: page.aesthetic,
+          themeColor: page.themeColor,
+        });
+
+        if (page.blocks && page.blocks.length > 0) {
+          const blockData = page.blocks.map((b: any) => ({
+            type: b.type || "TEXT",
+            content: b.content || "",
+            side: b.side === "right" ? ("right" as const) : ("left" as const),
+            checked: b.checked,
+            alignment: b.alignment,
+            emphasis: b.emphasis,
+            color: b.color,
+            gridData: b.gridData,
+            matrixData: b.matrixData,
+            moodValue: b.moodValue,
+            musicData: b.musicData,
+            calendarData: b.calendarData,
+            weeklyViewData: b.weeklyViewData,
+            habitTrackerData: b.habitTrackerData,
+            goalSectionData: b.goalSectionData,
+            timeBlockData: b.timeBlockData,
+            dailySectionData: b.dailySectionData,
+          }));
+          await ctx.runMutation(api.blocks.createBatch, { pageId, blocks: blockData });
+        }
+      }
+
+      return new Response(JSON.stringify({ id: nbId, success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Notebook save error:", error);
+      return new Response(JSON.stringify({ error: "Failed to save notebook" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+// ── Notebook delete ──────────────────────────────────────
+http.route({
+  path: "/api/notebooks/delete",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const body = await request.json();
+      const notebookId = body?.id;
+      if (!notebookId) {
+        return new Response(JSON.stringify({ error: "id required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      await ctx.runMutation(api.notebooks.remove, { id: notebookId, sessionToken });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("Notebook delete error:", error);
+      return new Response(JSON.stringify({ error: "Failed to delete notebook" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+// ── Admin endpoints ──────────────────────────────────────
+
+http.route({
+  path: "/api/admin/users",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const users = await ctx.runQuery(api.users.adminListUsers, { sessionToken });
+      return new Response(JSON.stringify({ users }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to list users");
+      const status = message.includes("Forbidden") || message.includes("admin") ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/set-plan",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const body = await request.json();
+      const { targetUserId, plan } = body as { targetUserId: string; plan: string };
+      await ctx.runMutation(api.users.adminSetPlan, {
+        sessionToken,
+        targetUserId: targetUserId as any,
+        plan: plan as any,
+      });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to set plan");
+      const status = message.includes("Forbidden") || message.includes("admin") ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/set-role",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const body = await request.json();
+      const { targetUserId, role } = body as { targetUserId: string; role: string };
+      await ctx.runMutation(api.users.adminSetRole, {
+        sessionToken,
+        targetUserId: targetUserId as any,
+        role: role as any,
+      });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to set role");
+      const status = message.includes("Forbidden") || message.includes("admin") ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/reset-usage",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const body = await request.json();
+      const { targetUserId } = body as { targetUserId: string };
+      await ctx.runMutation(api.users.adminResetUsage, {
+        sessionToken,
+        targetUserId: targetUserId as any,
+      });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to reset usage");
+      const status = message.includes("Forbidden") || message.includes("admin") ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // Handle CORS preflight for all routes
 for (const path of [
   "/api/generate-layout",
@@ -1251,6 +1554,13 @@ for (const path of [
   "/api/auth/signup",
   "/api/auth/me",
   "/api/auth/logout",
+  "/api/notebooks",
+  "/api/notebooks/save",
+  "/api/notebooks/delete",
+  "/api/admin/users",
+  "/api/admin/set-plan",
+  "/api/admin/set-role",
+  "/api/admin/reset-usage",
 ]) {
   http.route({
     path,

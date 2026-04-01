@@ -1,13 +1,8 @@
-import { BlockType, Block } from "@papergrid/core";
-import { validateAIOutput } from "@papergrid/core";
-
-const generateId = () => crypto.randomUUID();
-
-const VALID_BLOCK_TYPES = new Set<string>(Object.values(BlockType));
+import { Block } from "@papergrid/core";
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-interface GeneratedLayout {
+export interface GeneratedPage {
   title: string;
   paperType: 'lined' | 'grid' | 'dotted' | 'blank' | 'music' | 'rows' | 'isometric' | 'hex' | 'legal' | 'crumpled';
   themeColor: string;
@@ -52,7 +47,7 @@ const normalizeGeneratedCover = async (imageUrl: string): Promise<string> => {
   }
 };
 
-export const generateLayout = async (prompt: string, industry?: string, aesthetic?: string): Promise<GeneratedLayout> => {
+export const generateLayout = async (prompt: string, industry?: string, aesthetic?: string): Promise<GeneratedPage[]> => {
   try {
     const sessionToken = localStorage.getItem('papergrid_session');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -72,49 +67,21 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
 
     const data = await response.json();
 
-    // Validate AI output with Zod schema
-    const validation = validateAIOutput(data);
-    if (!validation.success) {
-      console.error('AI output validation failed:', validation.errors);
-      throw new Error('AI generated an invalid layout. Please try again.');
+    // Backend returns { pages: [...] } — each page already hydrated with IDs
+    const rawPages: GeneratedPage[] = Array.isArray(data.pages)
+      ? data.pages
+      : [data]; // backward compat: single-page response
+
+    if (rawPages.length === 0) {
+      throw new Error('AI generated an empty response. Please try again.');
     }
 
-    const validated = validation.data;
-
-    // Hydrate with IDs
-    const blocks: Block[] = validated.blocks.map((b) => ({
-      id: generateId(),
-      type: VALID_BLOCK_TYPES.has(b.type) ? (b.type as BlockType) : BlockType.TEXT,
-      content: b.content || "",
-      checked: b.checked ?? false,
-      alignment: b.alignment || 'left',
-      emphasis: b.emphasis || 'none',
-      color: b.color || validated.themeColor || 'slate',
-      side: b.side || 'left',
-      moodValue: b.type === 'MOOD_TRACKER' ? (b.moodValue ?? 2) : undefined,
-      matrixData: b.type === 'PRIORITY_MATRIX' ? (b.matrixData || { q1: '', q2: '', q3: '', q4: '' }) : undefined,
-      gridData: b.gridData ? {
-        columns: b.gridData.columns || [],
-        rows: b.gridData.rows?.map((row: Array<string | { id: string; content: string }>) =>
-          row.map((cell) =>
-            typeof cell === 'string' ? { id: generateId(), content: cell || "" } : cell
-          )
-        ) || []
-      } : undefined,
-      calendarData: b.type === 'CALENDAR' ? (b.calendarData || { month: new Date().getMonth() + 1, year: new Date().getFullYear(), highlights: [] }) : undefined,
-      weeklyViewData: b.type === 'WEEKLY_VIEW' ? (b.weeklyViewData || { days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => ({ label: d, content: '' })) }) : undefined,
-      habitTrackerData: b.type === 'HABIT_TRACKER' ? (b.habitTrackerData || { habits: [], days: 7, checked: [] }) : undefined,
-      goalSectionData: b.type === 'GOAL_SECTION' ? (b.goalSectionData || { goals: [] }) : undefined,
-      timeBlockData: b.type === 'TIME_BLOCK' ? (b.timeBlockData || { startHour: 8, endHour: 18, interval: 60 as 30 | 60, entries: [] }) : undefined,
-      dailySectionData: b.type === 'DAILY_SECTION' ? (b.dailySectionData || { sections: [{ label: 'Morning', content: '' }, { label: 'Afternoon', content: '' }, { label: 'Evening', content: '' }] }) : undefined
+    return rawPages.map((page) => ({
+      title: page.title || 'Untitled',
+      paperType: page.paperType || 'lined',
+      themeColor: page.themeColor || 'slate',
+      blocks: (page.blocks || []) as Block[],
     }));
-
-    return {
-      title: validated.title || 'Untitled',
-      paperType: validated.paperType || 'lined',
-      themeColor: validated.themeColor || 'slate',
-      blocks,
-    };
   } catch (error) {
     console.error("Layout generation failed:", error);
     throw error;

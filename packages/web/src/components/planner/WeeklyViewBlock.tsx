@@ -1,5 +1,6 @@
-import React from 'react';
-import { Block, WeeklyViewData, WeeklyViewDay } from '@papergrid/core';
+import React, { useState } from 'react';
+import { Block, WeeklyViewData, WeeklyViewDay, WeeklyViewTask } from '@papergrid/core';
+import { Check, Plus } from 'lucide-react';
 
 interface WeeklyViewBlockProps {
   block: Block;
@@ -34,13 +35,51 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
   const data = block.weeklyViewData ?? getDefaultWeeklyData();
   const days = data.days.length > 0 ? data.days : DEFAULT_DAYS;
 
+  const [addingTaskDay, setAddingTaskDay] = useState<number | null>(null);
+  const [newTaskText, setNewTaskText] = useState('');
+
+  const updateDays = (newDays: WeeklyViewDay[]) => {
+    onChange(block.id, {
+      weeklyViewData: { ...data, days: newDays },
+    });
+  };
+
   const handleDayContentChange = (index: number, content: string) => {
     const newDays = days.map((day, i) =>
       i === index ? { ...day, content } : day
     );
-    onChange(block.id, {
-      weeklyViewData: { ...data, days: newDays },
+    updateDays(newDays);
+  };
+
+  const toggleTask = (dayIndex: number, taskIndex: number) => {
+    const newDays = days.map((day, di) => {
+      if (di !== dayIndex || !day.tasks) return day;
+      const newTasks = day.tasks.map((t, ti) =>
+        ti === taskIndex ? { ...t, checked: !t.checked } : t
+      );
+      return { ...day, tasks: newTasks };
     });
+    updateDays(newDays);
+  };
+
+  const addTask = (dayIndex: number) => {
+    if (!newTaskText.trim()) return;
+    const newTask: WeeklyViewTask = { text: newTaskText.trim(), checked: false };
+    const newDays = days.map((day, di) => {
+      if (di !== dayIndex) return day;
+      return { ...day, tasks: [...(day.tasks || []), newTask] };
+    });
+    updateDays(newDays);
+    setNewTaskText('');
+    setAddingTaskDay(null);
+  };
+
+  const removeTask = (dayIndex: number, taskIndex: number) => {
+    const newDays = days.map((day, di) => {
+      if (di !== dayIndex || !day.tasks) return day;
+      return { ...day, tasks: day.tasks.filter((_, ti) => ti !== taskIndex) };
+    });
+    updateDays(newDays);
   };
 
   const isWeekend = (label: string): boolean => {
@@ -51,8 +90,10 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
   const topRow = days.slice(0, 4);
   const bottomRow = days.slice(4);
 
-  const renderDayCard = (day: WeeklyViewDay, index: number, globalIndex: number) => {
+  const renderDayCard = (day: WeeklyViewDay, globalIndex: number) => {
     const weekend = isWeekend(day.label);
+    const tasks = day.tasks || [];
+    const isAdding = addingTaskDay === globalIndex;
 
     return (
       <div
@@ -70,17 +111,84 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
         >
           {day.label}
         </div>
-        {/* Content area */}
+
+        {/* Notes area */}
         <textarea
-          className={`w-full flex-1 resize-none bg-transparent font-hand text-sm text-gray-700 placeholder-gray-300 focus:outline-none p-2 border-none ${
+          className={`w-full resize-none bg-transparent font-hand text-sm text-gray-700 placeholder-gray-300 focus:outline-none p-2 border-none ${
             weekend ? 'focus:bg-amber-50' : colorClasses.focusBg
           }`}
-          style={{ minHeight: '64px', lineHeight: '32px' }}
+          style={{ minHeight: '48px', lineHeight: '32px' }}
           value={day.content}
           onChange={(e) => handleDayContentChange(globalIndex, e.target.value)}
-          placeholder="Plans..."
+          placeholder="Notes..."
           spellCheck={false}
         />
+
+        {/* Tasks list */}
+        {tasks.length > 0 && (
+          <div className={`border-t ${weekend ? 'border-amber-200' : colorClasses.border} px-2 py-1`}>
+            {tasks.map((task, ti) => (
+              <div
+                key={ti}
+                className="flex items-center gap-1.5 group/task"
+                style={{ minHeight: '24px' }}
+              >
+                <button
+                  onClick={() => toggleTask(globalIndex, ti)}
+                  className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                    task.checked
+                      ? `${colorClasses.highlight} ${colorClasses.border} ${colorClasses.text}`
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  aria-label={`${task.checked ? 'Uncheck' : 'Check'} task`}
+                >
+                  {task.checked && <Check size={8} strokeWidth={3} />}
+                </button>
+                <span
+                  className={`text-xs font-sans flex-1 ${
+                    task.checked ? 'text-gray-400 line-through' : 'text-gray-600'
+                  }`}
+                >
+                  {task.text}
+                </span>
+                <button
+                  onClick={() => removeTask(globalIndex, ti)}
+                  className="opacity-0 group-hover/task:opacity-100 text-gray-300 hover:text-red-400 text-[10px] transition-opacity"
+                  aria-label="Remove task"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add task inline */}
+        {isAdding ? (
+          <div className={`border-t ${weekend ? 'border-amber-200' : colorClasses.border} px-2 py-1 flex items-center gap-1`}>
+            <input
+              className="flex-1 text-xs font-sans bg-transparent border-none focus:outline-none placeholder-gray-300 py-0.5"
+              value={newTaskText}
+              onChange={(e) => setNewTaskText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addTask(globalIndex);
+                if (e.key === 'Escape') { setAddingTaskDay(null); setNewTaskText(''); }
+              }}
+              placeholder="Task..."
+              autoFocus
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => { setAddingTaskDay(globalIndex); setNewTaskText(''); }}
+            className={`w-full text-[10px] font-sans ${colorClasses.text} opacity-40 hover:opacity-100 transition-opacity border-t ${
+              weekend ? 'border-amber-200' : colorClasses.border
+            } flex items-center justify-center gap-0.5`}
+            style={{ height: '24px' }}
+          >
+            <Plus size={10} /> task
+          </button>
+        )}
       </div>
     );
   };
@@ -90,12 +198,12 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
       <div className="flex flex-col gap-2">
         {/* Top row: first 4 days */}
         <div className="grid grid-cols-4 gap-2">
-          {topRow.map((day, i) => renderDayCard(day, i, i))}
+          {topRow.map((day, i) => renderDayCard(day, i))}
         </div>
         {/* Bottom row: remaining days */}
         {bottomRow.length > 0 && (
-          <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${bottomRow.length}, minmax(0, 1fr))` }}>
-            {bottomRow.map((day, i) => renderDayCard(day, i, i + topRow.length))}
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${bottomRow.length}, minmax(0, 1fr))` }}>
+            {bottomRow.map((day, i) => renderDayCard(day, i + topRow.length))}
           </div>
         )}
       </div>

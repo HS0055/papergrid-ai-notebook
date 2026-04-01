@@ -38,15 +38,28 @@ export interface MusicStaffData {
   notes: MusicNote[];
 }
 
+export interface CalendarEvent {
+  day: number;           // 1-31
+  title: string;
+  color?: string;        // theme color name
+}
+
 export interface CalendarData {
   month: number;         // 1-12
   year: number;          // e.g., 2026
   highlights?: number[]; // highlighted date numbers
+  events?: CalendarEvent[]; // per-day events
+}
+
+export interface WeeklyViewTask {
+  text: string;
+  checked: boolean;
 }
 
 export interface WeeklyViewDay {
   label: string;         // "Monday", "Tue", etc.
   content: string;
+  tasks?: WeeklyViewTask[];
 }
 
 export interface WeeklyViewData {

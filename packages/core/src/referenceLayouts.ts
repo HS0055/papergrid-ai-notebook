@@ -68,10 +68,13 @@ const weeklyPlanner: ReferenceLayout = {
       side: 'left', alignment: 'left', emphasis: 'none', color: 'slate',
       weeklyViewData: {
         days: [
-          { label: 'Monday', content: '' }, { label: 'Tuesday', content: '' },
-          { label: 'Wednesday', content: '' }, { label: 'Thursday', content: '' },
-          { label: 'Friday', content: '' }, { label: 'Saturday', content: '' },
-          { label: 'Sunday', content: '' },
+          { label: 'Monday', content: '', tasks: [{ text: 'Plan the week', checked: false }, { text: 'Review goals', checked: false }] },
+          { label: 'Tuesday', content: '', tasks: [{ text: 'Deep work block', checked: false }] },
+          { label: 'Wednesday', content: '', tasks: [{ text: 'Team sync', checked: false }] },
+          { label: 'Thursday', content: '', tasks: [{ text: 'Project milestone', checked: false }] },
+          { label: 'Friday', content: '', tasks: [{ text: 'Weekly wrap-up', checked: false }] },
+          { label: 'Saturday', content: '', tasks: [{ text: 'Personal time', checked: false }] },
+          { label: 'Sunday', content: '', tasks: [{ text: 'Prep for next week', checked: false }] },
         ],
       },
     },
@@ -82,7 +85,7 @@ const weeklyPlanner: ReferenceLayout = {
     {
       id: rid(), type: BlockType.CALENDAR, content: 'This Week',
       side: 'right', alignment: 'center', emphasis: 'none', color: 'slate',
-      calendarData: { month: 3, year: 2026, highlights: [] },
+      calendarData: { month: 3, year: 2026, highlights: [2, 5, 9], events: [{ day: 2, title: 'Team Standup', color: 'sky' }, { day: 5, title: 'Sprint Review', color: 'indigo' }, { day: 9, title: 'Planning', color: 'emerald' }] },
     },
     {
       id: rid(), type: BlockType.HEADING, content: 'Focus This Week',
@@ -434,7 +437,7 @@ const monthlyOverview: ReferenceLayout = {
     {
       id: rid(), type: BlockType.CALENDAR, content: 'Month at a Glance',
       side: 'left', alignment: 'center', emphasis: 'none', color: 'indigo',
-      calendarData: { month: 3, year: 2026, highlights: [] },
+      calendarData: { month: 3, year: 2026, highlights: [1, 8, 15, 22], events: [{ day: 1, title: 'Month Start', color: 'indigo' }, { day: 8, title: 'Review Meeting', color: 'sky' }, { day: 15, title: 'Mid-Month Check', color: 'amber' }, { day: 22, title: 'Sprint End', color: 'emerald' }] },
     },
     {
       id: rid(), type: BlockType.GOAL_SECTION, content: 'Monthly Goals',
@@ -947,7 +950,7 @@ const fitnessHabitTracker: ReferenceLayout = {
     {
       id: rid(), type: BlockType.CALENDAR, content: 'March 2026',
       side: 'right', alignment: 'center', emphasis: 'none', color: 'sky',
-      calendarData: { month: 3, year: 2026, highlights: [] },
+      calendarData: { month: 3, year: 2026, highlights: [3, 5, 10, 17, 24], events: [{ day: 3, title: 'Leg Day', color: 'sky' }, { day: 5, title: 'Cardio', color: 'emerald' }, { day: 10, title: 'Upper Body', color: 'sky' }, { day: 17, title: 'Rest Day', color: 'amber' }, { day: 24, title: 'Progress Check', color: 'rose' }] },
     },
     {
       id: rid(), type: BlockType.MOOD_TRACKER, content: 'Post-workout energy',
@@ -994,13 +997,13 @@ const projectTimeline: ReferenceLayout = {
       side: 'left', alignment: 'left', emphasis: 'none', color: 'indigo',
       weeklyViewData: {
         days: [
-          { label: 'Monday', content: 'Sprint planning, assign tasks' },
-          { label: 'Tuesday', content: 'Backend API development' },
-          { label: 'Wednesday', content: 'Frontend implementation' },
-          { label: 'Thursday', content: 'Code review & testing' },
-          { label: 'Friday', content: 'Integration testing' },
-          { label: 'Saturday', content: 'Documentation & cleanup' },
-          { label: 'Sunday', content: 'Sprint retrospective prep' },
+          { label: 'Monday', content: 'Sprint planning', tasks: [{ text: 'Assign tasks', checked: false }, { text: 'Update board', checked: false }] },
+          { label: 'Tuesday', content: 'Backend dev', tasks: [{ text: 'API endpoints', checked: false }, { text: 'Database migrations', checked: false }] },
+          { label: 'Wednesday', content: 'Frontend', tasks: [{ text: 'UI components', checked: false }, { text: 'Integration', checked: false }] },
+          { label: 'Thursday', content: 'Review', tasks: [{ text: 'Code review', checked: false }, { text: 'Testing', checked: false }] },
+          { label: 'Friday', content: 'QA', tasks: [{ text: 'Integration tests', checked: false }, { text: 'Bug fixes', checked: false }] },
+          { label: 'Saturday', content: 'Docs', tasks: [{ text: 'Update README', checked: false }] },
+          { label: 'Sunday', content: 'Prep', tasks: [{ text: 'Retro prep', checked: false }] },
         ],
       },
     },

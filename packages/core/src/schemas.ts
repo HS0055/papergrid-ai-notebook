@@ -55,17 +55,32 @@ export const MusicStaffDataSchema = z.object({
   notes: z.array(MusicNoteSchema),
 });
 
+// CalendarEvent - mirrors CalendarEvent interface
+export const CalendarEventSchema = z.object({
+  day: z.number().min(1).max(31),
+  title: z.string(),
+  color: z.string().optional(),
+});
+
 // CalendarData - mirrors CalendarData interface
 export const CalendarDataSchema = z.object({
   month: z.number().min(1).max(12),
   year: z.number().min(2020).max(2100),
   highlights: z.array(z.number().min(1).max(31)).optional(),
+  events: z.array(CalendarEventSchema).optional(),
+});
+
+// WeeklyViewTask - mirrors WeeklyViewTask interface
+export const WeeklyViewTaskSchema = z.object({
+  text: z.string(),
+  checked: z.boolean(),
 });
 
 // WeeklyViewDay - mirrors WeeklyViewDay interface
 export const WeeklyViewDaySchema = z.object({
   label: z.string(),
   content: z.string(),
+  tasks: z.array(WeeklyViewTaskSchema).optional(),
 });
 
 // WeeklyViewData - mirrors WeeklyViewData interface
@@ -201,6 +216,33 @@ export const AILayoutResponseSchema = z.object({
   })),
 });
 
+// AI Single Page Schema (reusable in multi-page)
+export const AIPageSchema = z.object({
+  title: z.string(),
+  paperType: PaperTypeSchema,
+  themeColor: ThemeColorSchema,
+  blocks: AILayoutResponseSchema.shape.blocks,
+});
+
+// AI Multi-Page Response - wraps multiple pages from a single prompt
+export const AIMultiPageResponseSchema = z.object({
+  pages: z.array(AIPageSchema).min(1),
+});
+
+// Combined validator: accepts either { pages: [...] } or { title, blocks, ... }
+export function parseAIResponse(data: unknown): { pages: z.infer<typeof AIPageSchema>[] } {
+  // Try multi-page first
+  const multiResult = AIMultiPageResponseSchema.safeParse(data);
+  if (multiResult.success) return multiResult.data;
+
+  // Fall back to single-page
+  const singleResult = AILayoutResponseSchema.safeParse(data);
+  if (singleResult.success) return { pages: [singleResult.data] };
+
+  // If neither works, throw with the single-page errors (more useful)
+  throw singleResult.error;
+}
+
 // Inferred types from Zod schemas
 export type BlockTypeZ = z.infer<typeof BlockTypeSchema>;
 export type PaperTypeZ = z.infer<typeof PaperTypeSchema>;
@@ -215,6 +257,7 @@ export type NotebookPageZ = z.infer<typeof NotebookPageSchema>;
 export type NotebookZ = z.infer<typeof NotebookSchema>;
 export type LayoutGenerationRequestZ = z.infer<typeof LayoutGenerationRequestSchema>;
 export type AILayoutResponseZ = z.infer<typeof AILayoutResponseSchema>;
+export type CalendarEventZ = z.infer<typeof CalendarEventSchema>;
 export type CalendarDataZ = z.infer<typeof CalendarDataSchema>;
 export type WeeklyViewDayZ = z.infer<typeof WeeklyViewDaySchema>;
 export type WeeklyViewDataZ = z.infer<typeof WeeklyViewDataSchema>;
@@ -225,3 +268,5 @@ export type TimeBlockEntryZ = z.infer<typeof TimeBlockEntrySchema>;
 export type TimeBlockDataZ = z.infer<typeof TimeBlockDataSchema>;
 export type DailySectionEntryZ = z.infer<typeof DailySectionEntrySchema>;
 export type DailySectionDataZ = z.infer<typeof DailySectionDataSchema>;
+export type AIPageZ = z.infer<typeof AIPageSchema>;
+export type AIMultiPageResponseZ = z.infer<typeof AIMultiPageResponseSchema>;

@@ -19,6 +19,7 @@ import {
   prepareCoverImageForStorage,
   saveNotebooksToStorage,
 } from '../utils/notebookStorage';
+import { useConvexNotebooks } from '../hooks/useConvexNotebooks';
 import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
@@ -171,6 +172,7 @@ export const Dashboard: React.FC = () => {
   // Sound effects
   const sfx = useSoundEffects();
   const auth = useAuth();
+  const convex = useConvexNotebooks();
 
   // Toast state
   const [toasts, setToasts] = useState<ToastData[]>([]);
@@ -185,11 +187,26 @@ export const Dashboard: React.FC = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Load from local storage
+  // Load notebooks: try Convex (if authenticated), fall back to localStorage
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
+      // Try loading from Convex if user is authenticated
+      if (auth.isAuthenticated) {
+        try {
+          const cloudNbs = await convex.loadNotebooks();
+          if (!cancelled && cloudNbs && cloudNbs.length > 0) {
+            setNotebooks(cloudNbs);
+            setActiveNotebookId(cloudNbs[0].id);
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to load from Convex:", e);
+        }
+      }
+
+      // Fall back to local storage
       try {
         const stored = await loadNotebooksFromStorage(STORAGE_KEY);
         if (!cancelled && stored && stored.length > 0) {
@@ -215,7 +232,7 @@ export const Dashboard: React.FC = () => {
           createdAt: new Date().toISOString(),
           paperType: 'lined',
           blocks: [
-            { id: 'b1', type: BlockType.HEADING, content: 'Welcome to PaperGrid', side: 'left' },
+            { id: 'b1', type: BlockType.HEADING, content: 'Welcome to Papera', side: 'left' },
             { id: 'b2', type: BlockType.TEXT, content: 'This is a digital notebook that feels real. The text sits right on the lines.', side: 'left' },
             { id: 'b3', type: BlockType.CHECKBOX, content: 'Try the AI Generator for structured layouts', checked: false, side: 'right' },
           ]
@@ -230,7 +247,7 @@ export const Dashboard: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [auth.isAuthenticated]);
 
   // Save to local storage
   useEffect(() => {
@@ -395,8 +412,8 @@ export const Dashboard: React.FC = () => {
 
   const handleAiGeneration = async (prompt: string, industry?: string, aesthetic?: string) => {
     try {
-      const layout = await generateLayout(prompt, industry, aesthetic);
-      const newPage: NotebookPage = {
+      const generatedPages = await generateLayout(prompt, industry, aesthetic);
+      const newPages: NotebookPage[] = generatedPages.map(layout => ({
         id: crypto.randomUUID(),
         title: layout.title,
         createdAt: new Date().toISOString(),
@@ -405,20 +422,27 @@ export const Dashboard: React.FC = () => {
         aesthetic: aesthetic || 'modern-planner',
         themeColor: layout.themeColor,
         aiGenerated: true,
-      };
+      }));
       setNotebooks(prev => {
         const updated = prev.map(nb => {
           if (nb.id !== activeNotebookId) return nb;
-          return { ...nb, pages: [...nb.pages, newPage] };
+          return { ...nb, pages: [...nb.pages, ...newPages] };
         });
         const nb = updated.find(n => n.id === activeNotebookId);
         if (nb) {
           setPageDirection('right');
-          setActivePageIndex(nb.pages.length - 1);
+          // Navigate to the first newly generated page
+          setActivePageIndex(nb.pages.length - newPages.length);
         }
         return updated;
       });
-      addToast('Layout generated successfully!', 'success');
+      const pageCount = newPages.length;
+      addToast(
+        pageCount > 1
+          ? `Generated ${pageCount} pages successfully!`
+          : 'Layout generated successfully!',
+        'success'
+      );
     } catch (error) {
       addToast('Failed to generate layout. Please check your API key.', 'error');
     }
@@ -542,7 +566,7 @@ export const Dashboard: React.FC = () => {
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <Book size={18} />
           </div>
-          <span className="font-semibold text-lg tracking-tight">PaperGrid AI</span>
+          <span className="font-semibold text-lg tracking-tight">Papera</span>
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
