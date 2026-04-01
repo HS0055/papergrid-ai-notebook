@@ -2,7 +2,7 @@ import React from 'react';
 
 const testimonials = [
   {
-    quote: 'PaperGrid AI completely replaced my physical notebook. The lined paper feels so real, and the AI generates layouts I never would have thought of.',
+    quote: 'Papera AI completely replaced my physical notebook. The lined paper feels so real, and the AI generates layouts I never would have thought of.',
     name: 'Mira Chen',
     role: 'UX Designer, Figma',
     emoji: '👩‍🎨',
@@ -16,7 +16,7 @@ const testimonials = [
     color: '#d97706',
   },
   {
-    quote: 'As a productivity coach, I\'ve tried everything. PaperGrid\'s Priority Matrix + Mood Tracker combination is genuinely unlike anything else.',
+    quote: 'As a productivity coach, I\'ve tried everything. Papera\'s Priority Matrix + Mood Tracker combination is genuinely unlike anything else.',
     name: 'Sarah Okonkwo',
     role: 'Productivity Coach',
     emoji: '🧘‍♀️',
@@ -37,7 +37,7 @@ const testimonials = [
     color: '#0ea5e9',
   },
   {
-    quote: 'My students love that I can share Cornell notes layouts with them directly. PaperGrid has become a classroom staple.',
+    quote: 'My students love that I can share Cornell notes layouts with them directly. Papera has become a classroom staple.',
     name: 'Maria Santos',
     role: 'High School Teacher',
     emoji: '🍎',

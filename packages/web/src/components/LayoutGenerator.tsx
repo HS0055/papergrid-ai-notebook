@@ -100,7 +100,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900 tracking-tight">AI Page Designer</h2>
-                <p className="text-xs text-gray-500 font-medium uppercase tracking-widest mt-0.5">Powered by PaperGrid Intelligence</p>
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-widest mt-0.5">Powered by Papera Intelligence</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-colors">

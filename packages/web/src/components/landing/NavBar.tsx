@@ -37,7 +37,7 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
             <Book className="text-white" size={18} />
           </div>
-          <span className="font-serif font-bold text-xl tracking-tight text-gray-900">PaperGrid AI</span>
+          <span className="font-serif font-bold text-xl tracking-tight text-gray-900">Papera</span>
         </div>
 
         {/* Links */}

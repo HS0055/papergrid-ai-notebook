@@ -40,8 +40,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
 
     const ctx = gsap.context(() => {
       // Both mobile and desktop get scroll-driven hero, but with different durations
-      // Mobile: shorter scroll (+=100%), desktop: longer (+=200%)
-      const scrollEnd = isMobile ? '+=100%' : '+=200%';
+      // Mobile: shorter scroll (+=100%), desktop: shorter pin (+=150%) to avoid blank end
+      const scrollEnd = isMobile ? '+=100%' : '+=150%';
 
       const masterTl = gsap.timeline({
         scrollTrigger: {
@@ -81,7 +81,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           0.08,
         );
 
-        // Phase 2: fades in 12-18%, visible until 38%, fades out 38-46%
+        // Phase 2: fades in 12-18%, visible until 30%, fades out 30-38%
         masterTl
           .fromTo(
             phase2Ref.current,
@@ -92,21 +92,21 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           .to(
             phase2Ref.current,
             { opacity: 0, y: -30, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
-            0.38,
+            0.30,
           );
 
-        // Phase 3: fades in 44-52%, visible 52-72%, fades out 72-84%
+        // Phase 3: fades in 38-46%, visible 46-58%, fades out 58-68%
         masterTl
           .fromTo(
             phase3Ref.current,
             { opacity: 0, y: 30, pointerEvents: 'none' },
             { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.10, ease: 'power2.out' },
-            0.44,
+            0.38,
           )
           .to(
             phase3Ref.current,
-            { opacity: 0, y: -25, scale: 0.97, pointerEvents: 'none', duration: 0.12, ease: 'power2.in' },
-            0.72,
+            { opacity: 0, y: -25, scale: 0.97, pointerEvents: 'none', duration: 0.10, ease: 'power2.in' },
+            0.58,
           );
       }
     }, sectionRef);

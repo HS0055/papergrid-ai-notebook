@@ -10,6 +10,7 @@ export default defineSchema({
     passwordHash: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder")),
+    role: v.optional(v.union(v.literal("user"), v.literal("admin"))),
     // Stripe
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
@@ -39,8 +40,10 @@ export default defineSchema({
     userId: v.id("users"),
     title: v.string(),
     coverColor: v.string(),
+    coverImageUrl: v.optional(v.string()),
     bookmarks: v.array(v.string()),
     isShared: v.boolean(),
+    createdAt: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 
   pages: defineTable({

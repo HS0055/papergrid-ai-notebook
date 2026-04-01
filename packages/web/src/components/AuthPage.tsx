@@ -46,7 +46,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onSignup, onGoogleL
                         <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
                             <Book size={24} className="text-white" />
                         </div>
-                        <span className="text-3xl font-bold text-white tracking-tight">PaperGrid</span>
+                        <span className="text-3xl font-bold text-white tracking-tight">Papera</span>
                     </div>
                     <p className="text-indigo-200/60 text-sm">
                         AI-powered digital notebooks that feel real

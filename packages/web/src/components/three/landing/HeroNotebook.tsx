@@ -84,7 +84,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     ctx.font = isMobile ? 'bold 56px "Playfair Display", serif' : 'bold 110px "Playfair Display", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('PaperGrid AI', canvasWidth / 2, canvasHeight * 0.38);
+    ctx.fillText('Papera', canvasWidth / 2, canvasHeight * 0.38);
 
     // Subtitle
     ctx.font = isMobile ? '20px "Inter", sans-serif' : '40px "Inter", sans-serif';
@@ -233,8 +233,8 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     currentDepthShift.current = THREE.MathUtils.lerp(currentDepthShift.current, targetDepthShift, lerpFactor);
     const scrollDrift = THREE.MathUtils.lerp(-0.15, 0.5, openEased);
 
-    // ── Exit animation: scale down, drift up, fade out (65%-95%) ──
-    const exitRaw = THREE.MathUtils.clamp((scrollProgress - 0.65) / 0.30, 0, 1);
+    // ── Exit animation: scale down, drift up, fade out (50%-80%) ──
+    const exitRaw = THREE.MathUtils.clamp((scrollProgress - 0.50) / 0.30, 0, 1);
     // Smooth the exit value too (prevents jitter on fast scroll)
     currentExit.current = THREE.MathUtils.lerp(currentExit.current, exitRaw, lerpFactor);
     // Hermite (smoothstep) easing for buttery exit

@@ -391,6 +391,72 @@ export const incrementAiUsage = mutation({
   },
 });
 
+// ── Admin helpers ──────────────────────────────────────────
+
+async function requireAdmin(ctx: MutationCtx | QueryCtx, sessionToken?: string) {
+  const user = (await getUserFromIdentity(ctx as AuthCtx)) ?? (await getUserFromSessionToken(ctx as AuthCtx, sessionToken));
+  if (!user) throw new Error("Not authenticated");
+  if ((user as any).role !== "admin") throw new Error("Forbidden: admin only");
+  return user;
+}
+
+// Admin: list all users with usage stats
+export const adminListUsers = query({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    await requireAdmin(ctx, sessionToken);
+    const users = await ctx.db.query("users").collect();
+    return users.map((u) => {
+      const { passwordHash, ...safe } = u as Record<string, unknown>;
+      return safe;
+    });
+  },
+});
+
+// Admin: update any user's plan
+export const adminSetPlan = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    targetUserId: v.id("users"),
+    plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder")),
+  },
+  handler: async (ctx, { sessionToken, targetUserId, plan }) => {
+    await requireAdmin(ctx, sessionToken);
+    await ctx.db.patch(targetUserId, { plan });
+    return { success: true };
+  },
+});
+
+// Admin: update any user's role
+export const adminSetRole = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    targetUserId: v.id("users"),
+    role: v.union(v.literal("user"), v.literal("admin")),
+  },
+  handler: async (ctx, { sessionToken, targetUserId, role }) => {
+    await requireAdmin(ctx, sessionToken);
+    await ctx.db.patch(targetUserId, { role });
+    return { success: true };
+  },
+});
+
+// Admin: reset AI usage counter for a user
+export const adminResetUsage = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    targetUserId: v.id("users"),
+  },
+  handler: async (ctx, { sessionToken, targetUserId }) => {
+    await requireAdmin(ctx, sessionToken);
+    await ctx.db.patch(targetUserId, {
+      aiGenerationsUsed: 0,
+      aiGenerationsResetAt: new Date().toISOString(),
+    });
+    return { success: true };
+  },
+});
+
 // Admin: reset a user's password by email (dev use only)
 export const resetPassword = mutation({
   args: {

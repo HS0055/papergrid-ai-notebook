@@ -114,23 +114,21 @@ export const StatsStrip: React.FC = () => {
       ref={sectionRef}
       className="relative overflow-hidden"
       style={{
-        // Warm twilight gradient: hold dark, snap through mid-tones, settle parchment
+        // Clean dark-to-parchment gradient — shorter, crisper transition
         background: `linear-gradient(
           to bottom,
           #0f111a 0%,
-          #0f111a 18%,
-          #18161f 28%,
-          #2a2233 38%,
-          #3d3040 48%,
-          #5c4a42 56%,
-          #8b7768 65%,
-          #b8a898 74%,
-          #d4ccc4 83%,
-          #F4F0EC 92%,
+          #0f111a 20%,
+          #1a1832 35%,
+          #2d2548 48%,
+          #584a6a 60%,
+          #9b8fa0 72%,
+          #d4ccc4 84%,
+          #F4F0EC 94%,
           #F4F0EC 100%
         )`,
-        paddingTop: 'clamp(100px, 18vh, 180px)',
-        paddingBottom: 'clamp(80px, 14vh, 140px)',
+        paddingTop: 'clamp(60px, 10vh, 100px)',
+        paddingBottom: 'clamp(60px, 10vh, 100px)',
       }}
     >
       {/* Vignette overlay — adds depth to the transition zone */}
@@ -162,6 +160,14 @@ export const StatsStrip: React.FC = () => {
       {/* Stats content */}
       <div ref={contentRef} className="relative px-6" style={{ zIndex: 2 }}>
         <div className="max-w-4xl mx-auto">
+          {/* Section tagline */}
+          <p
+            className="text-center text-sm font-semibold uppercase tracking-[0.2em] mb-10"
+            style={{ color: 'rgba(255,255,255,0.35)' }}
+          >
+            Everything you need to create
+          </p>
+
           {/* Stats grid — no divide-x, custom animated dividers */}
           <div className="grid grid-cols-2 md:grid-cols-4">
             {stats.map((stat, i) => (

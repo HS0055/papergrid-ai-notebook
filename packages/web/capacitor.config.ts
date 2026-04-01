@@ -1,13 +1,13 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.papergrid.app',
-  appName: 'PaperGrid AI',
+  appId: 'com.papera.app',
+  appName: 'Papera',
   webDir: 'dist',
   ios: {
     contentInset: 'automatic',
     preferredContentMode: 'mobile',
-    scheme: 'PaperGrid AI',
+    scheme: 'Papera',
   },
   plugins: {
     SplashScreen: {

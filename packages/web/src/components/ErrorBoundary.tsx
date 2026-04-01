@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
                         <h1 className="text-2xl font-bold text-gray-900 mb-2">Something went wrong</h1>
                         <p className="text-gray-500 text-sm mb-6">
-                            PaperGrid encountered an unexpected error. Your data is safe — try refreshing the page.
+                            Papera encountered an unexpected error. Your data is safe — try refreshing the page.
                         </p>
 
                         {this.state.error && (

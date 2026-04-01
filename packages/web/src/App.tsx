@@ -5,6 +5,7 @@ import { Dashboard } from './components/Dashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthPage } from './components/AuthPage';
 import { PricingPage } from './components/PricingPage';
+import { AdminPanel } from './components/AdminPanel';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 
 // Protected route wrapper
@@ -56,6 +57,11 @@ export default function App() {
             <Route path="/app" element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute>
+                <AdminPanel />
               </ProtectedRoute>
             } />
             <Route path="*" element={<Navigate to="/" replace />} />

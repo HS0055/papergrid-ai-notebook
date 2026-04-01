@@ -43,7 +43,7 @@ const TIERS: PricingTier[] = [
         name: 'Free',
         price: '$0',
         period: 'forever',
-        description: 'Try PaperGrid with basic features',
+        description: 'Try Papera with basic features',
         icon: <BookOpen size={24} />,
         gradient: 'from-gray-600 to-gray-700',
         cta: 'Get Started',
@@ -297,7 +297,7 @@ export const PricingPage: React.FC = () => {
                 {/* FAQ / Trust */}
                 <div className="mt-16 text-center">
                     <p className="text-white/30 text-sm">
-                        All plans include the core PaperGrid experience. Cancel anytime. Questions? Email us.
+                        All plans include the core Papera experience. Cancel anytime. Questions? Email us.
                     </p>
                 </div>
             </div>

@@ -15,7 +15,7 @@ const testimonials: Testimonial[] = [
   {
     name: 'Sarah Chen',
     role: 'Graduate Student',
-    quote: 'PaperGrid replaced three different apps for me. The AI layouts save me hours every week organizing my research notes.',
+    quote: 'Papera replaced three different apps for me. The AI layouts save me hours every week organizing my research notes.',
     color: '#4f46e5', // indigo
   },
   {

@@ -13,7 +13,7 @@ export const LandingFooter: React.FC = () => {
               <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center">
                 <Book size={16} className="text-white" />
               </div>
-              <span className="font-serif font-bold text-lg text-white">PaperGrid AI</span>
+              <span className="font-serif font-bold text-lg text-white">Papera</span>
             </div>
             <p className="text-sm leading-relaxed" style={{ color: '#475569' }}>
               The digital notebook that thinks with you.
@@ -81,7 +81,7 @@ export const LandingFooter: React.FC = () => {
       >
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
           <p className="text-xs" style={{ color: '#334155' }}>
-            © 2026 PaperGrid AI. All rights reserved.
+            © 2026 Papera. All rights reserved.
           </p>
           <p className="text-xs" style={{ color: '#334155' }}>
             Built with ❤️ using React, Tailwind v4 & Gemini 2.5 Flash
