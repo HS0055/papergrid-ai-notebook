@@ -41,7 +41,7 @@
         "id": "4",
         "title": "Continuous Ink Progress Line",
         "description": "Add a thin vertical ink line along the left viewport edge that draws downward as user scrolls — like a notebook margin line connecting all sections.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "medium",
         "dependencies": [
           "3"
@@ -49,13 +49,13 @@
         "details": "1. LandingPage.tsx: Add fixed-position div (2px wide, indigo-brand)\n2. Line draws via scaleY tied to scroll progress (GSAP ScrollTrigger)\n3. Small dot at current position (pen tip) with indigo glow\n4. Starts at bottom of StatsStrip, fades at FinalCTA\n5. Z-index: above sections, below NavBar\n6. Mobile: hidden below 768px\n7. globals.css: ink-line styles + reduced-motion override (hidden)",
         "testStrategy": "Scroll page — line should draw smoothly. Verify hidden on mobile. Check reduced-motion hides it.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.048Z"
+        "updatedAt": "2026-03-04T05:18:15.931Z"
       },
       {
         "id": "5",
         "title": "PaperStyles Large Live Preview Panel",
         "description": "Add a large preview panel to PaperStylesSection showing the selected paper style at full size with animated sample content.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "medium",
         "dependencies": [
           "3"
@@ -63,13 +63,13 @@
         "details": "1. 2-column layout: grid left, preview right (stacked on mobile)\n2. Preview: ~400px tall, CSS paper pattern filling it\n3. Animated handwriting-font lines fade in when paper changes\n4. GSAP crossfade transition: scale 0.98->1.0, opacity swap\n5. Sample content: 3-4 lines of placeholder text in Patrick Hand font",
         "testStrategy": "Click different paper styles — preview should crossfade smoothly. Verify layout stacks on mobile. Sample text should animate in.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.050Z"
+        "updatedAt": "2026-03-04T05:18:17.329Z"
       },
       {
         "id": "6",
         "title": "AIFeatureSection Real-Time Typing Simulation",
         "description": "Add a demo area showing simulated AI interaction: user types prompt, thinking indicator, then generated blocks appear one by one.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "high",
         "dependencies": [
           "3"
@@ -77,13 +77,13 @@
         "details": "1. Demo area styled as mini notebook page (paper-lines background)\n2. Typewriter text: 'Create a study planner for next week'\n3. After typing: 3-dot pulsing thinking indicator\n4. Blocks appear staggered with blockSlideIn animation:\n   - Heading: 'Weekly Study Plan'\n   - Checklist: 3 items\n   - Grid/table with days\n5. ScrollTrigger-driven or auto-play on viewport entry\n6. No actual API calls — pre-scripted GSAP timeline",
         "testStrategy": "Scroll to AI section — demo should auto-play. Typing should look realistic. Blocks should stagger in smoothly.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.051Z"
+        "updatedAt": "2026-03-04T05:18:18.823Z"
       },
       {
         "id": "7",
         "title": "BlockTypesBento Hover Micro-Interactions",
         "description": "Add hover micro-interactions to bento cards: scale, shadow increase, and brief sample content that animates in for each block type.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "medium",
         "dependencies": [
           "3"
@@ -91,13 +91,13 @@
         "details": "1. On hover: scale 1.0->1.02, shadow increase\n2. Hidden content div revealed by GSAP on mouseenter:\n   - TEXT: few lines appear\n   - CHECKLIST: checkboxes tick\n   - GRID: cells fill in\n   - etc.\n3. Stagger sample content (0.05s between elements)\n4. GSAP reverse on mouseleave\n5. Mobile: show sample content always visible (no hover)\n6. Keep cards same size — content within existing bounds",
         "testStrategy": "Hover each bento card — sample content should animate in. Leave — should animate out. Mobile: content visible by default.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.053Z"
+        "updatedAt": "2026-03-04T05:18:20.253Z"
       },
       {
         "id": "8",
         "title": "AestheticsSection Horizontal Carousel",
         "description": "Convert AestheticsSection from vertical cards to a horizontal scrolling carousel with drag/scroll-snap, parallax cards, and navigation.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "medium",
         "dependencies": [
           "3"
@@ -105,13 +105,13 @@
         "details": "1. Horizontal scroll container with CSS scroll-snap\n2. Cards: ASMR Sounds, Paper Textures, Sticker Pack, Washi Tape, Color Themes\n3. Each card: large visual + short copy\n4. Auto-scroll hint on first view (shift 60px left then back)\n5. Navigation dots below\n6. Mobile: full-width cards with swipe\n7. Card parallax: background moves slower than foreground\n8. globals.css: scroll-snap utilities if needed",
         "testStrategy": "Drag/scroll carousel — should snap to cards. Verify dots update. Check mobile swipe. Verify auto-scroll hint plays once.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.054Z"
+        "updatedAt": "2026-03-04T05:18:21.667Z"
       },
       {
         "id": "9",
         "title": "Reintroduce FloatingPapers with LOD System",
         "description": "Re-enable FloatingPapers.tsx as ambient 3D elements during content sections with LOD (Level of Detail) and auto-degradation for performance.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "medium",
         "dependencies": [
           "17"
@@ -119,7 +119,7 @@
         "details": "1. Rewrite FloatingPapers.tsx with LOD:\n   - Near camera: paper texture detail\n   - Far: simple flat planes\n   - 3-4 papers only\n2. Papers float at periphery (left/right edges, z=-2 to -5)\n3. Create AmbientCanvas.tsx: lightweight R3F canvas overlaying content sections\n4. OR extend hero canvas to cover more page\n5. Auto-degrade: if FPS < 45, hide FloatingPapers\n6. Subtle scroll parallax\n7. Don't show during hero — start from PaperStylesSection",
         "testStrategy": "Scroll past hero — floating papers should appear at edges. Verify LOD switching. Throttle CPU — papers should disappear at low FPS.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.054Z"
+        "updatedAt": "2026-03-04T05:18:23.158Z"
       },
       {
         "id": "10",
@@ -138,7 +138,7 @@
         "id": "11",
         "title": "Unified Color Flow System",
         "description": "Define and apply a consistent color flow across all sections: dark->parchment->warm white->gray->white->parchment->dark, eliminating the white/parchment ping-pong.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "high",
         "dependencies": [
           "3"
@@ -146,7 +146,7 @@
         "details": "Color flow:\n- Hero: #0f111a (dark)\n- StatsStrip: dark-to-parchment gradient (DONE)\n- PaperStyles: #fdfbf7 (warm white)\n- AIFeature: #f8f6f3 (subtle warm gray)\n- Inline Testimonials: transparent\n- BlockTypesBento: #ffffff with paper texture overlay\n- AestheticsSection: #F4F0EC (parchment)\n- FinalCTA: #0f111a (dark, bookends hero)\n- Footer: #0a0c14 (darkest)\n\nAdd 20px gradient overlap zones between sections for smooth transitions.",
         "testStrategy": "Scroll through entire page — colors should flow naturally with no hard cliffs. Compare before/after screenshots.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.056Z"
+        "updatedAt": "2026-03-04T05:18:24.582Z"
       },
       {
         "id": "12",
@@ -177,7 +177,7 @@
         "id": "14",
         "title": "Enhanced Inline Testimonials Styling",
         "description": "Polish the InlineTestimonials component (created in Task 3) with masonry-style layout, monogram avatars, handwritten quotation marks, and premium card styling.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "medium",
         "dependencies": [
           "3"
@@ -185,13 +185,13 @@
         "details": "1. Enhance InlineTestimonials.tsx from Task 3:\n   - Monogram avatar: first letter in colored circle (indigo/amber/leather rotating)\n   - Decorative opening quotation mark in Caveat font, oversized, muted color\n   - Quote text slightly larger than body\n   - Name + role in smaller muted text\n   - Card: subtle border, soft shadow, rounded-2xl\n   - GSAP stagger entrance (0.1s between cards)\n2. Desktop: 3 cards in row with slight height variation (masonry feel)\n3. Mobile: full-width stacked",
         "testStrategy": "Scroll to testimonials — cards should stagger in. Verify monogram colors rotate. Check mobile stacking.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.058Z"
+        "updatedAt": "2026-03-04T05:18:26.008Z"
       },
       {
         "id": "15",
         "title": "Floating CTA Bar",
         "description": "Add a slim floating CTA bar that appears after 60% scroll, hides when FinalCTA is visible, and provides an always-available conversion path.",
-        "status": "in-progress",
+        "status": "done",
         "priority": "medium",
         "dependencies": [
           "3"
@@ -199,7 +199,7 @@
         "details": "1. Create FloatingCTABar.tsx:\n   - 48px tall, dark bg, 'Start Creating — Free' + CTA button\n   - Slides up from bottom (GSAP)\n   - Dismissible with X button\n   - Appears after 60% page scroll\n   - Hides when FinalCTA in viewport\n   - Hides when scrolled back to hero\n   - Z-index: below modal, above content\n2. LandingPage.tsx: add component\n3. Reduced motion: just appears, no slide",
         "testStrategy": "Scroll past 60% — bar appears. Scroll to FinalCTA — bar hides. Click X — bar dismisses. Scroll to top — bar hides.",
         "subtasks": [],
-        "updatedAt": "2026-03-01T22:40:04.059Z"
+        "updatedAt": "2026-03-04T05:18:27.448Z"
       },
       {
         "id": "16",
@@ -260,9 +260,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-01T22:40:04.059Z",
+      "lastModified": "2026-03-04T05:18:27.448Z",
       "taskCount": 18,
-      "completedCount": 5,
+      "completedCount": 14,
       "tags": [
         "master"
       ]

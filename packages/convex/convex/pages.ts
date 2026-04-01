@@ -30,8 +30,10 @@ export const create = mutation({
     paperType: v.string(),
     aesthetic: v.optional(v.string()),
     themeColor: v.optional(v.string()),
+    aiGenerated: v.optional(v.boolean()),
+    createdAt: v.optional(v.string()),
   },
-  handler: async (ctx, { notebookId, title, paperType, aesthetic, themeColor }) => {
+  handler: async (ctx, { notebookId, title, paperType, aesthetic, themeColor, aiGenerated, createdAt }) => {
     // Determine next sortOrder
     const existingPages = await ctx.db
       .query("pages")
@@ -48,6 +50,8 @@ export const create = mutation({
       paperType,
       aesthetic,
       themeColor,
+      aiGenerated,
+      createdAt,
       sortOrder: maxSort + 1,
     });
   },

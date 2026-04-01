@@ -564,7 +564,11 @@ export const Dashboard: React.FC = () => {
   }, [activeNotebookId, activePage?.id, addToast]);
 
   const handleCoverColorChange = (color: string) => {
-    setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, coverColor: color, coverImageUrl: undefined } : nb));
+    setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, coverColor: color } : nb));
+  };
+
+  const handleRemoveCoverImage = () => {
+    setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, coverImageUrl: undefined } : nb));
   };
 
   const getPageAnimClass = () => {
@@ -998,7 +1002,7 @@ export const Dashboard: React.FC = () => {
                             <button
                               key={color}
                               onClick={() => handleCoverColorChange(color)}
-                              className={`w-6 h-6 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color && !activeNotebook.coverImageUrl
+                              className={`w-6 h-6 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color
                                 ? 'border-white scale-125 shadow-lg shadow-white/20'
                                 : 'border-white/10 hover:border-white/40 hover:scale-110'
                                 }`}
@@ -1017,7 +1021,7 @@ export const Dashboard: React.FC = () => {
                           </button>
                           {activeNotebook.coverImageUrl && (
                             <button
-                              onClick={() => handleCoverColorChange(activeNotebook.coverColor)}
+                              onClick={handleRemoveCoverImage}
                               className="px-3 py-2.5 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-white/40 hover:text-red-400 rounded-xl text-xs transition-all"
                               title="Remove AI cover"
                             >

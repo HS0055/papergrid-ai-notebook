@@ -457,22 +457,83 @@ export const adminResetUsage = mutation({
   },
 });
 
-// Admin: reset a user's password by email (dev use only)
-export const resetPassword = mutation({
+// ── Password Reset (user-facing) ─────────────────────────
+
+const RESET_CODE_TTL_MS = 1000 * 60 * 15; // 15 minutes
+
+export const requestPasswordReset = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) throw new Error("Email is required");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .first();
+    // Always return success to avoid email enumeration
+    if (!user || !user.passwordHash) return { success: true };
+
+    // Invalidate any existing codes for this email
+    const existing = await ctx.db
+      .query("passwordResetTokens")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .collect();
+    for (const token of existing) {
+      await ctx.db.delete(token._id);
+    }
+
+    // Generate a 6-digit code
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + RESET_CODE_TTL_MS).toISOString();
+
+    await ctx.db.insert("passwordResetTokens", {
+      email: normalizedEmail,
+      code,
+      expiresAt,
+      used: false,
+    });
+
+    // Code is sent via email in the HTTP action layer
+    return { success: true, code };
+  },
+});
+
+export const confirmPasswordReset = mutation({
   args: {
     email: v.string(),
+    code: v.string(),
     newPassword: v.string(),
   },
-  handler: async (ctx, { email, newPassword }) => {
-    assertPassword(newPassword);
+  handler: async (ctx, { email, code, newPassword }) => {
     const normalizedEmail = normalizeEmail(email);
+    assertPassword(newPassword);
+
+    const token = await ctx.db
+      .query("passwordResetTokens")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .first();
+
+    if (!token || token.code !== code || token.used) {
+      throw new Error("Invalid or expired reset code");
+    }
+    if (new Date(token.expiresAt).getTime() <= Date.now()) {
+      await ctx.db.delete(token._id);
+      throw new Error("Reset code has expired. Please request a new one.");
+    }
+
     const user = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
       .first();
     if (!user) throw new Error("User not found");
+
     const passwordHash = await hashPassword(newPassword);
     await ctx.db.patch(user._id, { passwordHash });
-    return { success: true, email: normalizedEmail };
+    await ctx.db.patch(token._id, { used: true });
+
+    // Create a session so user is logged in after reset
+    const sessionToken = await createSession(ctx, user._id);
+    return { sessionToken, user: sanitizeUser(user) };
   },
 });

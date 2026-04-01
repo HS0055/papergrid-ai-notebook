@@ -55,17 +55,22 @@ export const create = mutation({
     userId: v.id("users"),
     title: v.string(),
     coverColor: v.string(),
+    coverImageUrl: v.optional(v.string()),
+    bookmarks: v.optional(v.array(v.string())),
+    createdAt: v.optional(v.string()),
     sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { userId, title, coverColor, sessionToken }) => {
+  handler: async (ctx, { userId, title, coverColor, coverImageUrl, bookmarks, createdAt, sessionToken }) => {
     const user = await requireAuthUser(ctx, sessionToken);
     if (user._id !== userId) throw new Error("Forbidden");
     return await ctx.db.insert("notebooks", {
       userId,
       title,
       coverColor,
-      bookmarks: [],
+      coverImageUrl,
+      bookmarks: bookmarks ?? [],
       isShared: false,
+      createdAt,
     });
   },
 });
@@ -75,6 +80,7 @@ export const update = mutation({
     id: v.id("notebooks"),
     title: v.optional(v.string()),
     coverColor: v.optional(v.string()),
+    coverImageUrl: v.optional(v.string()),
     bookmarks: v.optional(v.array(v.string())),
     isShared: v.optional(v.boolean()),
     sessionToken: v.optional(v.string()),
@@ -88,6 +94,7 @@ export const update = mutation({
     const updates: Record<string, unknown> = {};
     if (fields.title !== undefined) updates.title = fields.title;
     if (fields.coverColor !== undefined) updates.coverColor = fields.coverColor;
+    if (fields.coverImageUrl !== undefined) updates.coverImageUrl = fields.coverImageUrl;
     if (fields.bookmarks !== undefined) updates.bookmarks = fields.bookmarks;
     if (fields.isShared !== undefined) updates.isShared = fields.isShared;
 

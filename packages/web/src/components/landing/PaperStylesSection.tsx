@@ -125,11 +125,10 @@ export const PaperStylesSection: React.FC<PaperStylesSectionProps> = ({ onLaunch
               {paperStyles.map((style, i) => (
                 <button
                   key={style.id}
-                  className={`group relative rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 ${
-                    selected === style.id
+                  className={`group relative rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1 ${selected === style.id
                       ? 'ring-2 ring-indigo-500 ring-offset-2 shadow-xl scale-[1.02]'
                       : 'ring-1 ring-gray-200 hover:ring-indigo-300 hover:shadow-md'
-                  }`}
+                    }`}
                   style={{ aspectRatio: '3/4', background: style.bg }}
                   onClick={() => setSelected(style.id)}
                   title={style.label}

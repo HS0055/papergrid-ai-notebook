@@ -74,39 +74,34 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
       } else {
         // Desktop: full 3-phase scroll narrative
 
-        // Phase 1: visible 0-8%, fades out 8-14%
+        // Phase 1: visible 0-18%, fades out 18-26%
         masterTl.to(
           phase1Ref.current,
-          { opacity: 0, y: -50, pointerEvents: 'none', duration: 0.06, ease: 'power2.in' },
-          0.08,
+          { opacity: 0, y: -50, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
+          0.18,
         );
 
-        // Phase 2: fades in 12-18%, visible until 30%, fades out 30-38%
+        // Phase 2: fades in 24-32%, visible until 48%, fades out 48-56%
         masterTl
           .fromTo(
             phase2Ref.current,
             { opacity: 0, y: 30, pointerEvents: 'none' },
             { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.08, ease: 'power2.out' },
-            0.12,
+            0.24,
           )
           .to(
             phase2Ref.current,
             { opacity: 0, y: -30, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
-            0.30,
+            0.48,
           );
 
-        // Phase 3: fades in 38-46%, visible 46-58%, fades out 58-68%
+        // Phase 3: fades in 54-62%, stays visible until end (no fade-out)
         masterTl
           .fromTo(
             phase3Ref.current,
             { opacity: 0, y: 30, pointerEvents: 'none' },
             { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.10, ease: 'power2.out' },
-            0.38,
-          )
-          .to(
-            phase3Ref.current,
-            { opacity: 0, y: -25, scale: 0.97, pointerEvents: 'none', duration: 0.10, ease: 'power2.in' },
-            0.58,
+            0.54,
           );
       }
     }, sectionRef);
@@ -123,7 +118,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     <section
       ref={sectionRef}
       className="hero-section relative"
-      style={{ minHeight: isMobile ? '200vh' : '300vh' }}
+      style={{ minHeight: isMobile ? '200vh' : '250vh', background: '#0f111a' }}
     >
       {/* Scroll progress indicator — outside pin container to avoid jump */}
       <div

@@ -36,6 +36,15 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_user", ["userId"]),
 
+  passwordResetTokens: defineTable({
+    email: v.string(),
+    code: v.string(),
+    expiresAt: v.string(),
+    used: v.boolean(),
+  })
+    .index("by_email", ["email"])
+    .index("by_code", ["code"]),
+
   notebooks: defineTable({
     userId: v.id("users"),
     title: v.string(),

@@ -1,0 +1,1102 @@
+diff --git a/packages/convex/convex/http.ts b/packages/convex/convex/http.ts
+index b929509..60102f8 100644
+--- a/packages/convex/convex/http.ts
++++ b/packages/convex/convex/http.ts
+@@ -2,6 +2,22 @@ import { httpRouter } from "convex/server";
+ import { httpAction } from "./_generated/server";
+ import { api } from "./_generated/api";
+ 
++async function fetchWithTimeout(url: string, payload: unknown, timeoutMs: number): Promise<Response> {
++  const controller = new AbortController();
++  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
++
++  try {
++    return await fetch(url, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(payload),
++      signal: controller.signal,
++    });
++  } finally {
++    clearTimeout(timeoutId);
++  }
++}
++
+ // Generate a procedural premium SVG data URL as fallback cover
+ function buildFallbackCover(prompt: string): string {
+   let hash = 0;
+@@ -387,7 +403,9 @@ const http = httpRouter();
+ // Allowed origins for local/dev + production/custom domains + Vercel aliases/previews
+ const ALLOWED_ORIGINS = [
+   "http://localhost:3000",
++  "http://127.0.0.1:3000",
+   "http://localhost:5173",
++  "http://127.0.0.1:5173",
+   "https://papergrid.app",
+   "https://www.papergrid.app",
+   "https://papergrid-five.vercel.app",
+@@ -416,6 +434,18 @@ function makeCorsHeaders(request: Request) {
+   };
+ }
+ 
++// Extract clean error message from Convex mutation errors.
++// Convex wraps thrown errors as "Uncaught Error: <message>\n    at handler (...)"
++function extractErrorMessage(error: any, fallback: string): string {
++  const raw: string = error?.message || error?.data || fallback;
++  // Strip "Uncaught Error: " prefix
++  let msg = raw.replace(/^Uncaught Error:\s*/i, "");
++  // Strip stack trace (everything from first newline)
++  const newlineIdx = msg.indexOf("\n");
++  if (newlineIdx !== -1) msg = msg.slice(0, newlineIdx);
++  return msg.trim() || fallback;
++}
++
+ function getSessionTokenFromRequest(request: Request): string | null {
+   const authHeader = request.headers.get("Authorization");
+   if (authHeader?.startsWith("Bearer ")) {
+@@ -749,13 +779,10 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum),
+         },
+       };
+ 
+-      const geminiResponse = await fetch(
+-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
+-        {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: JSON.stringify(geminiPayload),
+-        }
++      const geminiResponse = await fetchWithTimeout(
++        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
++        geminiPayload,
++        20000,
+       );
+ 
+       if (!geminiResponse.ok) {
+@@ -974,9 +1001,13 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum),
+       });
+     } catch (error) {
+       console.error("Generate layout error:", error);
++      const status = error instanceof Error && error.name === "AbortError" ? 504 : 500;
++      const message = error instanceof Error && error.name === "AbortError"
++        ? "AI layout generation timed out"
++        : "Internal server error";
+       return new Response(
+-        JSON.stringify({ error: "Internal server error" }),
+-        { status: 500, headers: { "Content-Type": "application/json" } }
++        JSON.stringify({ error: message }),
++        { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+       );
+     }
+   }),
+@@ -1020,13 +1051,10 @@ http.route({
+         },
+       };
+ 
+-      const geminiResponse = await fetch(
+-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`,
+-        {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: JSON.stringify(geminiPayload),
+-        }
++      const geminiResponse = await fetchWithTimeout(
++        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
++        geminiPayload,
++        18000,
+       );
+ 
+       if (!geminiResponse.ok) {
+@@ -1061,9 +1089,13 @@ http.route({
+       });
+     } catch (error) {
+       console.error("Generate cover error:", error);
++      const status = error instanceof Error && error.name === "AbortError" ? 504 : 500;
++      const message = error instanceof Error && error.name === "AbortError"
++        ? "AI cover generation timed out"
++        : "Internal server error";
+       return new Response(
+-        JSON.stringify({ error: "Internal server error" }),
+-        { status: 500, headers: { "Content-Type": "application/json" } }
++        JSON.stringify({ error: message }),
++        { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+       );
+     }
+   }),
+@@ -1101,7 +1133,7 @@ http.route({
+       });
+     } catch (error: any) {
+       console.error("Auth login error:", error);
+-      const message = error?.message || error?.data || "Login failed";
++      const message = extractErrorMessage(error, "Login failed");
+       const status = message.includes("Invalid") || message.includes("no password") ? 401 : 500;
+       return new Response(JSON.stringify({ error: message }), {
+         status,
+@@ -1145,7 +1177,7 @@ http.route({
+       });
+     } catch (error: any) {
+       console.error("Auth signup error:", error);
+-      const message = error?.message || error?.data || "Signup failed";
++      const message = extractErrorMessage(error, "Signup failed");
+       const status = message.includes("already in use") ? 409 : 500;
+       return new Response(JSON.stringify({ error: message }), {
+         status,
+diff --git a/packages/web/src/components/CoverGenModal.tsx b/packages/web/src/components/CoverGenModal.tsx
+index d2f540c..49f2521 100644
+--- a/packages/web/src/components/CoverGenModal.tsx
++++ b/packages/web/src/components/CoverGenModal.tsx
+@@ -3,11 +3,14 @@ import {
+     Sparkles, X, Wand2, Image as ImageIcon,
+     Paintbrush, BookOpen, Leaf, Moon, Sun, Gem, Flame, Palette
+ } from 'lucide-react';
++import { triggerHaptic } from '../utils/haptics';
++import { ImpactStyle, NotificationType } from '@capacitor/haptics';
++import type { GeneratedCoverResult } from '../services/geminiService';
+ 
+ interface CoverGenModalProps {
+     isOpen: boolean;
+     onClose: () => void;
+-    onGenerate: (prompt: string, aesthetic?: string) => Promise<{ imageUrl: string }>;
++    onGenerate: (prompt: string, aesthetic?: string) => Promise<GeneratedCoverResult>;
+     onApply: (imageUrl: string) => void;
+     currentCoverUrl?: string;
+     isGenerating: boolean;
+@@ -43,7 +46,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+ }) => {
+     const [prompt, setPrompt] = useState('');
+     const [aesthetic, setAesthetic] = useState('leather');
+-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
++    const [preview, setPreview] = useState<GeneratedCoverResult | null>(null);
+     const [error, setError] = useState<string | null>(null);
+     const textareaRef = useRef<HTMLTextAreaElement>(null);
+ 
+@@ -52,7 +55,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+             setTimeout(() => textareaRef.current?.focus(), 100);
+         }
+         if (!isOpen) {
+-            setPreviewUrl(null);
++            setPreview(null);
+             setError(null);
+         }
+     }, [isOpen]);
+@@ -63,6 +66,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+             return;
+         }
+         setError(null);
++        triggerHaptic.impact(ImpactStyle.Medium); // Initial impact for starting generation
+         try {
+             const style = AESTHETIC_STYLES.find(s => s.id === aesthetic);
+             const fullAesthetic = style ? `${style.label} — ${style.desc}` : aesthetic;
+@@ -70,22 +74,26 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+             if (!data?.imageUrl) {
+                 throw new Error('No image returned');
+             }
+-            setPreviewUrl(data.imageUrl);
++            setPreview(data);
++            triggerHaptic.notification(NotificationType.Success); // Tactile success feedback
+         } catch (e) {
+             setError(e instanceof Error ? e.message : 'Failed to generate cover');
++            triggerHaptic.notification(NotificationType.Error);
+         }
+     };
+ 
+     const handleApply = () => {
+-        if (previewUrl) {
+-            onApply(previewUrl);
++        if (preview?.imageUrl) {
++            triggerHaptic.impact(ImpactStyle.Heavy); // Affirmative impact
++            onApply(preview.imageUrl);
+             onClose();
+         }
+     };
+ 
+     const handleSuggestionClick = (suggestion: typeof PROMPT_SUGGESTIONS[0]) => {
++        triggerHaptic.impact(ImpactStyle.Light);
+         setPrompt(suggestion.prompt);
+-        setPreviewUrl(null);
++        setPreview(null);
+     };
+ 
+     if (!isOpen) return null;
+@@ -148,7 +156,10 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+                             {AESTHETIC_STYLES.map((style) => (
+                                 <button
+                                     key={style.id}
+-                                    onClick={() => setAesthetic(style.id)}
++                                    onClick={() => {
++                                        setAesthetic(style.id);
++                                        triggerHaptic.impact(ImpactStyle.Light);
++                                    }}
+                                     className={`px-3 py-2.5 rounded-xl text-left transition-all ${aesthetic === style.id
+                                         ? 'bg-indigo-600/20 border-indigo-500/40 border text-white'
+                                         : 'bg-white/[0.03] border border-white/5 text-white/50 hover:text-white/70 hover:border-white/10'
+@@ -185,11 +196,18 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+                     </div>
+ 
+                     {/* Preview */}
+-                    {(previewUrl || isGenerating) && (
++                    {(preview || isGenerating) && (
+                         <div>
+-                            <label className="text-xs font-medium text-white/50 uppercase tracking-wider mb-2 block">
+-                                Preview
+-                            </label>
++                            <div className="mb-2 flex items-center justify-between">
++                                <label className="text-xs font-medium text-white/50 uppercase tracking-wider block">
++                                    Preview
++                                </label>
++                                {preview?.fallback && (
++                                    <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200">
++                                        Fallback Preview
++                                    </span>
++                                )}
++                            </div>
+                             <div className="relative aspect-square max-w-[300px] mx-auto rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03]">
+                                 {isGenerating ? (
+                                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+@@ -205,33 +223,38 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+                                         />
+                                         <style>{`@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
+                                     </div>
+-                                ) : previewUrl ? (
++                                ) : preview?.imageUrl ? (
+                                     <img
+-                                        src={previewUrl}
++                                        src={preview.imageUrl}
+                                         alt="Generated cover preview"
+                                         className="w-full h-full object-cover"
+                                     />
+                                 ) : null}
+                             </div>
++                            {preview?.fallback && (
++                                <p className="mx-auto mt-3 max-w-[300px] text-center text-xs leading-relaxed text-amber-200/80">
++                                    The backend returned a procedural backup cover instead of a generated image. You can still apply it, but the image model needs attention.
++                                </p>
++                            )}
+                         </div>
+                     )}
+                 </div>
+ 
+                 {/* Footer Actions */}
+                 <div className="p-6 pt-4 border-t border-white/5 flex items-center gap-3">
+-                    {previewUrl && !isGenerating && (
++                    {preview && !isGenerating && (
+                         <button
+                             onClick={handleApply}
+                             className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all"
+                         >
+                             <ImageIcon size={16} />
+-                            Apply to Cover
++                            {preview.fallback ? 'Apply Fallback Cover' : 'Apply to Cover'}
+                         </button>
+                     )}
+                     <button
+                         onClick={handleGenerate}
+                         disabled={isGenerating || !prompt.trim()}
+-                        className={`${previewUrl && !isGenerating ? 'flex-1' : 'w-full'} py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
++                        className={`${preview && !isGenerating ? 'flex-1' : 'w-full'} py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                     >
+                         {isGenerating ? (
+                             <>
+@@ -241,7 +264,7 @@ export const CoverGenModal: React.FC<CoverGenModalProps> = ({
+                         ) : (
+                             <>
+                                 <Wand2 size={16} />
+-                                {previewUrl ? 'Regenerate' : 'Generate Cover'}
++                                {preview ? 'Regenerate' : 'Generate Cover'}
+                             </>
+                         )}
+                     </button>
+diff --git a/packages/web/src/components/Dashboard.tsx b/packages/web/src/components/Dashboard.tsx
+index b6e94f9..aca853c 100644
+--- a/packages/web/src/components/Dashboard.tsx
++++ b/packages/web/src/components/Dashboard.tsx
+@@ -190,8 +190,13 @@ export const Dashboard: React.FC = () => {
+           parsed.length > 0 &&
+           parsed.every((nb: unknown) => typeof nb === 'object' && nb !== null && 'id' in nb && 'pages' in nb)
+         ) {
+-          setNotebooks(parsed as Notebook[]);
+-          setActiveNotebookId((parsed as Notebook[])[0].id);
++          // Ensure bookmarks array exists (may be missing from older saved data)
++          const migrated = (parsed as Notebook[]).map(nb => ({
++            ...nb,
++            bookmarks: nb.bookmarks ?? [],
++          }));
++          setNotebooks(migrated);
++          setActiveNotebookId(migrated[0].id);
+           return;
+         }
+       } catch (e) {
+@@ -354,7 +359,8 @@ export const Dashboard: React.FC = () => {
+       });
+       addToast('Layout generated successfully!', 'success');
+     } catch (error) {
+-      addToast('Failed to generate layout. Please check your API key.', 'error');
++      const message = error instanceof Error ? error.message : 'Failed to generate layout.';
++      addToast(message, 'error');
+     }
+   };
+ 
+@@ -362,12 +368,13 @@ export const Dashboard: React.FC = () => {
+     if (!activePage) return;
+     setNotebooks(prev => prev.map(nb => {
+       if (nb.id !== activeNotebookId) return nb;
+-      const isBookmarked = nb.bookmarks.includes(activePage.id);
++      const bookmarks = nb.bookmarks ?? [];
++      const isBookmarked = bookmarks.includes(activePage.id);
+       return {
+         ...nb,
+         bookmarks: isBookmarked
+-          ? nb.bookmarks.filter(id => id !== activePage.id)
+-          : [...nb.bookmarks, activePage.id]
++          ? bookmarks.filter(id => id !== activePage.id)
++          : [...bookmarks, activePage.id]
+       };
+     }));
+   };
+@@ -443,7 +450,7 @@ export const Dashboard: React.FC = () => {
+ 
+   // Bookmarked pages for active notebook
+   const bookmarkedPages = activeNotebook
+-    ? activeNotebook.pages.filter(p => activeNotebook.bookmarks.includes(p.id))
++    ? activeNotebook.pages.filter(p => (activeNotebook.bookmarks ?? []).includes(p.id))
+     : [];
+ 
+   // Page indicator label
+@@ -627,13 +634,13 @@ export const Dashboard: React.FC = () => {
+             <>
+               <button
+                 onClick={toggleBookmark}
+-                className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${activeNotebook.bookmarks.includes(activePage.id)
++                className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${(activeNotebook.bookmarks ?? []).includes(activePage.id)
+                   ? 'bg-amber-100 border-amber-300 text-amber-600'
+                   : 'bg-white/80 border-gray-200 text-gray-700 hover:bg-white'
+                   }`}
+-                aria-label={activeNotebook.bookmarks.includes(activePage.id) ? 'Remove bookmark' : 'Bookmark page'}
++                aria-label={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? 'Remove bookmark' : 'Bookmark page'}
+               >
+-                <Bookmark size={20} fill={activeNotebook.bookmarks.includes(activePage.id) ? "currentColor" : "none"} />
++                <Bookmark size={20} fill={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? "currentColor" : "none"} />
+               </button>
+               <button
+                 onClick={() => setIsGeneratorOpen(true)}
+@@ -939,7 +946,8 @@ export const Dashboard: React.FC = () => {
+           try {
+             return await generateCover(prompt, aesthetic);
+           } catch (error) {
+-            addToast('Failed to generate cover', 'error');
++            const message = error instanceof Error ? error.message : 'Failed to generate cover.';
++            addToast(message, 'error');
+             throw error;
+           } finally {
+             setIsGeneratingCover(false);
+diff --git a/packages/web/src/components/landing/HeroSection.tsx b/packages/web/src/components/landing/HeroSection.tsx
+index 418fe3f..4abb4a1 100644
+--- a/packages/web/src/components/landing/HeroSection.tsx
++++ b/packages/web/src/components/landing/HeroSection.tsx
+@@ -152,26 +152,87 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
+           cursorRef.current.y = 0;
+         }}
+       >
+-        {/* Ambient glow blobs */}
++        {/* Ambient glow blobs — centered to frame notebook */}
+         {!isMobile && (
+           <>
+             <div
+-              className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full pointer-events-none"
++              className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full pointer-events-none"
+               style={{
+-                background: 'radial-gradient(ellipse, rgba(79,70,229,0.18) 0%, transparent 70%)',
+-                filter: 'blur(40px)',
++                background: 'radial-gradient(ellipse, rgba(79,70,229,0.2) 0%, transparent 65%)',
++                filter: 'blur(50px)',
+               }}
+             />
+             <div
+-              className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] rounded-full pointer-events-none"
++              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full pointer-events-none"
+               style={{
+-                background: 'radial-gradient(ellipse, rgba(217,119,6,0.12) 0%, transparent 70%)',
++                background: 'radial-gradient(ellipse, rgba(124,58,237,0.1) 0%, transparent 70%)',
++                filter: 'blur(80px)',
++              }}
++            />
++            <div
++              className="absolute bottom-1/4 right-1/3 w-[350px] h-[350px] rounded-full pointer-events-none"
++              style={{
++                background: 'radial-gradient(ellipse, rgba(217,119,6,0.1) 0%, transparent 70%)',
+                 filter: 'blur(60px)',
+               }}
+             />
+           </>
+         )}
+ 
++        {!isMobile && (
++          <div
++            className="absolute right-[4%] top-1/2 hidden lg:block w-[44vw] max-w-[760px] h-[72vh] max-h-[760px] -translate-y-1/2 rounded-[40px] border overflow-hidden pointer-events-none"
++            style={{
++              zIndex: 4,
++              borderColor: 'rgba(255,255,255,0.08)',
++              background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
++              boxShadow: '0 40px 120px rgba(3,7,18,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
++              backdropFilter: 'blur(16px)',
++            }}
++          >
++            <div
++              className="absolute inset-0"
++              style={{
++                background: 'radial-gradient(circle at 22% 22%, rgba(129,140,248,0.18), transparent 34%), radial-gradient(circle at 75% 72%, rgba(251,191,36,0.16), transparent 28%)',
++              }}
++            />
++            <div className="absolute left-8 top-8 rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(226,232,240,0.72)' }}>
++              Notebook Stage
++            </div>
++            <div className="absolute right-8 top-8 max-w-[220px] text-right">
++              <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: 'rgba(226,232,240,0.6)' }}>
++                Leather cover
++              </p>
++              <p className="mt-3 text-sm leading-relaxed" style={{ color: 'rgba(226,232,240,0.8)' }}>
++                A cinematic product frame that keeps the full notebook readable from first paint through the opening sequence.
++              </p>
++            </div>
++            <div className="absolute inset-x-10 bottom-8 grid grid-cols-3 gap-3">
++              {[
++                ['3D motion', 'Scroll-reactive camera move'],
++                ['Paper detail', 'Textured pages and foil spine'],
++                ['AI notebook', 'Cover and spread generation'],
++              ].map(([label, value]) => (
++                <div
++                  key={label}
++                  className="rounded-2xl border px-4 py-4"
++                  style={{
++                    borderColor: 'rgba(255,255,255,0.08)',
++                    background: 'rgba(15,23,42,0.22)',
++                  }}
++                >
++                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'rgba(148,163,184,0.7)' }}>
++                    {label}
++                  </div>
++                  <div className="mt-2 text-sm font-medium leading-snug text-white">
++                    {value}
++                  </div>
++                </div>
++              ))}
++            </div>
++          </div>
++        )}
++
+         {/* ── 3D Canvas: overlays entire section ── */}
+         <div
+           className="absolute inset-0"
+@@ -187,64 +248,100 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
+         {/* ── Phase 1: Main headline ── */}
+         <div
+           ref={phase1Ref}
+-          className="relative text-center max-w-5xl mx-auto"
+-          style={{ zIndex: 20 }}
++          className="relative w-full max-w-7xl mx-auto"
++          style={{
++            zIndex: 20,
++            paddingTop: isMobile ? 0 : '1rem',
++            paddingBottom: isMobile ? 0 : '18rem',
++          }}
+         >
+-          {/* Badge */}
+-          <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-8 border"
+-            style={{
+-              background: 'rgba(79,70,229,0.15)',
+-              borderColor: 'rgba(79,70,229,0.4)',
+-              color: '#a5b4fc',
+-            }}
+-          >
+-            <Sparkles size={14} />
+-            <span>Powered by Gemini 2.5 Flash</span>
+-          </div>
++          <div className={`grid items-center gap-10 ${isMobile ? '' : 'lg:grid-cols-[minmax(0,580px)_1fr]'}`}>
++            <div className={`${isMobile ? 'text-center' : 'text-left max-w-[580px]'}`}>
++              <div className={`hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-8 border ${isMobile ? '' : 'self-start'}`}
++                style={{
++                  background: 'rgba(79,70,229,0.15)',
++                  borderColor: 'rgba(79,70,229,0.4)',
++                  color: '#a5b4fc',
++                }}
++              >
++                <Sparkles size={14} />
++                <span>3D Notebook Experience · AI-Powered Layouts</span>
++              </div>
+ 
+-          {/* Headline */}
+-          <h1
+-            className="font-serif font-bold tracking-tight mb-6 leading-[1.05] text-white"
+-            style={{ fontSize: 'clamp(3.5rem, 9vw, 7.5rem)' }}
+-          >
+-            <span className="hero-word block">The notebook</span>
+-            <span className="hero-word block" style={{ color: '#818cf8' }}>that thinks</span>
+-            <span className="hero-word block italic" style={{ color: '#F4F0EC' }}>with you.</span>
+-          </h1>
++              <h1
++                className="font-serif font-bold tracking-tight mb-6 leading-[1.02] text-white"
++                style={{
++                  fontSize: 'clamp(3.5rem, 9vw, 7.5rem)',
++                  maxWidth: isMobile ? undefined : '10.5ch',
++                  marginInline: isMobile ? 'auto' : undefined,
++                }}
++              >
++                <span className="hero-word block">The notebook</span>
++                <span className="hero-word block" style={{ color: '#818cf8' }}>you can see</span>
++                <span className="hero-word block italic" style={{ color: '#F4F0EC' }}>come alive.</span>
++              </h1>
+ 
+-          {/* Subheadline */}
+-          <p className="hero-desc max-w-2xl mx-auto text-lg md:text-xl mb-10 leading-relaxed" style={{ color: '#94a3b8' }}>
+-            Describe your day, task, or idea — AI generates the perfect notebook layout instantly.
+-          </p>
++              <p className={`hero-desc text-lg md:text-xl mb-10 leading-relaxed ${isMobile ? 'max-w-2xl mx-auto' : 'max-w-xl'}`} style={{ color: '#94a3b8' }}>
++                Describe your day, task, or idea. PaperGrid stages the cover in 3D, opens the notebook on scroll, and generates a polished spread that feels tangible instead of flat.
++              </p>
+ 
+-          {/* CTAs */}
+-          <div className="hero-btns flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+-            <button
+-              onClick={onLaunch}
+-              className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-4 text-white font-bold text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
+-              style={{
+-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+-                boxShadow: '0 20px 60px rgba(79,70,229,0.4)',
+-              }}
+-            >
+-              Start Writing Now
+-              <ChevronRight size={20} />
+-            </button>
+-            <a
+-              href="https://github.com"
+-              target="_blank"
+-              rel="noopener noreferrer"
+-              className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-4 font-bold text-lg rounded-2xl border transition-all hover:bg-white/5"
+-              style={{ borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)' }}
+-            >
+-              <Github size={20} />
+-              View on GitHub
+-            </a>
+-          </div>
++              <div className={`hero-btns flex flex-col sm:flex-row items-center gap-4 mb-8 ${isMobile ? 'justify-center' : 'justify-start'}`}>
++                <button
++                  onClick={onLaunch}
++                  className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-4 text-white font-bold text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
++                  style={{
++                    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
++                    boxShadow: '0 20px 60px rgba(79,70,229,0.4)',
++                  }}
++                >
++                  Start Writing Now
++                  <ChevronRight size={20} />
++                </button>
++                <a
++                  href="https://github.com"
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-4 font-bold text-lg rounded-2xl border transition-all hover:bg-white/5"
++                  style={{ borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)' }}
++                >
++                  <Github size={20} />
++                  View on GitHub
++                </a>
++              </div>
+ 
+-          <p className="text-xs font-medium tracking-widest uppercase" style={{ color: 'rgba(148,163,184,0.6)' }}>
+-            Free · AI-Powered · No credit card needed
+-          </p>
++              <div className={`grid gap-3 text-left ${isMobile ? 'max-w-md mx-auto grid-cols-1' : 'grid-cols-3 max-w-2xl'}`}>
++                {[
++                  ['Cinematic hero', 'Full notebook visible at first paint'],
++                  ['Paper realism', 'Leather cover, spine foil, textured pages'],
++                  ['AI workflow', 'Generate the cover, then the full spread'],
++                ].map(([label, value]) => (
++                  <div
++                    key={label}
++                    className="rounded-2xl border px-4 py-4"
++                    style={{
++                      borderColor: 'rgba(255,255,255,0.08)',
++                      background: 'rgba(15,23,42,0.26)',
++                    }}
++                  >
++                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: 'rgba(148,163,184,0.72)' }}>
++                      {label}
++                    </div>
++                    <div className="mt-2 text-sm leading-relaxed text-white/88">
++                      {value}
++                    </div>
++                  </div>
++                ))}
++              </div>
++
++              <p className={`mt-6 text-xs font-medium tracking-widest uppercase ${isMobile ? 'text-center' : ''}`} style={{ color: 'rgba(148,163,184,0.6)' }}>
++                Free · AI-Powered · No credit card needed
++              </p>
++            </div>
++
++            {!isMobile && (
++              <div className="hidden lg:block" aria-hidden="true" />
++            )}
++          </div>
+         </div>
+ 
+         {/* ── Phase 2: Feature callout (starts hidden, desktop only) ── */}
+@@ -253,7 +350,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
+           className="absolute inset-0 flex items-center justify-center px-6"
+           style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
+         >
+-          <div className="text-center max-w-3xl">
++          <div
++            className="text-center max-w-3xl rounded-3xl px-10 py-12"
++            style={{
++              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
++              backdropFilter: 'blur(8px)',
++            }}
++          >
+             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
+               style={{
+                 background: 'rgba(217,119,6,0.15)',
+@@ -284,7 +387,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
+           className="absolute inset-0 flex items-center justify-center px-6"
+           style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
+         >
+-          <div className="text-center max-w-3xl">
++          <div
++            className="text-center max-w-3xl rounded-3xl px-10 py-12"
++            style={{
++              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
++              backdropFilter: 'blur(8px)',
++            }}
++          >
+             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
+               style={{
+                 background: 'rgba(16,185,129,0.15)',
+@@ -317,11 +426,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
+           </div>
+         </div>
+ 
+-        {/* ── Notebook hover target (desktop only) ── */}
++        {/* ── Notebook hover target (desktop only) — centered ── */}
+         {!isMobile && (
+           <div
+-            className="relative w-full max-w-5xl mx-auto mt-16"
+-            style={{ height: '420px', zIndex: 15 }}
++            className="absolute right-[4%] top-[14%] bottom-[8%] w-[46vw] max-w-[780px]"
++            style={{ zIndex: 15 }}
+             onPointerEnter={() => setHovered(true)}
+             onPointerLeave={() => setHovered(false)}
+           />
+diff --git a/packages/web/src/components/three/landing/HeroNotebook.tsx b/packages/web/src/components/three/landing/HeroNotebook.tsx
+index c0d06bd..141f5c6 100644
+--- a/packages/web/src/components/three/landing/HeroNotebook.tsx
++++ b/packages/web/src/components/three/landing/HeroNotebook.tsx
+@@ -34,6 +34,8 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
+   const currentCursorX = useRef(0);
+   const currentCursorY = useRef(0);
+   const currentHoverScale = useRef(1);
++  const currentLateralShift = useRef(0);
++  const currentDepthShift = useRef(0);
+ 
+   // Materials — both mobile and desktop use higher resolution for visible quality
+   const texRes = isMobile ? 512 : 1024;
+@@ -57,13 +59,13 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
+     emissiveIntensity: 0.08,
+   }), []);
+ 
+-  // Gold emboss material for title & spine lines — bright emissive so it's visible
++  // Gold emboss material for title & spine lines — brighter emissive for prominence
+   const goldMat = useMemo(() => new THREE.MeshStandardMaterial({
+     color: '#d4a574',
+-    roughness: 0.2,
+-    metalness: 0.8,
++    roughness: 0.15,
++    metalness: 0.85,
+     emissive: '#d4a574',
+-    emissiveIntensity: 0.25,
++    emissiveIntensity: 0.35,
+   }), []);
+ 
+   // Title texture for cover — high-res canvas for crisp text on both platforms
+@@ -104,10 +106,10 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
+       map: texture,
+       transparent: true,
+       alphaTest: 0.05,
+-      roughness: 0.15,
+-      metalness: 0.8,
++      roughness: 0.12,
++      metalness: 0.85,
+       emissive: '#d4a574',
+-      emissiveIntensity: 0.2,
++      emissiveIntensity: 0.3,
+     });
+   }, [isMobile]);
+ 
+@@ -159,11 +161,16 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
+     }
+ 
+     // Hover scale
+-    const targetHoverScale = hovered ? 1.03 : 1.0;
++    const targetHoverScale = hovered ? 1.06 : 1.0;
+     currentHoverScale.current = THREE.MathUtils.lerp(currentHoverScale.current, targetHoverScale, lerpFactor);
+ 
+     // Front cover rotation — smooth ease-out curve for satisfying open feel
+     const openEased = 1 - Math.pow(1 - open, 2.2);
++    const revealProgress = THREE.MathUtils.clamp(scrollProgress / (isMobile ? 0.12 : 0.08), 0, 1);
++    const revealEased = 1 - Math.pow(1 - revealProgress, 3);
++
++    // Stronger staged reveal: book starts smaller, pushes forward, then settles.
++    const scrollScale = THREE.MathUtils.lerp(0.84, 1.02, Math.min(openEased * 1.5, 1));
+     frontCoverRef.current.rotation.y = -openEased * Math.PI * 0.52;
+ 
+     // Idle sway — fades out as book opens for cleaner motion
+@@ -171,9 +178,24 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
+     const idleWeight = Math.max(0, 1 - open * 3); // fades by 33% open
+     const idleSway = Math.sin(idleTime * 0.15) * 0.04 * idleWeight;
+ 
+-    // Rotation: start angled to show 3D depth, gently rotate toward viewer
+-    groupRef.current.rotation.y = idleSway + THREE.MathUtils.lerp(0.5, 0.08, openEased) + cursorTiltY;
+-    groupRef.current.rotation.x = Math.sin(idleTime * 0.1) * 0.015 * idleWeight - 0.15 + openEased * 0.08 + cursorTiltX;
++    // Rotation: start with a pleasant 3/4 angle, rotate toward viewer as book opens
++    groupRef.current.rotation.y =
++      idleSway +
++      THREE.MathUtils.lerp(0.72, 0.18, openEased) -
++      (1 - revealEased) * 0.12 +
++      cursorTiltY;
++    groupRef.current.rotation.x =
++      Math.sin(idleTime * 0.1) * 0.02 * idleWeight -
++      0.01 +
++      openEased * 0.08 +
++      cursorTiltX;
++
++    // Scroll-driven motion path: pull notebook into view, then lift as it opens.
++    const targetLateralShift = THREE.MathUtils.lerp(0.95, 0.42, Math.min(openEased * 1.2, 1));
++    const targetDepthShift = THREE.MathUtils.lerp(0.95, 0.12, revealEased);
++    currentLateralShift.current = THREE.MathUtils.lerp(currentLateralShift.current, targetLateralShift, lerpFactor);
++    currentDepthShift.current = THREE.MathUtils.lerp(currentDepthShift.current, targetDepthShift, lerpFactor);
++    const scrollDrift = THREE.MathUtils.lerp(-0.05, 0.55, openEased);
+ 
+     // ── Exit animation: scale down, drift up, fade out (65%-95%) ──
+     const exitRaw = THREE.MathUtils.clamp((scrollProgress - 0.65) / 0.30, 0, 1);
+@@ -183,13 +205,15 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
+     const e = currentExit.current;
+     const exitEased = e * e * (3 - 2 * e);
+ 
+-    const exitScale = THREE.MathUtils.lerp(1.0, 0.7, exitEased);
+-    const exitDrift = exitEased * 0.8; // additive drift, not absolute
++    const exitScale = THREE.MathUtils.lerp(1.0, 0.65, exitEased);
++    const exitDrift = exitEased * 1.2;
+     const exitOpacity = THREE.MathUtils.lerp(1.0, 0.0, exitEased);
+ 
+-    groupRef.current.scale.setScalar(exitScale * currentHoverScale.current);
+-    // Add drift to base y offset (don't overwrite Float positioning)
+-    groupRef.current.position.y = exitDrift;
++    groupRef.current.scale.setScalar(exitScale * currentHoverScale.current * scrollScale);
++    groupRef.current.position.x = currentLateralShift.current;
++    groupRef.current.position.z = currentDepthShift.current;
++    // Combine reveal drift + exit drift for smooth continuous motion
++    groupRef.current.position.y = scrollDrift + exitDrift;
+ 
+     // Fade all materials — cached array avoids per-frame scene graph traverse
+     // On mobile: skip exit fade (no scroll-driven phases) to save GPU cycles
+@@ -226,7 +250,8 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
+ 
+   // Mobile: compensate for inner hw offset (all meshes sit at x=hw=1.6) to visually center,
+   // and push well below CTA buttons so it doesn't overlap text content
+-  const bookPosition: [number, number, number] = isMobile ? [-hw, -4.5, 0] : [0.5, -0.5, 0];
++  // Desktop: start below hero text, center horizontally (hw offset compensates for spine-origin geometry)
++  const bookPosition: [number, number, number] = isMobile ? [-hw, -4.5, 0] : [-hw + 2.1, -2.05, 0];
+ 
+   const notebookContent = (
+     <group position={bookPosition}>
+diff --git a/packages/web/src/components/three/landing/HeroScene.tsx b/packages/web/src/components/three/landing/HeroScene.tsx
+index 8a94620..47129f6 100644
+--- a/packages/web/src/components/three/landing/HeroScene.tsx
++++ b/packages/web/src/components/three/landing/HeroScene.tsx
+@@ -26,8 +26,8 @@ export default function HeroScene({ scrollRef, hovered, cursorRef, isMobile = fa
+       shadows={false}
+       postPreset={isMobile ? undefined : 'subtle'}
+       lightPreset="landing"
+-      fov={isMobile ? 45 : 40}
+-      cameraPosition={isMobile ? [0, -1.5, 14] : [0, 0, 7]}
++      fov={isMobile ? 45 : 38}
++      cameraPosition={isMobile ? [0, -1.5, 14] : [1.2, 0.35, 10.5]}
+       mobileLowPower={isMobile}
+     >
+       <HeroNotebook scrollRef={scrollRef} hovered={hovered} cursorRef={cursorRef} isMobile={isMobile} />
+diff --git a/packages/web/src/components/three/shared/Lighting.tsx b/packages/web/src/components/three/shared/Lighting.tsx
+index dfc788d..6f99369 100644
+--- a/packages/web/src/components/three/shared/Lighting.tsx
++++ b/packages/web/src/components/three/shared/Lighting.tsx
+@@ -30,13 +30,13 @@ export function Lighting({ preset = 'landing', followCursor = false, intensity =
+ 
+   const presets = {
+     landing: {
+-      keyColor: '#f8fafc',
+-      keyIntensity: 2.0,
+-      keyPosition: [5, 8, 5] as [number, number, number],
+-      fillIntensity: 0.45,
+-      rimColor: '#d4a574',
+-      rimIntensity: 0.8,
+-      rimPosition: [-3, 3, -4] as [number, number, number],
++      keyColor: '#fff7ed',
++      keyIntensity: 2.7,
++      keyPosition: [5.5, 7.5, 7] as [number, number, number],
++      fillIntensity: 0.58,
++      rimColor: '#a78bfa',
++      rimIntensity: 1.15,
++      rimPosition: [-4.5, 4.5, -2.5] as [number, number, number],
+       shadowMapSize: 1024,
+     },
+     notebook: {
+@@ -71,7 +71,7 @@ export function Lighting({ preset = 'landing', followCursor = false, intensity =
+     },
+   };
+ 
+-  const p = presets[preset];
++  const p = presets[preset] ?? presets.landing;
+ 
+   return (
+     <>
+diff --git a/packages/web/src/services/geminiService.ts b/packages/web/src/services/geminiService.ts
+index 1f5495c..f5763c1 100644
+--- a/packages/web/src/services/geminiService.ts
++++ b/packages/web/src/services/geminiService.ts
+@@ -6,6 +6,75 @@ const generateId = () => crypto.randomUUID();
+ const VALID_BLOCK_TYPES = new Set<string>(Object.values(BlockType));
+ 
+ const API_BASE = import.meta.env.VITE_API_URL || '';
++const AI_REQUEST_TIMEOUT_MS = 25000;
++
++export interface GeneratedCoverResult {
++  imageUrl: string;
++  fallback?: boolean;
++}
++
++function getAiApiBase(): string {
++  if (
++    import.meta.env.DEV &&
++    typeof window !== 'undefined' &&
++    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
++  ) {
++    // In local dev, prefer Vite's same-origin AI proxy so cover/layout generation
++    // keeps working even when the remote backend CORS policy is stricter.
++    return '';
++  }
++
++  return API_BASE;
++}
++
++function createTimeoutSignal(timeoutMs: number): AbortSignal {
++  const controller = new AbortController();
++  window.setTimeout(() => controller.abort(), timeoutMs);
++  return controller.signal;
++}
++
++async function parseApiResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
++  const contentType = response.headers.get('content-type') || '';
++  const isJson = contentType.includes('application/json');
++
++  if (!response.ok) {
++    let message = fallbackMessage;
++
++    if (isJson) {
++      const errorData = await response.json().catch(() => null);
++      message = errorData?.error || fallbackMessage;
++    } else {
++      const errorText = await response.text().catch(() => '');
++      if (errorText.trim()) {
++        message = errorText;
++      }
++    }
++
++    throw new Error(message);
++  }
++
++  if (!isJson) {
++    throw new Error('AI service returned an unexpected response.');
++  }
++
++  return response.json() as Promise<T>;
++}
++
++function normalizeAiError(error: unknown, fallbackMessage: string): Error {
++  if (error instanceof Error) {
++    if (error.name === 'AbortError') {
++      return new Error('AI generation timed out. Please try a shorter prompt or try again.');
++    }
++
++    if (error.message === 'Failed to fetch') {
++      return new Error('Could not reach the AI service. In local dev, keep the Vite server running and verify the backend origin.');
++    }
++
++    return error;
++  }
++
++  return new Error(fallbackMessage);
++}
+ 
+ interface GeneratedLayout {
+   title: string;
+@@ -21,18 +90,14 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
+     if (sessionToken) {
+       headers['Authorization'] = `Bearer ${sessionToken}`;
+     }
+-    const response = await fetch(`${API_BASE}/api/generate-layout`, {
++    const response = await fetch(`${getAiApiBase()}/api/generate-layout`, {
+       method: 'POST',
+       headers,
++      signal: createTimeoutSignal(AI_REQUEST_TIMEOUT_MS),
+       body: JSON.stringify({ prompt, industry, aesthetic }),
+     });
+ 
+-    if (!response.ok) {
+-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+-      throw new Error(errorData.error || `API error: ${response.status}`);
+-    }
+-
+-    const data = await response.json();
++    const data = await parseApiResponse<GeneratedLayout>(response, 'Layout generation failed.');
+ 
+     // Validate AI output with Zod schema
+     const validation = validateAIOutput(data);
+@@ -57,8 +122,13 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
+       matrixData: b.type === 'PRIORITY_MATRIX' ? (b.matrixData || { q1: '', q2: '', q3: '', q4: '' }) : undefined,
+       gridData: b.gridData ? {
+         columns: b.gridData.columns || [],
+-        rows: b.gridData.rows?.map((row: string[]) =>
+-          row.map((cellText: string) => ({ id: generateId(), content: cellText || "" }))
++        rows: b.gridData.rows?.map((row: unknown[]) =>
++          row.map((cell: unknown) => {
++            if (typeof cell === 'object' && cell !== null && 'id' in cell && 'content' in cell) {
++              return cell as { id: string; content: string };
++            }
++            return { id: generateId(), content: typeof cell === 'string' ? cell : '' };
++          })
+         ) || []
+       } : undefined,
+       calendarData: b.type === 'CALENDAR' ? (b.calendarData || { month: new Date().getMonth() + 1, year: new Date().getFullYear(), highlights: [] }) : undefined,
+@@ -77,27 +147,22 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
+     };
+   } catch (error) {
+     console.error("Layout generation failed:", error);
+-    throw error;
++    throw normalizeAiError(error, 'Layout generation failed.');
+   }
+ };
+ 
+-export const generateCover = async (prompt: string, aesthetic?: string): Promise<{ imageUrl: string }> => {
++export const generateCover = async (prompt: string, aesthetic?: string): Promise<GeneratedCoverResult> => {
+   try {
+-    const response = await fetch(`${API_BASE}/api/generate-cover`, {
++    const response = await fetch(`${getAiApiBase()}/api/generate-cover`, {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
++      signal: createTimeoutSignal(AI_REQUEST_TIMEOUT_MS),
+       body: JSON.stringify({ prompt, aesthetic }),
+     });
+ 
+-    if (!response.ok) {
+-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+-      throw new Error(errorData.error || `API error: ${response.status}`);
+-    }
+-
+-    return await response.json();
++    return await parseApiResponse<GeneratedCoverResult>(response, 'Cover generation failed.');
+   } catch (error) {
+     console.error("Cover generation failed:", error);
+-    throw error;
++    throw normalizeAiError(error, 'Cover generation failed.');
+   }
+ };
+-
+diff --git a/packages/web/vite.config.ts b/packages/web/vite.config.ts
+index d04ea5c..64fd7df 100644
+--- a/packages/web/vite.config.ts
++++ b/packages/web/vite.config.ts
+@@ -3,6 +3,21 @@ import { defineConfig, loadEnv, Plugin } from 'vite';
+ import react from '@vitejs/plugin-react';
+ 
+ function geminiProxyPlugin(apiKey: string): Plugin {
++  async function fetchWithTimeout(url: string, payload: unknown, timeoutMs: number): Promise<Response> {
++    const controller = new AbortController();
++    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
++
++    try {
++      return await fetch(url, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify(payload),
++        signal: controller.signal,
++      });
++    } finally {
++      clearTimeout(timeoutId);
++    }
++  }
+ 
+   // Generate a procedural gradient SVG cover as fallback
+   function generateFallbackCover(prompt: string, aesthetic?: string): string {
+@@ -160,13 +175,10 @@ Return a JSON object matching the schema.`,
+             },
+           };
+ 
+-          const geminiResponse = await fetch(
+-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+-            {
+-              method: 'POST',
+-              headers: { 'Content-Type': 'application/json' },
+-              body: JSON.stringify(geminiPayload),
+-            }
++          const geminiResponse = await fetchWithTimeout(
++            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
++            geminiPayload,
++            20000,
+           );
+ 
+           if (!geminiResponse.ok) {
+@@ -190,8 +202,12 @@ Return a JSON object matching the schema.`,
+           res.end(generatedText);
+         } catch (error) {
+           console.error('Gemini proxy error:', error);
+-          res.writeHead(500, { 'Content-Type': 'application/json' });
+-          res.end(JSON.stringify({ error: 'Internal server error' }));
++          const statusCode = error instanceof Error && error.name === 'AbortError' ? 504 : 500;
++          const message = error instanceof Error && error.name === 'AbortError'
++            ? 'AI layout generation timed out'
++            : 'Internal server error';
++          res.writeHead(statusCode, { 'Content-Type': 'application/json' });
++          res.end(JSON.stringify({ error: message }));
+         }
+       });
+ 
+@@ -242,13 +258,10 @@ Return a JSON object matching the schema.`,
+             },
+           };
+ 
+-          const geminiResponse = await fetch(
+-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+-            {
+-              method: 'POST',
+-              headers: { 'Content-Type': 'application/json' },
+-              body: JSON.stringify(geminiPayload),
+-            }
++          const geminiResponse = await fetchWithTimeout(
++            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
++            geminiPayload,
++            18000,
+           );
+ 
+           if (!geminiResponse.ok) {
+@@ -281,8 +294,12 @@ Return a JSON object matching the schema.`,
+           res.end(JSON.stringify({ imageUrl: fallbackUrl, fallback: true }));
+         } catch (error) {
+           console.error('Cover generation error:', error);
+-          res.writeHead(500, { 'Content-Type': 'application/json' });
+-          res.end(JSON.stringify({ error: 'Internal server error' }));
++          const statusCode = error instanceof Error && error.name === 'AbortError' ? 504 : 500;
++          const message = error instanceof Error && error.name === 'AbortError'
++            ? 'AI cover generation timed out'
++            : 'Internal server error';
++          res.writeHead(statusCode, { 'Content-Type': 'application/json' });
++          res.end(JSON.stringify({ error: message }));
+         }
+       });
+     },

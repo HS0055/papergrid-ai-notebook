@@ -1045,7 +1045,7 @@ http.route({
       const styleContext = aesthetic || "premium leather journal";
       // Title is NEVER baked into the image — the 3D BookCoverScene renders it
       // dynamically as a gold foil text overlay, so name changes are free/instant.
-      const imagePrompt = `Generate a flat, front-facing notebook cover surface design for a realistic 3D journal model. This must read as real cover artwork once mapped onto the notebook, so keep it perfectly FLAT: no perspective, no angled book, no book spine, no desk, no props, no mockup, no physical shadows outside the artwork. Do NOT include any text, words, titles, initials, or lettering unless explicitly requested. The design features: ${prompt}. Style: ${styleContext}. Use premium surface details such as leather grain, linen weave, foil stamping, embossing, debossing, ornamental pattern, painted artwork, or refined texture. The cover must have a visible focal composition, for example a centered emblem, medallion, decorative frame, botanical motif, or art-deco geometry, with enough contrast to read clearly on the notebook. Avoid plain blank covers, very dark near-solid fills, or large empty areas unless the prompt explicitly asks for minimalism. Keep the main composition vertically centered with a safe margin so important details are not clipped near the trim. Portrait orientation, taller than wide, roughly 3:4 ratio. Fill the frame with the cover surface only.`;
+      const imagePrompt = `Generate a flat, front-facing notebook cover surface design that will be texture-mapped onto a 3D book model. CRITICAL REQUIREMENTS: The artwork MUST fill the ENTIRE canvas edge-to-edge with ZERO white borders, margins, padding, or empty space around the edges. The design must bleed all the way to every edge. No perspective, no angled book, no book spine, no desk, no props, no mockup, no physical shadows. Do NOT include any text, words, titles, initials, or lettering. The design features: ${prompt}. Style: ${styleContext}. Use premium surface details such as leather grain, linen weave, foil stamping, embossing, debossing, ornamental pattern, painted artwork, or refined texture. The design must have a rich, fully saturated background color or pattern that extends to all four edges — imagine wrapping paper that has no white border. Include a visible focal composition (centered emblem, medallion, decorative frame, botanical motif, or art-deco geometry) with enough contrast to read clearly. Portrait orientation, taller than wide, 3:4 aspect ratio. The ENTIRE rectangle must be filled with design — absolutely no white or blank areas at any edge.`;
 
       // Use the current Gemini native image generation model
       const geminiPayload = {
@@ -1262,6 +1262,63 @@ http.route({
   }),
 });
 
+// ── Password Reset ───────────────────────────────────────
+
+http.route({
+  path: "/api/auth/forgot-password",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const body = await request.json();
+      const email = typeof body?.email === "string" ? body.email : "";
+      if (!email.trim()) {
+        return new Response(JSON.stringify({ error: "Email is required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const result = await ctx.runMutation(api.users.requestPasswordReset, { email });
+      return new Response(JSON.stringify(result), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to process request");
+      return new Response(JSON.stringify({ error: message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/auth/reset-password",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const body = await request.json();
+      const email = typeof body?.email === "string" ? body.email : "";
+      const code = typeof body?.code === "string" ? body.code : "";
+      const newPassword = typeof body?.newPassword === "string" ? body.newPassword : "";
+
+      if (!email.trim() || !code || !newPassword) {
+        return new Response(JSON.stringify({ error: "Email, code, and new password are required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const result = await ctx.runMutation(api.users.confirmPasswordReset, { email, code, newPassword });
+      return new Response(JSON.stringify(result), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to reset password");
+      return new Response(JSON.stringify({ error: message }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // ── Notebook sync: full load ──────────────────────────────
 http.route({
   path: "/api/notebooks",
@@ -1295,6 +1352,7 @@ http.route({
             paperType: page.paperType,
             aesthetic: page.aesthetic,
             themeColor: page.themeColor,
+            aiGenerated: page.aiGenerated,
             blocks: blocks.map((b: any) => ({
               id: b._id,
               type: b.type,
@@ -1363,13 +1421,52 @@ http.route({
         });
       }
 
-      const nbId = await ctx.runMutation(api.notebooks.create, {
-        userId: user._id as any,
-        title: notebook.title,
-        coverColor: notebook.coverColor || "bg-indigo-900",
-        sessionToken,
-      });
+      // Try to find existing notebook by ID (Convex doc ID) for upsert
+      let nbId: any = null;
+      let isUpdate = false;
+      if (notebook.id) {
+        try {
+          const existing = await ctx.runQuery(api.notebooks.get, { id: notebook.id });
+          if (existing && existing.userId === (user._id as any)) {
+            nbId = existing._id;
+            isUpdate = true;
+          }
+        } catch {
+          // Not a valid Convex ID — will create new
+        }
+      }
 
+      if (isUpdate && nbId) {
+        // Update notebook metadata
+        await ctx.runMutation(api.notebooks.update, {
+          id: nbId,
+          title: notebook.title,
+          coverColor: notebook.coverColor || "bg-indigo-900",
+          coverImageUrl: notebook.coverImageUrl || undefined,
+          bookmarks: notebook.bookmarks || [],
+          sessionToken,
+        });
+
+        // Delete existing pages + blocks, then recreate
+        const oldPages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nbId });
+        for (const oldPage of oldPages) {
+          await ctx.runMutation(api.pages.remove, { id: oldPage._id });
+        }
+      } else {
+        // Create new notebook
+        nbId = await ctx.runMutation(api.notebooks.create, {
+          userId: user._id as any,
+          title: notebook.title,
+          coverColor: notebook.coverColor || "bg-indigo-900",
+          coverImageUrl: notebook.coverImageUrl || undefined,
+          bookmarks: notebook.bookmarks || [],
+          createdAt: notebook.createdAt,
+          sessionToken,
+        });
+      }
+
+      // Create pages + blocks
+      const pageIdMap: Record<string, string> = {};
       for (const page of notebook.pages || []) {
         const pageId = await ctx.runMutation(api.pages.create, {
           notebookId: nbId,
@@ -1377,7 +1474,10 @@ http.route({
           paperType: page.paperType || "lined",
           aesthetic: page.aesthetic,
           themeColor: page.themeColor,
+          aiGenerated: page.aiGenerated,
+          createdAt: page.createdAt,
         });
+        if (page.id) pageIdMap[page.id] = pageId;
 
         if (page.blocks && page.blocks.length > 0) {
           const blockData = page.blocks.map((b: any) => ({
@@ -1554,6 +1654,8 @@ for (const path of [
   "/api/auth/signup",
   "/api/auth/me",
   "/api/auth/logout",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
   "/api/notebooks",
   "/api/notebooks/save",
   "/api/notebooks/delete",
