@@ -9,7 +9,7 @@ import {
   Book, Plus, Sparkles, Menu, ChevronLeft, ChevronRight, Bookmark,
   AlertCircle, CheckCircle2, X, Home, Search, FileText, Undo2,
   Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
-  Download, Image, Printer, Volume2, VolumeX, Wand2
+  Download, Image, Printer, Volume2, VolumeX, Wand2, Trash2
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { useSoundEffects } from '../hooks/useSoundEffects';
@@ -25,7 +25,7 @@ import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
 // Lazy-load 3D components (Three.js chunk loads on demand)
 const BookCoverScene = lazy(() => import('./three/notebook/BookCoverScene'));
 
-const STORAGE_KEY = 'papergrid_notebooks';
+const STORAGE_KEY_PREFIX = 'papergrid_notebooks';
 
 const COVER_COLORS = [
   'bg-indigo-900', 'bg-rose-900', 'bg-emerald-900', 'bg-slate-900',
@@ -160,6 +160,7 @@ export const Dashboard: React.FC = () => {
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [showCoverModal, setShowCoverModal] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Animation states
   const [contentKey, setContentKey] = useState(0);
@@ -173,6 +174,11 @@ export const Dashboard: React.FC = () => {
   const sfx = useSoundEffects();
   const auth = useAuth();
   const convex = useConvexNotebooks();
+
+  // User-scoped localStorage key to prevent cross-account data leakage
+  const storageKey = auth.user?.id
+    ? `${STORAGE_KEY_PREFIX}_${auth.user.id}`
+    : STORAGE_KEY_PREFIX;
 
   // Toast state
   const [toasts, setToasts] = useState<ToastData[]>([]);
@@ -208,7 +214,7 @@ export const Dashboard: React.FC = () => {
 
       // Fall back to local storage
       try {
-        const stored = await loadNotebooksFromStorage(STORAGE_KEY);
+        const stored = await loadNotebooksFromStorage(storageKey);
         if (!cancelled && stored && stored.length > 0) {
           setNotebooks(stored);
           setActiveNotebookId(stored[0].id);
@@ -247,17 +253,32 @@ export const Dashboard: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [auth.isAuthenticated]);
+  }, [auth.isAuthenticated, storageKey]);
 
-  // Save to local storage
+  // Save to local storage (user-scoped)
   useEffect(() => {
     if (notebooks.length > 0) {
-      void saveNotebooksToStorage(STORAGE_KEY, notebooks).catch((error) => {
+      void saveNotebooksToStorage(storageKey, notebooks).catch((error) => {
         console.error('Failed to persist notebooks:', error);
         addToast('Could not save notebook changes locally.', 'error');
       });
     }
-  }, [addToast, notebooks]);
+  }, [addToast, notebooks, storageKey]);
+
+  // Sync active notebook to Convex (debounced)
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!auth.isAuthenticated || notebooks.length === 0) return;
+    const nb = notebooks.find(n => n.id === activeNotebookId);
+    if (!nb) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      void convex.saveNotebook(nb);
+    }, 2000);
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [auth.isAuthenticated, notebooks, activeNotebookId]);
 
   const activeNotebook = notebooks.find(n => n.id === activeNotebookId) || notebooks[0];
   const activePage = activeNotebook && activePageIndex >= 0 && activePageIndex < activeNotebook.pages.length
@@ -333,6 +354,31 @@ export const Dashboard: React.FC = () => {
     setActiveNotebookId(nbId);
     setActivePageIndex(-1);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const handleDeleteNotebook = async (nbId: string) => {
+    const nb = notebooks.find(n => n.id === nbId);
+    if (!nb) return;
+    // Remove from local state
+    const remaining = notebooks.filter(n => n.id !== nbId);
+    setNotebooks(remaining);
+    if (activeNotebookId === nbId) {
+      if (remaining.length > 0) {
+        setActiveNotebookId(remaining[0].id);
+      } else {
+        // Create a fresh notebook if all deleted
+        handleNewNotebook();
+      }
+      setActivePageIndex(-1);
+    }
+    setDeleteConfirmId(null);
+    // Delete from Convex
+    const ok = await convex.deleteNotebook(nbId);
+    if (ok) {
+      addToast(`"${nb.title || 'Untitled'}" deleted`, 'success');
+    } else {
+      addToast('Deleted locally (cloud sync pending)', 'success');
+    }
   };
 
   const handleNewPage = (templateBlocks?: Block[]) => {
@@ -585,29 +631,70 @@ export const Dashboard: React.FC = () => {
 
           <div className="px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Notebooks</div>
           {filteredNotebooks.map(nb => (
-            <button
-              key={nb.id}
-              onClick={() => handleSwitchNotebook(nb.id)}
-              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 ${activeNotebookId === nb.id
-                ? 'bg-gray-800 text-white shadow-md border border-gray-700'
-                : 'hover:bg-gray-800/50 hover:text-gray-100'
-                }`}
-            >
-              <div
-                className={`w-4 h-6 rounded-sm ${nb.coverColor} shadow-sm border border-white/10 bg-cover bg-center shrink-0`}
-                style={nb.coverImageUrl ? { backgroundImage: `url("${nb.coverImageUrl}")` } : undefined}
-              />
-              <div className="overflow-hidden flex-1">
-                <div className="truncate font-medium text-sm">{nb.title || "Untitled"}</div>
-                <div className="text-[10px] text-gray-500 mt-0.5">{nb.pages.length} spreads</div>
-              </div>
-              {nb.pages.some(p => p.aiGenerated) && (
-                <Sparkles size={12} className="text-indigo-400 shrink-0" />
+            <div key={nb.id} className="relative group/nb">
+              {deleteConfirmId === nb.id ? (
+                /* Delete confirmation inline */
+                <div className="px-3 py-2.5 rounded-lg bg-red-950/60 border border-red-800/40 space-y-2">
+                  <div className="text-xs text-red-300">Delete "{nb.title || 'Untitled'}"?</div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleDeleteNotebook(nb.id)}
+                      className="flex-1 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-medium transition-colors"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirmId(null)}
+                      className="flex-1 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleSwitchNotebook(nb.id)}
+                  className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 ${activeNotebookId === nb.id
+                    ? 'bg-gray-800 text-white shadow-md border border-gray-700'
+                    : 'hover:bg-gray-800/50 hover:text-gray-100'
+                    }`}
+                >
+                  <div
+                    className={`w-4 h-6 rounded-sm ${nb.coverColor} shadow-sm border border-white/10 bg-cover bg-center shrink-0`}
+                    style={nb.coverImageUrl ? { backgroundImage: `url("${nb.coverImageUrl}")` } : undefined}
+                  />
+                  <div className="overflow-hidden flex-1">
+                    <div className="truncate font-medium text-sm">{nb.title || "Untitled"}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                      <span>{nb.pages.length} spreads</span>
+                      {(nb.bookmarks ?? []).length > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-amber-500">
+                          <Bookmark size={8} fill="currentColor" />
+                          <span>{nb.bookmarks.length}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {nb.pages.some(p => p.aiGenerated) && (
+                    <Sparkles size={12} className="text-indigo-400 shrink-0" />
+                  )}
+                  {/* Delete button — appears on hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirmId(nb.id);
+                    }}
+                    className="opacity-0 group-hover/nb:opacity-100 p-1 rounded hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all shrink-0"
+                    title="Delete notebook"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </button>
               )}
-            </button>
+            </div>
           ))}
 
-          {/* Bookmarks Section */}
+          {/* Bookmarks Section (sidebar list) */}
           {bookmarkedPages.length > 0 && (
             <div className="mt-4">
               <button
@@ -727,15 +814,19 @@ export const Dashboard: React.FC = () => {
         <div className="absolute top-4 right-4 z-30 flex gap-1.5 md:gap-2">
           {activePage && (
             <>
+              {/* Bookmark ribbon toggle — top corner tassel style */}
               <button
                 onClick={toggleBookmark}
-                className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${(activeNotebook.bookmarks ?? []).includes(activePage.id)
-                  ? 'bg-amber-100 border-amber-300 text-amber-600'
-                  : 'bg-white/80 border-gray-200 text-gray-700 hover:bg-white'
+                className={`relative p-2 backdrop-blur rounded-lg shadow-sm border transition-all duration-300 ${(activeNotebook.bookmarks ?? []).includes(activePage.id)
+                  ? 'bg-amber-100 border-amber-300 text-amber-600 scale-110'
+                  : 'bg-white/80 border-gray-200 text-gray-700 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-500'
                   }`}
                 aria-label={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? 'Remove bookmark' : 'Bookmark page'}
               >
                 <Bookmark size={20} fill={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? "currentColor" : "none"} />
+                {(activeNotebook.bookmarks ?? []).includes(activePage.id) && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-white" />
+                )}
               </button>
               <button
                 onClick={() => setIsGeneratorOpen(true)}
@@ -778,6 +869,57 @@ export const Dashboard: React.FC = () => {
 
         {/* Notebook Container */}
         <div className="w-full max-w-6xl h-full flex flex-col items-center justify-center relative">
+
+          {/* Bookmark Ribbon Tassels — left edge of notebook */}
+          {activePageIndex >= 0 && bookmarkedPages.length > 0 && (
+            <div className="absolute left-0 md:left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-1" style={{ marginTop: '-60px' }}>
+              {bookmarkedPages.map((p, i) => {
+                const pageIdx = activeNotebook.pages.findIndex(pg => pg.id === p.id);
+                const isCurrentPage = pageIdx === activePageIndex;
+                const ribbonColors = [
+                  'from-amber-500 to-amber-600',
+                  'from-rose-500 to-rose-600',
+                  'from-indigo-500 to-indigo-600',
+                  'from-emerald-500 to-emerald-600',
+                  'from-violet-500 to-violet-600',
+                  'from-sky-500 to-sky-600',
+                  'from-pink-500 to-pink-600',
+                  'from-teal-500 to-teal-600',
+                ];
+                const colorClass = ribbonColors[i % ribbonColors.length];
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setPageDirection(pageIdx > activePageIndex ? 'right' : 'left');
+                      setActivePageIndex(pageIdx);
+                      sfx.pageFlip();
+                    }}
+                    className={`group/ribbon relative flex items-center transition-all duration-300 ${isCurrentPage ? 'translate-x-0' : '-translate-x-2 hover:translate-x-0'}`}
+                    title={p.title || `Page ${pageIdx + 1}`}
+                  >
+                    {/* Ribbon body */}
+                    <div
+                      className={`relative bg-gradient-to-r ${colorClass} shadow-lg rounded-r-sm ${isCurrentPage ? 'w-20 md:w-28' : 'w-8 md:w-12 group-hover/ribbon:w-20 md:group-hover/ribbon:w-28'} h-7 transition-all duration-300 flex items-center overflow-hidden`}
+                    >
+                      {/* Fabric texture overlay */}
+                      <div className="absolute inset-0 opacity-20 bg-[repeating-linear-gradient(90deg,transparent,transparent_1px,rgba(255,255,255,0.1)_1px,rgba(255,255,255,0.1)_2px)]" />
+                      {/* Label — only visible when expanded */}
+                      <span className={`text-white text-[10px] font-medium pl-2 pr-1 truncate whitespace-nowrap transition-opacity duration-200 ${isCurrentPage ? 'opacity-100' : 'opacity-0 group-hover/ribbon:opacity-100'}`}>
+                        {p.title || `Pg ${pageIdx + 1}`}
+                      </span>
+                    </div>
+                    {/* Ribbon tail / V-notch */}
+                    <div className={`w-0 h-0 border-t-[14px] border-b-[14px] border-l-[6px] border-t-transparent border-b-transparent transition-colors`}
+                      style={{
+                        borderLeftColor: isCurrentPage ? undefined : undefined,
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Left Navigation Arrow */}
           {activePageIndex >= 0 && (
@@ -968,7 +1110,7 @@ export const Dashboard: React.FC = () => {
             </button>
           )}
 
-          {/* Page Position Indicator */}
+          {/* Page Position Indicator + Add Page */}
           <div className="mt-3 flex items-center justify-center gap-3 shrink-0">
             <span className="text-xs font-sans text-gray-400 uppercase tracking-widest">
               {getPageLabel()}
@@ -990,6 +1132,14 @@ export const Dashboard: React.FC = () => {
                 ))}
               </div>
             )}
+            {/* Add new page — always accessible */}
+            <button
+              onClick={() => handleNewPage()}
+              className="p-1.5 rounded-full bg-white/80 hover:bg-indigo-100 border border-gray-200 hover:border-indigo-300 text-gray-500 hover:text-indigo-600 shadow-sm transition-all hover:scale-110"
+              title="Add new page"
+            >
+              <Plus size={14} />
+            </button>
           </div>
         </div>
       </main>
