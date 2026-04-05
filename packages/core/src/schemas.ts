@@ -5,6 +5,7 @@ export const BlockTypeSchema = z.enum([
   'TEXT', 'HEADING', 'GRID', 'CHECKBOX', 'CALLOUT',
   'QUOTE', 'DIVIDER', 'MOOD_TRACKER', 'PRIORITY_MATRIX', 'INDEX', 'MUSIC_STAFF',
   'CALENDAR', 'WEEKLY_VIEW', 'HABIT_TRACKER', 'GOAL_SECTION', 'TIME_BLOCK', 'DAILY_SECTION',
+  'PROGRESS_BAR', 'RATING', 'WATER_TRACKER', 'SECTION_NAV', 'KANBAN',
 ]);
 
 // Paper types - mirrors NotebookPage.paperType union
@@ -136,6 +137,54 @@ export const DailySectionDataSchema = z.object({
   sections: z.array(DailySectionEntrySchema),
 });
 
+// ProgressBarData
+export const ProgressBarDataSchema = z.object({
+  label: z.string(),
+  current: z.number().min(0).max(100),
+  target: z.string(),
+  color: z.string(),
+});
+
+// RatingData
+export const RatingDataSchema = z.object({
+  label: z.string(),
+  max: z.union([z.literal(5), z.literal(10)]),
+  value: z.number().min(0),
+  style: z.enum(['star', 'circle', 'heart']),
+});
+
+// WaterTrackerData
+export const WaterTrackerDataSchema = z.object({
+  goal: z.number().min(1).max(20).default(8),
+  filled: z.number().min(0),
+});
+
+// SectionNavData
+export const SectionNavDataSchema = z.object({
+  sections: z.array(z.object({
+    label: z.string(),
+    icon: z.string().optional(),
+    pageIndex: z.number().optional(),
+  })),
+});
+
+// KanbanData
+export const KanbanCardSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  checked: z.boolean().optional(),
+});
+
+export const KanbanColumnSchema = z.object({
+  title: z.string(),
+  color: z.string(),
+  cards: z.array(KanbanCardSchema),
+});
+
+export const KanbanDataSchema = z.object({
+  columns: z.array(KanbanColumnSchema),
+});
+
 // Block - mirrors Block interface
 export const BlockSchema = z.object({
   id: z.string(),
@@ -156,6 +205,11 @@ export const BlockSchema = z.object({
   goalSectionData: GoalSectionDataSchema.optional(),
   timeBlockData: TimeBlockDataSchema.optional(),
   dailySectionData: DailySectionDataSchema.optional(),
+  progressBarData: ProgressBarDataSchema.optional(),
+  ratingData: RatingDataSchema.optional(),
+  waterTrackerData: WaterTrackerDataSchema.optional(),
+  sectionNavData: SectionNavDataSchema.optional(),
+  kanbanData: KanbanDataSchema.optional(),
 });
 
 // NotebookPage - mirrors NotebookPage interface
@@ -213,6 +267,11 @@ export const AILayoutResponseSchema = z.object({
     goalSectionData: GoalSectionDataSchema.optional().nullable(),
     timeBlockData: TimeBlockDataSchema.optional().nullable(),
     dailySectionData: DailySectionDataSchema.optional().nullable(),
+    progressBarData: ProgressBarDataSchema.optional().nullable(),
+    ratingData: RatingDataSchema.optional().nullable(),
+    waterTrackerData: WaterTrackerDataSchema.optional().nullable(),
+    sectionNavData: SectionNavDataSchema.optional().nullable(),
+    kanbanData: KanbanDataSchema.optional().nullable(),
   })),
 });
 
@@ -270,3 +329,10 @@ export type DailySectionEntryZ = z.infer<typeof DailySectionEntrySchema>;
 export type DailySectionDataZ = z.infer<typeof DailySectionDataSchema>;
 export type AIPageZ = z.infer<typeof AIPageSchema>;
 export type AIMultiPageResponseZ = z.infer<typeof AIMultiPageResponseSchema>;
+export type ProgressBarDataZ = z.infer<typeof ProgressBarDataSchema>;
+export type RatingDataZ = z.infer<typeof RatingDataSchema>;
+export type WaterTrackerDataZ = z.infer<typeof WaterTrackerDataSchema>;
+export type SectionNavDataZ = z.infer<typeof SectionNavDataSchema>;
+export type KanbanCardZ = z.infer<typeof KanbanCardSchema>;
+export type KanbanColumnZ = z.infer<typeof KanbanColumnSchema>;
+export type KanbanDataZ = z.infer<typeof KanbanDataSchema>;
