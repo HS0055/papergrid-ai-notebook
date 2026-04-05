@@ -2,12 +2,37 @@ import { v } from "convex/values";
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
-// Plan limits for gating features
+// Legacy plan limits (kept for backward compatibility during migration)
 export const PLAN_LIMITS = {
   free: { notebooks: 3, pagesPerNotebook: 10, aiGenerationsPerMonth: 25 },
   starter: { notebooks: 999, pagesPerNotebook: 50, aiGenerationsPerMonth: 50 },
   pro: { notebooks: 999, pagesPerNotebook: 999, aiGenerationsPerMonth: 500 },
   founder: { notebooks: 999, pagesPerNotebook: 999, aiGenerationsPerMonth: 500 },
+  creator: { notebooks: 999, pagesPerNotebook: 999, aiGenerationsPerMonth: 500 },
+} as const;
+
+// Default Ink configuration (admin can override via appSettings)
+export const DEFAULT_INK_CONFIG = {
+  plans: {
+    free:    { inkPerMonth: 12,  notebooks: 1,   rolloverMax: 0,   pagesPerNotebook: 10 },
+    pro:     { inkPerMonth: 120, notebooks: 999, rolloverMax: 60,  pagesPerNotebook: 999 },
+    creator: { inkPerMonth: 350, notebooks: 999, rolloverMax: 150, pagesPerNotebook: 999 },
+    // Legacy plans map to new ones
+    starter: { inkPerMonth: 120, notebooks: 999, rolloverMax: 60,  pagesPerNotebook: 50 },
+    founder: { inkPerMonth: 350, notebooks: 999, rolloverMax: 150, pagesPerNotebook: 999 },
+  },
+  costs: {
+    layout: 1,
+    advanced_layout: 2,
+    cover: 4,
+    premium_cover: 6,
+  },
+  packs: [
+    { id: "pack_25",  ink: 25,  priceCents: 399  },
+    { id: "pack_75",  ink: 75,  priceCents: 899  },
+    { id: "pack_200", ink: 200, priceCents: 1999 },
+    { id: "pack_500", ink: 500, priceCents: 4499 },
+  ],
 } as const;
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
@@ -418,7 +443,7 @@ export const adminSetPlan = mutation({
   args: {
     sessionToken: v.optional(v.string()),
     targetUserId: v.id("users"),
-    plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder")),
+    plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder"), v.literal("creator")),
   },
   handler: async (ctx, { sessionToken, targetUserId, plan }) => {
     await requireAdmin(ctx, sessionToken);
@@ -466,6 +491,352 @@ export const devResetAllAiUsage = mutation({
       await ctx.db.patch(u._id, { aiGenerationsUsed: 0, aiGenerationsResetAt: new Date().toISOString() });
     }
     return { reset: users.length };
+  },
+});
+
+// ── Ink System ────────────────────────────────────────────
+
+// Get Ink config (from appSettings or default)
+export const getInkConfig = query({
+  args: {},
+  handler: async (ctx) => {
+    const setting = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
+      .first();
+    if (setting?.value) return setting.value as typeof DEFAULT_INK_CONFIG;
+    return DEFAULT_INK_CONFIG;
+  },
+});
+
+// Get user's Ink balance
+export const getInkBalance = query({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const user = (await getUserFromIdentity(ctx)) ?? (await getUserFromSessionToken(ctx, sessionToken));
+    if (!user) return null;
+    const subscription = user.inkSubscription ?? 0;
+    const purchased = user.inkPurchased ?? 0;
+    const total = subscription + purchased;
+    return {
+      subscription,
+      purchased,
+      total,
+      plan: user.plan,
+      resetAt: user.inkResetAt ?? null,
+    };
+  },
+});
+
+// Preview Ink cost before an action
+export const previewInkCost = query({
+  args: {
+    sessionToken: v.optional(v.string()),
+    action: v.string(),
+  },
+  handler: async (ctx, { sessionToken, action }) => {
+    const user = (await getUserFromIdentity(ctx)) ?? (await getUserFromSessionToken(ctx, sessionToken));
+    if (!user) return { cost: 0, balance: 0, canAfford: false };
+
+    const setting = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
+      .first();
+    const config = (setting?.value ?? DEFAULT_INK_CONFIG) as typeof DEFAULT_INK_CONFIG;
+    const cost = config.costs[action as keyof typeof config.costs] ?? 1;
+    const balance = (user.inkSubscription ?? 0) + (user.inkPurchased ?? 0);
+
+    return { cost, balance, canAfford: balance >= cost };
+  },
+});
+
+// Spend Ink (called before AI generation)
+export const spendInk = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    action: v.string(),
+    amount: v.optional(v.number()),
+  },
+  handler: async (ctx, { sessionToken, action, amount }) => {
+    const user = (await getUserFromIdentity(ctx)) ?? (await getUserFromSessionToken(ctx, sessionToken));
+    if (!user) throw new Error("Not authenticated");
+
+    // Get config for cost lookup
+    const setting = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
+      .first();
+    const config = (setting?.value ?? DEFAULT_INK_CONFIG) as typeof DEFAULT_INK_CONFIG;
+    const cost = amount ?? config.costs[action as keyof typeof config.costs] ?? 1;
+
+    const subscription = user.inkSubscription ?? 0;
+    const purchased = user.inkPurchased ?? 0;
+    const total = subscription + purchased;
+
+    if (total < cost) {
+      return { allowed: false, balance: total, cost };
+    }
+
+    // Spend subscription ink first, then purchased
+    const subDeduct = Math.min(subscription, cost);
+    const purchDeduct = cost - subDeduct;
+
+    const newSub = subscription - subDeduct;
+    const newPurch = purchased - purchDeduct;
+    const newBalance = newSub + newPurch;
+
+    await ctx.db.patch(user._id, {
+      inkSubscription: newSub,
+      inkPurchased: newPurch,
+      inkLastActivity: new Date().toISOString(),
+    });
+
+    // Log transaction
+    await ctx.db.insert("inkTransactions", {
+      userId: user._id,
+      type: "spend",
+      amount: -cost,
+      balance: newBalance,
+      action,
+      description: `${action} generation`,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { allowed: true, balance: newBalance, cost };
+  },
+});
+
+// Refill subscription Ink (called on login or monthly reset)
+export const refillSubscriptionInk = mutation({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const user = (await getUserFromIdentity(ctx)) ?? (await getUserFromSessionToken(ctx, sessionToken));
+    if (!user) throw new Error("Not authenticated");
+
+    const now = new Date();
+    const resetAt = user.inkResetAt ? new Date(user.inkResetAt) : null;
+
+    // Only refill if month has changed
+    if (resetAt && resetAt.getMonth() === now.getMonth() && resetAt.getFullYear() === now.getFullYear()) {
+      return { refilled: false, balance: (user.inkSubscription ?? 0) + (user.inkPurchased ?? 0) };
+    }
+
+    const setting = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
+      .first();
+    const config = (setting?.value ?? DEFAULT_INK_CONFIG) as typeof DEFAULT_INK_CONFIG;
+    const planConfig = config.plans[user.plan as keyof typeof config.plans] ?? config.plans.free;
+
+    // Calculate rollover
+    const currentSub = user.inkSubscription ?? 0;
+    const rollover = Math.min(currentSub, planConfig.rolloverMax);
+    const newSub = planConfig.inkPerMonth + rollover;
+    const purchased = user.inkPurchased ?? 0;
+
+    await ctx.db.patch(user._id, {
+      inkSubscription: newSub,
+      inkResetAt: now.toISOString(),
+    });
+
+    // Log transaction
+    await ctx.db.insert("inkTransactions", {
+      userId: user._id,
+      type: "subscription_refill",
+      amount: planConfig.inkPerMonth,
+      balance: newSub + purchased,
+      description: `Monthly refill (${user.plan} plan)${rollover > 0 ? ` + ${rollover} rollover` : ""}`,
+      createdAt: now.toISOString(),
+    });
+
+    return { refilled: true, balance: newSub + purchased, rollover };
+  },
+});
+
+// Purchase Ink (after Stripe payment confirmation)
+export const purchaseInk = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    packId: v.string(),
+    inkAmount: v.number(),
+  },
+  handler: async (ctx, { sessionToken, packId, inkAmount }) => {
+    const user = (await getUserFromIdentity(ctx)) ?? (await getUserFromSessionToken(ctx, sessionToken));
+    if (!user) throw new Error("Not authenticated");
+
+    const newPurchased = (user.inkPurchased ?? 0) + inkAmount;
+    const newBalance = (user.inkSubscription ?? 0) + newPurchased;
+
+    await ctx.db.patch(user._id, {
+      inkPurchased: newPurchased,
+      inkLastActivity: new Date().toISOString(),
+    });
+
+    await ctx.db.insert("inkTransactions", {
+      userId: user._id,
+      type: "purchase",
+      amount: inkAmount,
+      balance: newBalance,
+      description: `Purchased ${packId} (${inkAmount} Ink)`,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { balance: newBalance };
+  },
+});
+
+// Admin: update Ink config
+export const adminUpdateInkConfig = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    config: v.any(),
+  },
+  handler: async (ctx, { sessionToken, config }) => {
+    const admin = await requireAdmin(ctx, sessionToken);
+    const existing = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        value: config,
+        updatedAt: new Date().toISOString(),
+        updatedBy: admin._id,
+      });
+    } else {
+      await ctx.db.insert("appSettings", {
+        key: "inkConfig",
+        value: config,
+        updatedAt: new Date().toISOString(),
+        updatedBy: admin._id,
+      });
+    }
+    return { success: true };
+  },
+});
+
+// Admin: grant Ink to a user
+export const adminGrantInk = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    targetUserId: v.id("users"),
+    amount: v.number(),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, { sessionToken, targetUserId, amount, description }) => {
+    await requireAdmin(ctx, sessionToken);
+    const target = await ctx.db.get(targetUserId);
+    if (!target) throw new Error("User not found");
+
+    const newPurchased = (target.inkPurchased ?? 0) + amount;
+    const newBalance = (target.inkSubscription ?? 0) + newPurchased;
+
+    await ctx.db.patch(targetUserId, { inkPurchased: newPurchased });
+
+    await ctx.db.insert("inkTransactions", {
+      userId: targetUserId,
+      type: "admin_grant",
+      amount,
+      balance: newBalance,
+      description: description ?? `Admin granted ${amount} Ink`,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { balance: newBalance };
+  },
+});
+
+// Admin: deduct Ink from a user
+export const adminDeductInk = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    targetUserId: v.id("users"),
+    amount: v.number(),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, { sessionToken, targetUserId, amount, description }) => {
+    await requireAdmin(ctx, sessionToken);
+    const target = await ctx.db.get(targetUserId);
+    if (!target) throw new Error("User not found");
+
+    // Deduct from purchased first, then subscription
+    const purchased = target.inkPurchased ?? 0;
+    const subscription = target.inkSubscription ?? 0;
+
+    const purchDeduct = Math.min(purchased, amount);
+    const subDeduct = Math.min(subscription, amount - purchDeduct);
+
+    const newPurch = purchased - purchDeduct;
+    const newSub = subscription - subDeduct;
+    const newBalance = newSub + newPurch;
+
+    await ctx.db.patch(targetUserId, {
+      inkPurchased: newPurch,
+      inkSubscription: newSub,
+    });
+
+    await ctx.db.insert("inkTransactions", {
+      userId: targetUserId,
+      type: "admin_deduct",
+      amount: -amount,
+      balance: newBalance,
+      description: description ?? `Admin deducted ${amount} Ink`,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { balance: newBalance };
+  },
+});
+
+// Migration: convert old generation system to Ink
+export const migrateToInkSystem = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    const setting = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
+      .first();
+    const config = (setting?.value ?? DEFAULT_INK_CONFIG) as typeof DEFAULT_INK_CONFIG;
+
+    let migrated = 0;
+    for (const u of users) {
+      // Skip if already migrated
+      if (u.inkBalance !== undefined && u.inkBalance !== null) continue;
+
+      const planKey = u.plan as keyof typeof config.plans;
+      const planConfig = config.plans[planKey] ?? config.plans.free;
+
+      await ctx.db.patch(u._id, {
+        inkSubscription: planConfig.inkPerMonth,
+        inkPurchased: 0,
+        inkResetAt: new Date().toISOString(),
+        inkLastActivity: new Date().toISOString(),
+      });
+      migrated++;
+    }
+    return { migrated, total: users.length };
+  },
+});
+
+// Seed default Ink config into appSettings
+export const seedInkConfig = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const existing = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
+      .first();
+    if (!existing) {
+      await ctx.db.insert("appSettings", {
+        key: "inkConfig",
+        value: DEFAULT_INK_CONFIG,
+        updatedAt: new Date().toISOString(),
+      });
+      return { seeded: true };
+    }
+    return { seeded: false, existing: true };
   },
 });
 
