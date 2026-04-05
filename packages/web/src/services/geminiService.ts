@@ -47,18 +47,45 @@ const normalizeGeneratedCover = async (imageUrl: string): Promise<string> => {
   }
 };
 
-export const generateLayout = async (prompt: string, industry?: string, aesthetic?: string): Promise<GeneratedPage[]> => {
+export interface ExistingPageContext {
+  title: string;
+  paperType: string;
+  themeColor: string;
+  blockSummary: string;
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 90000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const sessionToken = localStorage.getItem('papergrid_session');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (sessionToken) {
-      headers['Authorization'] = `Bearer ${sessionToken}`;
-    }
-    const response = await fetch(`${API_BASE}/api/generate-layout`, {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export const generateLayout = async (
+  prompt: string,
+  industry?: string,
+  aesthetic?: string,
+  existingPages?: ExistingPageContext[],
+): Promise<GeneratedPage[]> => {
+  const sessionToken = localStorage.getItem('papergrid_session');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (sessionToken) {
+    headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+  const payload: Record<string, unknown> = { prompt, industry, aesthetic };
+  if (existingPages && existingPages.length > 0) {
+    payload.existingPages = existingPages;
+  }
+
+  const doFetch = async (): Promise<GeneratedPage[]> => {
+    const response = await fetchWithTimeout(`${API_BASE}/api/generate-layout`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ prompt, industry, aesthetic }),
-    });
+      body: JSON.stringify(payload),
+    }, 90000);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -67,23 +94,56 @@ export const generateLayout = async (prompt: string, industry?: string, aestheti
 
     const data = await response.json();
 
-    // Backend returns { pages: [...] } — each page already hydrated with IDs
     const rawPages: GeneratedPage[] = Array.isArray(data.pages)
       ? data.pages
-      : [data]; // backward compat: single-page response
+      : [data];
 
     if (rawPages.length === 0) {
       throw new Error('AI generated an empty response. Please try again.');
     }
 
-    return rawPages.map((page) => ({
-      title: page.title || 'Untitled',
-      paperType: page.paperType || 'lined',
-      themeColor: page.themeColor || 'slate',
-      blocks: (page.blocks || []) as Block[],
-    }));
+    // Filter out pages with no real blocks
+    const validPages = rawPages
+      .map((page) => ({
+        title: page.title || 'Untitled',
+        paperType: page.paperType || 'lined',
+        themeColor: page.themeColor || 'slate',
+        blocks: ((page.blocks || []) as Block[]).filter(
+          (b) => b.type === 'DIVIDER' || b.type === 'MOOD_TRACKER' || b.type === 'PRIORITY_MATRIX' || b.type === 'CALENDAR' || b.type === 'WEEKLY_VIEW' || b.type === 'HABIT_TRACKER' || b.type === 'GOAL_SECTION' || b.type === 'TIME_BLOCK' || b.type === 'DAILY_SECTION' || (b.content && b.content.trim().length > 0) || b.gridData
+        ),
+      }))
+      .filter((p) => p.blocks.length > 0);
+
+    if (validPages.length === 0) {
+      throw new Error('AI returned empty pages. Please try again with a different prompt.');
+    }
+
+    return validPages;
+  };
+
+  // Try once, auto-retry on network/timeout errors
+  try {
+    return await doFetch();
   } catch (error) {
-    console.error("Layout generation failed:", error);
+    const isRetryable = error instanceof Error && (
+      error.name === 'AbortError' ||
+      error.message.includes('Failed to fetch') ||
+      error.message.includes('network') ||
+      error.message.includes('timeout')
+    );
+    if (isRetryable) {
+      // One retry
+      try {
+        return await doFetch();
+      } catch (retryError) {
+        const msg = retryError instanceof Error ? retryError.message : 'Generation failed';
+        throw new Error(
+          retryError instanceof Error && retryError.name === 'AbortError'
+            ? 'Generation timed out. Try a simpler prompt or try again.'
+            : msg
+        );
+      }
+    }
     throw error;
   }
 };

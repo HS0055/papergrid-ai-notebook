@@ -1,6 +1,8 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
+import { detectDomain, getDomainRules, getDesignPrinciples } from "./domainDetection";
+import { REFERENCE_LAYOUTS, type CompactBlock, type CompactReference } from "./referenceLayouts";
 
 // Generate a procedural premium SVG data URL as fallback cover
 function buildFallbackCover(prompt: string): string {
@@ -37,45 +39,7 @@ function buildFallbackCover(prompt: string): string {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
-// ---------------------------------------------------------------------------
-// Embedded reference layouts for few-shot prompting.
-// These are copied from @papergrid/core because Convex runtime cannot import
-// arbitrary monorepo packages.  We use a compact representation (no full
-// block objects) to keep the payload small while still giving the AI model
-// enough structure to learn from.
-// ---------------------------------------------------------------------------
-
-interface CompactBlock {
-  type: string;
-  content: string;
-  side: string;
-  color?: string;
-  emphasis?: string;
-  alignment?: string;
-  gridColumns?: string[];
-  gridRowCount?: number;
-  moodValue?: number;
-  matrixData?: { q1: string; q2: string; q3: string; q4: string };
-  checked?: boolean;
-  calendarData?: { month: number; year: number; highlights?: number[] };
-  weeklyViewData?: { startDate?: string; days: Array<{ label: string; content: string }> };
-  habitTrackerData?: { habits: string[]; days: number; checked: boolean[][] };
-  goalSectionData?: { goals: Array<{ text: string; subItems: Array<{ text: string; checked: boolean }>; progress?: number }> };
-  timeBlockData?: { startHour: number; endHour: number; interval: number; entries: Array<{ time: string; content: string; color?: string }> };
-  dailySectionData?: { date?: string; dayLabel?: string; sections: Array<{ label: string; content: string }> };
-}
-
-interface CompactReference {
-  id: string;
-  niche: string;
-  style: string;
-  aesthetic: string;
-  tags: string[];
-  paperType: string;
-  themeColor: string;
-  title: string;
-  blocks: CompactBlock[];
-}
+// Reference layouts and types imported from ./referenceLayouts
 
 const REFERENCE_LAYOUTS: readonly CompactReference[] = [
   {
@@ -324,14 +288,30 @@ const REFERENCE_LAYOUTS: readonly CompactReference[] = [
 // cannot import from @papergrid/core.
 // ---------------------------------------------------------------------------
 
+// Domain-to-niche mapping for boosting references in the same domain
+const DOMAIN_NICHE_MAP: Record<string, string[]> = {
+  finance: ["finance", "budget", "money", "accounting"],
+  wellness: ["self-care", "wellness", "mindfulness", "journal", "gratitude"],
+  health_fitness: ["fitness", "cooking", "health", "nutrition", "exercise"],
+  lifestyle: ["lifestyle", "travel", "reading", "cleaning", "organization"],
+  business: ["business", "project", "sales", "freelance"],
+  marketing: ["marketing", "social media", "content", "brand"],
+  academic: ["student", "academic", "study", "research", "education"],
+  planning: ["productivity", "planner", "habits", "bujo", "time management"],
+};
+
 function matchReferences(
   prompt: string,
   aesthetic?: string,
-  maxResults = 3,
+  maxResults = 4,
+  detectedDomain?: string,
 ): { layout: CompactReference; score: number }[] {
   const lowerPrompt = prompt.toLowerCase();
   const promptWords = lowerPrompt.split(/\s+/);
   const lowerAesthetic = aesthetic?.toLowerCase();
+
+  // Get niches that belong to the detected domain for boosting
+  const domainNiches = detectedDomain ? (DOMAIN_NICHE_MAP[detectedDomain] || []) : [];
 
   const scored = REFERENCE_LAYOUTS.map((layout) => {
     let score = 0;
@@ -346,6 +326,12 @@ function matchReferences(
     // Niche match: 5 points
     if (lowerPrompt.includes(layout.niche.toLowerCase())) {
       score += 5;
+    }
+
+    // Domain boost: if this layout's niche belongs to the detected domain, +8 points
+    // This ensures domain-relevant layouts rank higher even without exact keyword matches
+    if (domainNiches.some(n => layout.niche.toLowerCase().includes(n) || layout.tags.some(t => t.toLowerCase().includes(n)))) {
+      score += 8;
     }
 
     // Aesthetic match (from explicit parameter): 2 points
@@ -473,10 +459,11 @@ http.route({
       }
 
       const body = await request.json();
-      const { prompt, industry, aesthetic } = body as {
+      const { prompt, industry, aesthetic, existingPages } = body as {
         prompt: string;
         industry?: string;
         aesthetic?: string;
+        existingPages?: Array<{ title: string; paperType: string; themeColor: string; blockSummary: string }>;
       };
 
       if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
@@ -504,8 +491,13 @@ http.route({
         );
       }
 
-      // --- Few-shot reference matching ---
-      const matches = matchReferences(prompt, aesthetic, 3);
+      // --- Domain Detection ---
+      const domainMatch = detectDomain(prompt, industry);
+      const domainRules = getDomainRules(domainMatch.domain);
+      const designPrinciples = getDesignPrinciples();
+
+      // --- Few-shot reference matching (domain-aware) ---
+      const matches = matchReferences(prompt, aesthetic, 4, domainMatch.domain);
       const referenceExamples = matches
         .filter((m) => m.score > 0)
         .map(
@@ -537,16 +529,29 @@ http.route({
         day: "numeric",
       });
 
+      // --- Build continuation context ---
+      const continuationContext = existingPages && existingPages.length > 0
+        ? `
+=== EXISTING PAGES IN THIS NOTEBOOK ===
+The user already has these pages. DO NOT repeat them. Continue from where they left off. Match their style and aesthetic for consistency.
+${existingPages.map((p, i) => `Page ${i + 1}: "${p.title}" (${p.paperType}, ${p.themeColor}) — ${p.blockSummary}`).join("\n")}
+=== END EXISTING PAGES ===
+`
+        : "";
+
       // --- Build user prompt ---
-      const userPrompt = `Generate a structured notebook layout.
-${industryContext} ${aestheticContext}
+      const domainLabel = domainMatch.domain !== "general" ? `\nDetected Domain: ${domainMatch.domain.replace("_", " ")} (${domainMatch.confidence} confidence)` : "";
+
+      const userPrompt = `You are a world-class planner product designer creating pages for a premium digital notebook app. You think like an Etsy/KDP template creator — every page you design should look like it belongs in a $29 planner bundle, not a free to-do app.
+${industryContext} ${aestheticContext}${domainLabel}
 Current Date: ${currentDate}
 
 User Request: "${prompt}"
+${continuationContext}
 ${hasReferences
           ? `
 === REFERENCE EXAMPLES ===
-Here are ${matches.filter((m) => m.score > 0).length} similar high-quality layouts that users love. Use them as inspiration for structure and block composition, but adapt them to the user's specific request:
+Here are ${matches.filter((m) => m.score > 0).length} high-quality layouts from our design library. Study their structure, block variety, and content density — then create something BETTER:
 
 ${referenceExamples}
 
@@ -554,233 +559,170 @@ ${referenceExamples}
 `
           : ""
         }
-=== DESIGN RULES ===
-1. Act as a world-class editorial designer. Use "layers" of content. Mix TEXT blocks with structured GRID blocks (tables), CALLOUTs, QUOTEs, DIVIDERs, MOOD_TRACKERs, PRIORITY_MATRIXes, and INDEXes.
-2. For "planners", "trackers", or "logs", heavily favor GRID type with specific columns relevant to the industry. Use MOOD_TRACKER for daily journals or wellness logs. Use PRIORITY_MATRIX for task management and Eisenhower matrices.
-3. Use CALLOUT blocks for tips, warnings, or daily focus (they look like sticky notes with washi tape!). Use QUOTE for inspirational or important text. Use DIVIDER to separate major sections. Use INDEX to create a table of contents for the notebook.
-4. Ensure the structure mimics a real paper worksheet, Notion template, or magazine layout.
-5. Adhere to the requested aesthetic:
-   - 'pastel': Soft, warm tones. Favor rose, sky, and emerald colors. Use 'lined' or 'dotted' paper.
-   - 'modern-planner': Comprehensive dashboards, finance/wellness/schedule sections. Use 'blank' or 'lined' paper, 'indigo' or 'rose' theme.
-   - 'e-ink': High contrast, minimalist. Use 'grid' or 'dotted' paper, 'slate' or 'gray' theme.
-   - 'bujo': Playful, freeform. Use 'dotted' or 'crumpled' paper, 'amber' or 'sky' theme.
-   - 'cornell': Academic and structured. Use 'legal' or 'lined' paper, 'slate' theme.
-6. Assign appropriate alignments, emphasis, and colors to blocks.
-7. Design a 2-page spread. Assign 'left' or 'right' to the 'side' property of each block.
-8. For planners: include REAL dates based on the current date (${currentDate}). Replace blank date fields with actual upcoming dates.
-9. Default to pastel/soft colors (rose, sky, emerald) unless a different aesthetic is explicitly specified by the user.
-10. Use MOOD_TRACKER for wellness, journal, self-care, and daily reflection layouts. Set moodValue to a number 0-4 (0=awful, 1=bad, 2=okay, 3=good, 4=great).
-11. Use PRIORITY_MATRIX for task management, project planning, and Eisenhower matrix layouts. Fill matrixData q1-q4 with relevant starter text.
-12. Pre-populate GRID blocks with realistic column headers and example rows relevant to the user's request.
-13. For CHECKBOX blocks, set checked to false by default.
-14. For "planner", "schedule", or "weekly" requests: use WEEKLY_VIEW blocks for day-spread views and CALENDAR for mini month calendars. Pre-populate weeklyViewData.days with 7 days (Monday-Sunday) with content hints. For CALENDAR, set calendarData month/year to the current month based on ${currentDate}.
-15. For "habit", "tracker", or "routine" requests: use HABIT_TRACKER blocks. Pre-populate habitTrackerData.habits with 5-7 relevant habits and set days to 7 (weekly) or 30 (monthly). Initialize checked as a 2D boolean array (all false).
-16. For "goals", "objectives", or "project" requests: use GOAL_SECTION blocks. Pre-populate goalSectionData.goals with 3-4 relevant goals, each with 2-3 sub-items (checked: false).
-17. For "daily", "schedule", or "time" requests: use TIME_BLOCK for hourly schedules (set startHour/endHour/interval and entries) and DAILY_SECTION for structured day views (set sections with "Morning", "Afternoon", "Evening" labels).
-18. IMPORTANT: Prefer the new specialized planner types over GRID workarounds. Use WEEKLY_VIEW instead of a 7-row GRID for weekly schedules. Use HABIT_TRACKER instead of a habits-in-columns GRID. Use TIME_BLOCK instead of a time-slot GRID.
-19. For "monthly planner", calendar, or month-at-a-glance requests: generate a full-page monthly spread using a GRID block with 7 columns ("Sun", "Mon", "Tue", etc.) and 5 empty rows for the weeks, so users have large typable boxes for every day. Do NOT use the mini CALENDAR block for the main calendar grid.
+${designPrinciples}
 
-Return a JSON object with: title (string), paperType (enum), themeColor (enum), blocks (array of block objects with type, content, alignment, emphasis, color, side, gridData, moodValue, matrixData, checked, calendarData, weeklyViewData, habitTrackerData, goalSectionData, timeBlockData, dailySectionData).`;
+${domainRules}
+
+=== PAGE PLANNING ===
+YOU decide how many pages this request needs (1 to 5 pages max per generation).
+- "meeting notes" or "grocery list" → 1 page
+- "weekly planner" → 2-3 pages (overview + weekly spreads)
+- "monthly planner" → 4-5 pages (month overview + weekly spreads + reflection)
+- "daily planner for the week" → 5 pages (one per weekday, Mon-Fri)
+- "travel itinerary 3 days" → 3-4 pages (one per day + packing list)
+- "budget tracker" → 3 pages (income + expenses + savings goals/reflection)
+- "social media planner" → 3 pages (accounts audit + content calendar + posting schedule)
+- "study notes for chapter" → 1-2 pages
+Think like a real planner designer: what set of pages would make a COMPLETE, useful section?
+
+Each page is a SEPARATE notebook page with its own title, paper type, theme color, and blocks.
+Vary the page designs — different pages should serve different roles (overview vs detail, schedule vs reflection, tracker vs notes).
+${existingPages && existingPages.length > 0 ? "IMPORTANT: This is a CONTINUATION. The user already has pages. Generate the NEXT logical pages that follow from what exists. Do not repeat content." : ""}
+
+=== AESTHETIC RULES ===
+Adhere to the requested aesthetic:
+- 'pastel': Soft, warm tones. Favor rose, sky, emerald. Use 'lined' or 'dotted' paper.
+- 'modern-planner': Comprehensive dashboards. Use 'blank' or 'lined', 'indigo' or 'rose' theme.
+- 'e-ink': High contrast, minimalist. Use 'grid' or 'dotted', 'slate' or 'gray' theme.
+- 'bujo': Playful, freeform. Use 'dotted' or 'crumpled', 'amber' or 'sky' theme.
+- 'cornell': Academic. Use 'legal' or 'lined', 'slate' theme.
+- 'rainbow': Vibrant, ADHD-friendly. Vary colors per section. Use 'dotted' or 'blank'.
+
+=== BLOCK USAGE ===
+1. Mix TEXT blocks with GRID, CALLOUT, QUOTE, DIVIDER, MOOD_TRACKER, PRIORITY_MATRIX, INDEX.
+2. For "planners", "trackers", or "logs": favor GRID with specific columns, WEEKLY_VIEW for weekly spreads, HABIT_TRACKER for habits, TIME_BLOCK for hourly schedules, DAILY_SECTION for day structure, CALENDAR for month views.
+3. Prefer specialized block types: WEEKLY_VIEW over 7-row GRID, HABIT_TRACKER over habits-in-columns GRID, TIME_BLOCK over time-slot GRID.
+4. Use REAL dates based on ${currentDate}. Fill in actual day names, dates, month names — never placeholders like "___".
+5. Assign 'left' or 'right' to each block's side property for 2-page spread layout.
+6. Pre-populate GRID blocks with realistic headers AND example data rows. CHECKBOX blocks default checked=false.
+7. Each page must have a unique, descriptive title using real dates: "Week of April 7-13" or "April Savings Dashboard".
+8. Vary themeColor subtly across pages for visual interest while maintaining aesthetic coherence.
+9. Every page needs 6-14 blocks minimum for a rich, professional look. Aim for 8-12.
+
+Return a JSON object with a "pages" array. Each page has: title, paperType, themeColor, and blocks array.`;
+
+      // Block schema (reused for each page)
+      const blockSchema = {
+        type: "OBJECT" as const,
+        properties: {
+          type: {
+            type: "STRING" as const,
+            enum: ["TEXT", "HEADING", "GRID", "CHECKBOX", "CALLOUT", "QUOTE", "DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "INDEX", "MUSIC_STAFF", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION"],
+          },
+          content: { type: "STRING" as const },
+          alignment: { type: "STRING" as const, enum: ["left", "center", "right"] },
+          emphasis: { type: "STRING" as const, enum: ["bold", "italic", "highlight", "none"] },
+          color: { type: "STRING" as const, enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray"] },
+          side: { type: "STRING" as const, enum: ["left", "right"] },
+          gridData: {
+            type: "OBJECT" as const,
+            properties: {
+              columns: { type: "ARRAY" as const, items: { type: "STRING" as const } },
+              rows: { type: "ARRAY" as const, items: { type: "ARRAY" as const, items: { type: "STRING" as const } } },
+            },
+            nullable: true,
+          },
+          moodValue: { type: "NUMBER" as const, nullable: true },
+          matrixData: {
+            type: "OBJECT" as const,
+            properties: { q1: { type: "STRING" as const }, q2: { type: "STRING" as const }, q3: { type: "STRING" as const }, q4: { type: "STRING" as const } },
+            nullable: true,
+          },
+          checked: { type: "BOOLEAN" as const, nullable: true },
+          calendarData: {
+            type: "OBJECT" as const,
+            properties: {
+              month: { type: "NUMBER" as const }, year: { type: "NUMBER" as const },
+              highlights: { type: "ARRAY" as const, items: { type: "NUMBER" as const } },
+              events: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: { day: { type: "NUMBER" as const }, title: { type: "STRING" as const }, color: { type: "STRING" as const } } } },
+            },
+            nullable: true,
+          },
+          weeklyViewData: {
+            type: "OBJECT" as const,
+            properties: {
+              startDate: { type: "STRING" as const },
+              days: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: { label: { type: "STRING" as const }, content: { type: "STRING" as const }, tasks: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: { text: { type: "STRING" as const }, checked: { type: "BOOLEAN" as const } } } } } } },
+            },
+            nullable: true,
+          },
+          habitTrackerData: {
+            type: "OBJECT" as const,
+            properties: {
+              habits: { type: "ARRAY" as const, items: { type: "STRING" as const } },
+              days: { type: "NUMBER" as const },
+              checked: { type: "ARRAY" as const, items: { type: "ARRAY" as const, items: { type: "BOOLEAN" as const } } },
+            },
+            nullable: true,
+          },
+          goalSectionData: {
+            type: "OBJECT" as const,
+            properties: {
+              goals: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: {
+                text: { type: "STRING" as const },
+                subItems: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: { text: { type: "STRING" as const }, checked: { type: "BOOLEAN" as const } } } },
+                progress: { type: "NUMBER" as const },
+              } } },
+            },
+            nullable: true,
+          },
+          timeBlockData: {
+            type: "OBJECT" as const,
+            properties: {
+              startHour: { type: "NUMBER" as const }, endHour: { type: "NUMBER" as const }, interval: { type: "NUMBER" as const },
+              entries: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: { time: { type: "STRING" as const }, content: { type: "STRING" as const }, color: { type: "STRING" as const } } } },
+            },
+            nullable: true,
+          },
+          dailySectionData: {
+            type: "OBJECT" as const,
+            properties: {
+              date: { type: "STRING" as const }, dayLabel: { type: "STRING" as const },
+              sections: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: { label: { type: "STRING" as const }, content: { type: "STRING" as const } } } },
+            },
+            nullable: true,
+          },
+        },
+        required: ["type", "content"],
+      };
 
       const geminiPayload = {
         contents: [
-          {
-            parts: [
-              {
-                text: userPrompt,
-              },
-            ],
-          },
+          { parts: [{ text: userPrompt }] },
         ],
         generationConfig: {
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 4096 },
           responseSchema: {
-            type: "OBJECT",
+            type: "OBJECT" as const,
             properties: {
-              title: { type: "STRING" },
-              paperType: {
-                type: "STRING",
-                enum: ["lined", "grid", "dotted", "blank", "music", "rows", "isometric", "hex", "legal", "crumpled"],
-              },
-              themeColor: {
-                type: "STRING",
-                enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray"],
-              },
-              blocks: {
-                type: "ARRAY",
+              pages: {
+                type: "ARRAY" as const,
                 items: {
-                  type: "OBJECT",
+                  type: "OBJECT" as const,
                   properties: {
-                    type: {
-                      type: "STRING",
-                      enum: ["TEXT", "HEADING", "GRID", "CHECKBOX", "CALLOUT", "QUOTE", "DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "INDEX", "MUSIC_STAFF", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION"],
+                    title: { type: "STRING" as const },
+                    paperType: {
+                      type: "STRING" as const,
+                      enum: ["lined", "grid", "dotted", "blank", "music", "rows", "isometric", "hex", "legal", "crumpled"],
                     },
-                    content: { type: "STRING" },
-                    alignment: { type: "STRING", enum: ["left", "center", "right"] },
-                    emphasis: { type: "STRING", enum: ["bold", "italic", "highlight", "none"] },
-                    color: { type: "STRING", enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray"] },
-                    side: { type: "STRING", enum: ["left", "right"] },
-                    gridData: {
-                      type: "OBJECT",
-                      properties: {
-                        columns: { type: "ARRAY", items: { type: "STRING" } },
-                        rows: {
-                          type: "ARRAY",
-                          items: {
-                            type: "ARRAY",
-                            items: { type: "STRING" },
-                          },
-                        },
-                      },
-                      nullable: true,
+                    themeColor: {
+                      type: "STRING" as const,
+                      enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray"],
                     },
-                    moodValue: { type: "NUMBER", nullable: true },
-                    matrixData: {
-                      type: "OBJECT",
-                      properties: {
-                        q1: { type: "STRING" },
-                        q2: { type: "STRING" },
-                        q3: { type: "STRING" },
-                        q4: { type: "STRING" },
-                      },
-                      nullable: true,
-                    },
-                    checked: { type: "BOOLEAN", nullable: true },
-                    calendarData: {
-                      type: "OBJECT",
-                      properties: {
-                        month: { type: "NUMBER" },
-                        year: { type: "NUMBER" },
-                        highlights: { type: "ARRAY", items: { type: "NUMBER" } },
-                        events: {
-                          type: "ARRAY",
-                          items: {
-                            type: "OBJECT",
-                            properties: {
-                              day: { type: "NUMBER" },
-                              title: { type: "STRING" },
-                              color: { type: "STRING" },
-                            },
-                          },
-                        },
-                      },
-                      nullable: true,
-                    },
-                    weeklyViewData: {
-                      type: "OBJECT",
-                      properties: {
-                        startDate: { type: "STRING" },
-                        days: {
-                          type: "ARRAY",
-                          items: {
-                            type: "OBJECT",
-                            properties: {
-                              label: { type: "STRING" },
-                              content: { type: "STRING" },
-                              tasks: {
-                                type: "ARRAY",
-                                items: {
-                                  type: "OBJECT",
-                                  properties: {
-                                    text: { type: "STRING" },
-                                    checked: { type: "BOOLEAN" },
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
-                      nullable: true,
-                    },
-                    habitTrackerData: {
-                      type: "OBJECT",
-                      properties: {
-                        habits: { type: "ARRAY", items: { type: "STRING" } },
-                        days: { type: "NUMBER" },
-                        checked: {
-                          type: "ARRAY",
-                          items: { type: "ARRAY", items: { type: "BOOLEAN" } },
-                        },
-                      },
-                      nullable: true,
-                    },
-                    goalSectionData: {
-                      type: "OBJECT",
-                      properties: {
-                        goals: {
-                          type: "ARRAY",
-                          items: {
-                            type: "OBJECT",
-                            properties: {
-                              text: { type: "STRING" },
-                              subItems: {
-                                type: "ARRAY",
-                                items: {
-                                  type: "OBJECT",
-                                  properties: {
-                                    text: { type: "STRING" },
-                                    checked: { type: "BOOLEAN" },
-                                  },
-                                },
-                              },
-                              progress: { type: "NUMBER" },
-                            },
-                          },
-                        },
-                      },
-                      nullable: true,
-                    },
-                    timeBlockData: {
-                      type: "OBJECT",
-                      properties: {
-                        startHour: { type: "NUMBER" },
-                        endHour: { type: "NUMBER" },
-                        interval: { type: "NUMBER" },
-                        entries: {
-                          type: "ARRAY",
-                          items: {
-                            type: "OBJECT",
-                            properties: {
-                              time: { type: "STRING" },
-                              content: { type: "STRING" },
-                              color: { type: "STRING" },
-                            },
-                          },
-                        },
-                      },
-                      nullable: true,
-                    },
-                    dailySectionData: {
-                      type: "OBJECT",
-                      properties: {
-                        date: { type: "STRING" },
-                        dayLabel: { type: "STRING" },
-                        sections: {
-                          type: "ARRAY",
-                          items: {
-                            type: "OBJECT",
-                            properties: {
-                              label: { type: "STRING" },
-                              content: { type: "STRING" },
-                            },
-                          },
-                        },
-                      },
-                      nullable: true,
-                    },
+                    blocks: { type: "ARRAY" as const, items: blockSchema },
                   },
-                  required: ["type", "content"],
+                  required: ["title", "paperType", "themeColor", "blocks"],
                 },
               },
             },
-            required: ["title", "blocks", "paperType", "themeColor"],
+            required: ["pages"],
           },
         },
         systemInstruction: {
           parts: [
             {
-              text: "You are an expert planner and notebook designer who creates structured layouts for digital notebooks. You specialize in productivity, wellness, education, and creative planners. You draw inspiration from popular Etsy, Amazon, and bullet journal designs. Your layouts feel hand-crafted, warm, and highly usable -- like a premium paper planner brought to life digitally.",
+              text: "You are an expert planner and notebook designer. You create multi-page notebook layouts that feel hand-crafted and highly usable — like a premium paper planner brought to life digitally. You decide how many pages each request needs based on the content scope. You use real dates and never leave placeholders. Each page you create serves a distinct purpose and has unique content.",
             },
           ],
         },
@@ -1021,15 +963,34 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
         ? layoutData.pages
         : [layoutData];
 
-      const pages = rawPages.map((page: Record<string, unknown>) => ({
-        title: (page.title as string) || "Untitled",
-        paperType: (page.paperType as string) || "lined",
-        themeColor: (page.themeColor as string) || "slate",
-        blocks: hydrateBlocks(
+      // Structural block types that are valid even without text content
+      const structuralTypes = new Set(["DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION", "INDEX"]);
+
+      const pages = rawPages.map((page: Record<string, unknown>) => {
+        const allBlocks = hydrateBlocks(
           (Array.isArray(page.blocks) ? page.blocks : []) as Record<string, unknown>[],
           (page.themeColor as string) || "slate"
-        ),
-      }));
+        );
+        // Filter out blank blocks: keep structural types + blocks with actual content or grid data
+        const validBlocks = allBlocks.filter((b) =>
+          structuralTypes.has(b.type as string) ||
+          (typeof b.content === "string" && b.content.trim().length > 0) ||
+          b.gridData
+        );
+        return {
+          title: (page.title as string) || "Untitled",
+          paperType: (page.paperType as string) || "lined",
+          themeColor: (page.themeColor as string) || "slate",
+          blocks: validBlocks,
+        };
+      }).filter((p) => p.blocks.length > 0); // Remove entirely empty pages
+
+      if (pages.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "AI generated empty content. Please try again." }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const result = { pages };
 
@@ -1041,7 +1002,7 @@ Return a JSON object with: title (string), paperType (enum), themeColor (enum), 
       console.error("Generate layout error:", error);
       return new Response(
         JSON.stringify({ error: "Internal server error" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
   }),

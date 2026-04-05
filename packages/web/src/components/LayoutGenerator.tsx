@@ -186,39 +186,51 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
             </div>
 
             {/* Footer Actions */}
-            <div className="pt-4 flex items-center justify-between border-t border-gray-100">
-              <div className="text-[10px] text-gray-400 max-w-[180px]">
-                AI will generate layout, blocks, and content based on your vision.
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-5 py-2.5 text-gray-500 hover:text-gray-700 font-bold uppercase tracking-widest text-[10px] transition-colors"
-                >
-                  Discard
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !prompt.trim()}
-                  className={`flex items-center gap-2 px-8 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-xl shadow-indigo-500/20 ${
-                    isLoading 
-                      ? 'bg-indigo-400 text-white cursor-wait' 
-                      : 'bg-indigo-600 hover:bg-indigo-500 text-white hover:scale-[1.02] active:scale-95'
-                  }`}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="animate-spin" size={16} />
-                      Thinking...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 size={16} />
-                      Generate Page
-                    </>
-                  )}
-                </button>
+            <div className="pt-4 flex flex-col gap-3 border-t border-gray-100">
+              {isLoading && (
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <Loader2 className="animate-spin text-indigo-500 shrink-0" size={16} />
+                  <div className="flex-1">
+                    <div className="text-xs font-semibold text-indigo-700">Designing your pages...</div>
+                    <div className="text-[10px] text-indigo-500 mt-0.5">AI is crafting the perfect layout. This may take up to 30 seconds.</div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] text-gray-400 max-w-[200px]">
+                  AI will generate 1-5 pages based on your request. Planners get multiple pages automatically.
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isLoading}
+                    className="px-5 py-2.5 text-gray-500 hover:text-gray-700 font-bold uppercase tracking-widest text-[10px] transition-colors disabled:opacity-50"
+                  >
+                    {isLoading ? 'Cancel' : 'Discard'}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading || !prompt.trim()}
+                    className={`flex items-center gap-2 px-8 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-xl shadow-indigo-500/20 ${
+                      isLoading
+                        ? 'bg-indigo-400 text-white cursor-wait'
+                        : 'bg-indigo-600 hover:bg-indigo-500 text-white hover:scale-[1.02] active:scale-95'
+                    }`}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 size={16} />
+                        Generate Pages
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </form>

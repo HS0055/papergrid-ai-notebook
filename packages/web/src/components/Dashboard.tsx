@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { NotebookView } from './NotebookView';
 import { LayoutGenerator } from './LayoutGenerator';
 import { Notebook, NotebookPage, Block, BlockType } from '@papergrid/core';
-import { generateLayout, generateCover } from '../services/geminiService';
+import { generateLayout, generateCover, ExistingPageContext } from '../services/geminiService';
 import { CoverGenModal } from './CoverGenModal';
 import {
   Book, Plus, Sparkles, Menu, ChevronLeft, ChevronRight, Bookmark,
@@ -486,7 +486,20 @@ export const Dashboard: React.FC = () => {
 
   const handleAiGeneration = async (prompt: string, industry?: string, aesthetic?: string) => {
     try {
-      const generatedPages = await generateLayout(prompt, industry, aesthetic);
+      // Build context from last 5 existing pages so AI can continue intelligently
+      const activeNb = notebooks.find(n => n.id === activeNotebookId);
+      let existingPageCtx: ExistingPageContext[] | undefined;
+      if (activeNb && activeNb.pages.length > 0) {
+        const lastPages = activeNb.pages.slice(-5);
+        existingPageCtx = lastPages.map(p => ({
+          title: p.title,
+          paperType: p.paperType,
+          themeColor: p.themeColor || 'slate',
+          blockSummary: p.blocks.slice(0, 6).map(b => `${b.type}${b.content ? `: "${b.content.slice(0, 40)}"` : ''}`).join(', '),
+        }));
+      }
+
+      const generatedPages = await generateLayout(prompt, industry, aesthetic, existingPageCtx);
       const newPages: NotebookPage[] = generatedPages.map(layout => ({
         id: crypto.randomUUID(),
         title: layout.title,
@@ -505,7 +518,6 @@ export const Dashboard: React.FC = () => {
         const nb = updated.find(n => n.id === activeNotebookId);
         if (nb) {
           setPageDirection('right');
-          // Navigate to the first newly generated page
           setActivePageIndex(nb.pages.length - newPages.length);
         }
         return updated;
@@ -513,12 +525,13 @@ export const Dashboard: React.FC = () => {
       const pageCount = newPages.length;
       addToast(
         pageCount > 1
-          ? `Generated ${pageCount} pages successfully!`
-          : 'Layout generated successfully!',
+          ? `Generated ${pageCount} pages!`
+          : 'Page generated!',
         'success'
       );
     } catch (error) {
-      addToast('Failed to generate layout. Please check your API key.', 'error');
+      const message = error instanceof Error ? error.message : 'Failed to generate layout.';
+      addToast(message, 'error');
     }
   };
 
@@ -684,9 +697,12 @@ export const Dashboard: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSwitchNotebook(nb.id)}
-                  className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 ${activeNotebookId === nb.id
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSwitchNotebook(nb.id); } }}
+                  className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 cursor-pointer ${activeNotebookId === nb.id
                     ? 'bg-gray-800 text-white shadow-md border border-gray-700'
                     : 'hover:bg-gray-800/50 hover:text-gray-100'
                     }`}
@@ -721,7 +737,7 @@ export const Dashboard: React.FC = () => {
                   >
                     <Trash2 size={14} />
                   </button>
-                </button>
+                </div>
               )}
             </div>
           ))}

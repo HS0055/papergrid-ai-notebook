@@ -4,7 +4,7 @@ import type { Id } from "./_generated/dataModel";
 
 // Plan limits for gating features
 export const PLAN_LIMITS = {
-  free: { notebooks: 3, pagesPerNotebook: 10, aiGenerationsPerMonth: 5 },
+  free: { notebooks: 3, pagesPerNotebook: 10, aiGenerationsPerMonth: 25 },
   starter: { notebooks: 999, pagesPerNotebook: 50, aiGenerationsPerMonth: 50 },
   pro: { notebooks: 999, pagesPerNotebook: 999, aiGenerationsPerMonth: 500 },
   founder: { notebooks: 999, pagesPerNotebook: 999, aiGenerationsPerMonth: 500 },
@@ -454,6 +454,18 @@ export const adminResetUsage = mutation({
       aiGenerationsResetAt: new Date().toISOString(),
     });
     return { success: true };
+  },
+});
+
+// Dev helper: reset AI usage for all users (no auth required)
+export const devResetAllAiUsage = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    for (const u of users) {
+      await ctx.db.patch(u._id, { aiGenerationsUsed: 0, aiGenerationsResetAt: new Date().toISOString() });
+    }
+    return { reset: users.length };
   },
 });
 

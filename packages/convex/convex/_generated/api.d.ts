@@ -10,6 +10,7 @@
 
 import type * as aiGenerations from "../aiGenerations.js";
 import type * as blocks from "../blocks.js";
+import type * as domainDetection from "../domainDetection.js";
 import type * as http from "../http.js";
 import type * as notebooks from "../notebooks.js";
 import type * as pages from "../pages.js";
@@ -25,6 +26,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   aiGenerations: typeof aiGenerations;
   blocks: typeof blocks;
+  domainDetection: typeof domainDetection;
   http: typeof http;
   notebooks: typeof notebooks;
   pages: typeof pages;
