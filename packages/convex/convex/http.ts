@@ -571,7 +571,7 @@ ${designPrinciples}
 ${domainRules}
 
 === PAGE COUNT ===
-${pageCount === "1" ? "Generate EXACTLY 1 page. Do NOT generate multiple pages. Focus all content into a single, rich, well-designed page." : pageCount === "2-3" ? "Generate 2 to 3 pages. Each page should serve a different purpose (e.g. overview + detail, or tracker + reflection)." : pageCount === "4-5" ? "Generate 4 to 5 pages. Create a complete planner set with varied page types (overview, daily/weekly spreads, trackers, reflections)." : "Generate EXACTLY 1 page unless the prompt clearly implies multiple pages."}
+${pageCount === "1" ? "Generate EXACTLY 1 page. Do NOT generate multiple pages. Focus all content into a single, rich, well-designed page." : "YOU decide how many pages this request needs (1 to 5 pages max per generation). Think like a planner designer — a 'weekly planner' needs 2-3 pages, a 'monthly planner' needs 4-5, a 'daily planner for the week' needs 5 (Mon-Fri). Simple requests like 'meeting notes' or 'grocery list' need just 1 page."}
 
 === DATE RULES ===
 - Current date is ${currentDate}.
@@ -586,7 +586,7 @@ ${pageCount === "1" ? "Generate EXACTLY 1 page. Do NOT generate multiple pages. 
 - Use actual calendar math: April has 30 days, correct day-of-week names.
 
 Each page is a SEPARATE notebook page with its own title, paper type, theme color, and blocks.
-${pageCount !== "1" ? "Vary the page designs — different pages should serve different roles (overview vs detail, schedule vs reflection, tracker vs notes)." : ""}
+${pageCount !== "1" ? "Vary the page designs — different pages should serve different roles (overview vs detail, schedule vs reflection, tracker vs notes)." : "Pack as much useful content as possible into this single page."}
 ${existingPages && existingPages.length > 0 ? "IMPORTANT: This is a CONTINUATION. The user already has pages. Generate the NEXT logical pages that follow from what exists. Do not repeat content." : ""}
 
 === AESTHETIC RULES ===

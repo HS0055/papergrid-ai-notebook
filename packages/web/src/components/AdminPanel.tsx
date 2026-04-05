@@ -47,6 +47,21 @@ export function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [inkConfig, setInkConfig] = useState({
+    plans: {
+      free: { inkPerMonth: 12 },
+      pro: { inkPerMonth: 120 },
+      creator: { inkPerMonth: 350 },
+    },
+    costs: {
+      layout: 1,
+      advanced_layout: 2,
+      cover: 4,
+      premium_cover: 6,
+    },
+  });
+  const [editingInk, setEditingInk] = useState(false);
+  const [savingInk, setSavingInk] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -66,13 +81,28 @@ export function AdminPanel() {
     }
   }, []);
 
+  const fetchInkConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/ink/config`, { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.plans && data.costs) {
+          setInkConfig({ plans: data.plans, costs: data.costs });
+        }
+      }
+    } catch {
+      // Use defaults
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login', { replace: true });
       return;
     }
     fetchUsers();
-  }, [isAuthenticated, navigate, fetchUsers]);
+    fetchInkConfig();
+  }, [isAuthenticated, navigate, fetchUsers, fetchInkConfig]);
 
   const setPlan = async (targetUserId: string, plan: Plan) => {
     setActionLoading(targetUserId);
@@ -168,6 +198,23 @@ export function AdminPanel() {
     }
   };
 
+  const saveInkConfig = async () => {
+    setSavingInk(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/ink-config`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ config: inkConfig }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      setEditingInk(false);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to save ink config');
+    } finally {
+      setSavingInk(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -176,18 +223,46 @@ export function AdminPanel() {
     );
   }
 
+  const handleBootstrap = async () => {
+    try {
+      setActionLoading('bootstrap');
+      const res = await fetch(`${API_BASE}/api/admin/bootstrap`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Bootstrap failed');
+      // Retry loading admin panel
+      setError(null);
+      fetchUsers();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Bootstrap failed');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-sm border p-8 max-w-md text-center">
           <div className="text-red-500 text-lg font-medium mb-2">Access Denied</div>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => navigate('/app')}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Back to App
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleBootstrap}
+              disabled={actionLoading === 'bootstrap'}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+            >
+              {actionLoading === 'bootstrap' ? 'Promoting...' : 'Become First Admin'}
+            </button>
+            <button
+              onClick={() => navigate('/app')}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Back to App
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -239,49 +314,164 @@ export function AdminPanel() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-semibold text-gray-900">Ink Economy</h2>
-            <button
-              onClick={() => alert('Coming soon: edit via /api/admin/ink-config')}
-              className="text-xs text-indigo-600 hover:text-indigo-700 font-medium px-3 py-1 rounded-lg border border-indigo-200 hover:border-indigo-300 transition-colors"
-            >
-              Edit
-            </button>
+            <div className="flex items-center gap-2">
+              {editingInk ? (
+                <>
+                  <button
+                    onClick={saveInkConfig}
+                    disabled={savingInk}
+                    className="text-xs text-white bg-indigo-600 hover:bg-indigo-700 font-medium px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {savingInk ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingInk(false);
+                      fetchInkConfig();
+                    }}
+                    disabled={savingInk}
+                    className="text-xs text-gray-600 hover:text-gray-700 font-medium px-3 py-1 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditingInk(true)}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-medium px-3 py-1 rounded-lg border border-indigo-200 hover:border-indigo-300 transition-colors"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
             {/* Plan Ink Allocations */}
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Free Plan</div>
-              <div className="text-lg font-bold text-gray-900">12</div>
+              {editingInk ? (
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full text-lg font-bold text-gray-900 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                  value={inkConfig.plans.free.inkPerMonth}
+                  onChange={(e) => setInkConfig(prev => ({
+                    ...prev,
+                    plans: { ...prev.plans, free: { inkPerMonth: parseInt(e.target.value) || 0 } }
+                  }))}
+                />
+              ) : (
+                <div className="text-lg font-bold text-gray-900">{inkConfig.plans.free.inkPerMonth}</div>
+              )}
               <div className="text-xs text-gray-400">Ink / month</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Pro Plan</div>
-              <div className="text-lg font-bold text-purple-700">120</div>
+              {editingInk ? (
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full text-lg font-bold text-purple-700 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                  value={inkConfig.plans.pro.inkPerMonth}
+                  onChange={(e) => setInkConfig(prev => ({
+                    ...prev,
+                    plans: { ...prev.plans, pro: { inkPerMonth: parseInt(e.target.value) || 0 } }
+                  }))}
+                />
+              ) : (
+                <div className="text-lg font-bold text-purple-700">{inkConfig.plans.pro.inkPerMonth}</div>
+              )}
               <div className="text-xs text-gray-400">Ink / month</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Creator Plan</div>
-              <div className="text-lg font-bold text-emerald-700">350</div>
+              {editingInk ? (
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full text-lg font-bold text-emerald-700 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                  value={inkConfig.plans.creator.inkPerMonth}
+                  onChange={(e) => setInkConfig(prev => ({
+                    ...prev,
+                    plans: { ...prev.plans, creator: { inkPerMonth: parseInt(e.target.value) || 0 } }
+                  }))}
+                />
+              ) : (
+                <div className="text-lg font-bold text-emerald-700">{inkConfig.plans.creator.inkPerMonth}</div>
+              )}
               <div className="text-xs text-gray-400">Ink / month</div>
             </div>
             {/* Action Costs */}
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Layout</div>
-              <div className="text-lg font-bold text-gray-900">1</div>
+              {editingInk ? (
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full text-lg font-bold text-gray-900 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                  value={inkConfig.costs.layout}
+                  onChange={(e) => setInkConfig(prev => ({
+                    ...prev,
+                    costs: { ...prev.costs, layout: parseInt(e.target.value) || 0 }
+                  }))}
+                />
+              ) : (
+                <div className="text-lg font-bold text-gray-900">{inkConfig.costs.layout}</div>
+              )}
               <div className="text-xs text-gray-400">Ink / action</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Advanced</div>
-              <div className="text-lg font-bold text-gray-900">2</div>
+              {editingInk ? (
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full text-lg font-bold text-gray-900 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                  value={inkConfig.costs.advanced_layout}
+                  onChange={(e) => setInkConfig(prev => ({
+                    ...prev,
+                    costs: { ...prev.costs, advanced_layout: parseInt(e.target.value) || 0 }
+                  }))}
+                />
+              ) : (
+                <div className="text-lg font-bold text-gray-900">{inkConfig.costs.advanced_layout}</div>
+              )}
               <div className="text-xs text-gray-400">Ink / action</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Cover</div>
-              <div className="text-lg font-bold text-gray-900">4</div>
+              {editingInk ? (
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full text-lg font-bold text-gray-900 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                  value={inkConfig.costs.cover}
+                  onChange={(e) => setInkConfig(prev => ({
+                    ...prev,
+                    costs: { ...prev.costs, cover: parseInt(e.target.value) || 0 }
+                  }))}
+                />
+              ) : (
+                <div className="text-lg font-bold text-gray-900">{inkConfig.costs.cover}</div>
+              )}
               <div className="text-xs text-gray-400">Ink / action</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Premium Cover</div>
-              <div className="text-lg font-bold text-gray-900">6</div>
+              {editingInk ? (
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full text-lg font-bold text-gray-900 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 focus:outline-none focus:border-indigo-400"
+                  value={inkConfig.costs.premium_cover}
+                  onChange={(e) => setInkConfig(prev => ({
+                    ...prev,
+                    costs: { ...prev.costs, premium_cover: parseInt(e.target.value) || 0 }
+                  }))}
+                />
+              ) : (
+                <div className="text-lg font-bold text-gray-900">{inkConfig.costs.premium_cover}</div>
+              )}
               <div className="text-xs text-gray-400">Ink / action</div>
             </div>
           </div>

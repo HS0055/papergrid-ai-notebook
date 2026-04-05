@@ -49,7 +49,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
   const [isLoading, setIsLoading] = useState(false);
   const [showFullUI, setShowFullUI] = useState(false);
   const [inkPreview, setInkPreview] = useState<{ cost: number; balance: number; canAfford: boolean } | null>(null);
-  const [pageCount, setPageCount] = useState<'1' | '2-3' | '4-5'>('1');
+  const [multiPage, setMultiPage] = useState(false);
 
   const activeAesthetic = useMemo(() => AESTHETICS.find(a => a.id === aesthetic), [aesthetic]);
 
@@ -91,12 +91,12 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
 
     setIsLoading(true);
     try {
-      await onGenerate(prompt, industry, aesthetic, pageCount);
+      await onGenerate(prompt, industry, aesthetic, multiPage ? 'auto' : '1');
       onClose();
       setPrompt('');
       setIndustry('');
       setAesthetic('pastel');
-      setPageCount('1');
+      setMultiPage(false);
     } catch (error) {
       // Parent handles toast
     } finally {
@@ -203,32 +203,21 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
               ))}
             </div>
 
-            {/* Page Count Selector */}
-            <div className="space-y-2">
+            {/* Multi-Page Toggle */}
+            <div className="flex items-center justify-between px-1">
               <label className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                <Layers size={12} /> Pages to Generate
+                <Layers size={12} /> Multi-Page
               </label>
-              <div className="flex gap-2">
-                {([
-                  { value: '1' as const, label: '1 Page', desc: 'Single page' },
-                  { value: '2-3' as const, label: '2-3 Pages', desc: 'Multi-page spread' },
-                  { value: '4-5' as const, label: '4-5 Pages', desc: 'Full planner set' },
-                ]).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setPageCount(opt.value)}
-                    className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-center transition-all ${
-                      pageCount === opt.value
-                        ? 'border-indigo-500 bg-indigo-50 shadow-sm'
-                        : 'border-gray-100 bg-white hover:border-gray-200'
-                    }`}
-                  >
-                    <div className={`text-sm font-bold ${pageCount === opt.value ? 'text-indigo-600' : 'text-gray-700'}`}>{opt.label}</div>
-                    <div className="text-[9px] text-gray-400 mt-0.5">{opt.desc}</div>
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setMultiPage(!multiPage)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${multiPage ? 'bg-indigo-600' : 'bg-gray-200'}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${multiPage ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-xs text-gray-500 ml-2 flex-1">
+                {multiPage ? 'AI decides how many pages your request needs' : 'Single page only'}
+              </span>
             </div>
 
             {/* Footer Actions */}
@@ -256,7 +245,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
               )}
               <div className="flex items-center justify-between">
                 <div className="text-[10px] text-gray-400 max-w-[200px]">
-                  {pageCount === '1' ? 'One focused page.' : `AI will generate ${pageCount} pages with sequential dates.`}
+                  {multiPage ? 'AI will generate multiple pages with sequential dates.' : 'One focused page.'}
                 </div>
                 <div className="flex gap-3">
                   <button
