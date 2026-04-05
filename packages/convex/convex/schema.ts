@@ -9,14 +9,20 @@ export default defineSchema({
     email: v.string(),
     passwordHash: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
-    plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder")),
+    plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder"), v.literal("creator")),
     role: v.optional(v.union(v.literal("user"), v.literal("admin"))),
     // Stripe
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
-    // Usage tracking
+    // Legacy usage tracking (kept for migration)
     aiGenerationsUsed: v.optional(v.number()),
     aiGenerationsResetAt: v.optional(v.string()),
+    // Ink system
+    inkBalance: v.optional(v.number()),
+    inkSubscription: v.optional(v.number()),
+    inkPurchased: v.optional(v.number()),
+    inkResetAt: v.optional(v.string()),
+    inkLastActivity: v.optional(v.string()),
     // Preferences
     preferences: v.object({
       defaultAesthetic: v.string(),
@@ -106,6 +112,32 @@ export default defineSchema({
   })
     .index("by_niche", ["niche"])
     .index("by_style", ["style"]),
+
+  appSettings: defineTable({
+    key: v.string(),
+    value: v.any(),
+    updatedAt: v.string(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_key", ["key"]),
+
+  inkTransactions: defineTable({
+    userId: v.id("users"),
+    type: v.union(
+      v.literal("subscription_refill"),
+      v.literal("purchase"),
+      v.literal("spend"),
+      v.literal("reward"),
+      v.literal("admin_grant"),
+      v.literal("admin_deduct"),
+    ),
+    amount: v.number(),
+    balance: v.number(),
+    action: v.optional(v.string()),
+    description: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_type", ["type"]),
 
   aiGenerations: defineTable({
     userId: v.id("users"),
