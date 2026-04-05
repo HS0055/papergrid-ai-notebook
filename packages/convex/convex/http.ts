@@ -439,22 +439,28 @@ http.route({
     }
 
     try {
-      // --- Auth + Usage Gating (graceful: don't block if auth fails) ---
-      let usageAllowed = true;
+      // --- Ink spending (replaces old generation counter) ---
+      let inkResult: { allowed: boolean; balance: number; cost: number } = { allowed: true, balance: 0, cost: 0 };
       try {
         const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
         if (sessionToken) {
-          const usageResult = await ctx.runMutation(api.users.incrementAiUsage, { sessionToken });
-          usageAllowed = usageResult.allowed;
+          inkResult = await ctx.runMutation(api.users.spendInk, {
+            sessionToken,
+            action: "layout",
+          });
         }
       } catch (e) {
-        // If auth fails, allow generation but don't track usage
-        console.warn("AI usage gating skipped:", e);
+        // If auth fails, allow generation but don't track
+        console.warn("Ink spending skipped:", e);
       }
-      if (!usageAllowed) {
+      if (!inkResult.allowed) {
         return new Response(
-          JSON.stringify({ error: "Monthly AI generation limit reached. Upgrade your plan for more." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            error: "Not enough Ink for this generation.",
+            inkRequired: inkResult.cost,
+            inkBalance: inkResult.balance,
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -1709,6 +1715,114 @@ http.route({
   }),
 });
 
+// ── Ink API ──────────────────────────────────────────────
+
+// GET /api/ink/config — public Ink pricing config
+http.route({
+  path: "/api/ink/config",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    const config = await ctx.runQuery(api.users.getInkConfig, {});
+    return new Response(JSON.stringify(config), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }),
+});
+
+// GET /api/ink/balance — user's Ink balance
+http.route({
+  path: "/api/ink/balance",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+    const balance = await ctx.runQuery(api.users.getInkBalance, { sessionToken });
+    return new Response(JSON.stringify(balance ?? { subscription: 0, purchased: 0, total: 0 }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }),
+});
+
+// POST /api/ink/preview — preview cost before action
+http.route({
+  path: "/api/ink/preview",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    const body = await request.json();
+    const { action } = body as { action: string };
+    const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+    const preview = await ctx.runQuery(api.users.previewInkCost, { sessionToken, action: action || "layout" });
+    return new Response(JSON.stringify(preview), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }),
+});
+
+// POST /api/ink/refill — trigger monthly Ink refill
+http.route({
+  path: "/api/ink/refill",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+    const result = await ctx.runMutation(api.users.refillSubscriptionInk, { sessionToken });
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }),
+});
+
+// POST /api/admin/ink-config — admin update Ink config
+http.route({
+  path: "/api/admin/ink-config",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+    const body = await request.json();
+    const { config } = body as { config: unknown };
+    const result = await ctx.runMutation(api.users.adminUpdateInkConfig, { sessionToken, config });
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }),
+});
+
+// POST /api/admin/grant-ink — admin grant Ink to user
+http.route({
+  path: "/api/admin/grant-ink",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+    const body = await request.json();
+    const { targetUserId, amount, description } = body as { targetUserId: string; amount: number; description?: string };
+    const result = await ctx.runMutation(api.users.adminGrantInk, {
+      sessionToken,
+      targetUserId: targetUserId as any,
+      amount,
+      description,
+    });
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }),
+});
+
 // Handle CORS preflight for all routes
 for (const path of [
   "/api/generate-layout",
@@ -1726,6 +1840,12 @@ for (const path of [
   "/api/admin/set-plan",
   "/api/admin/set-role",
   "/api/admin/reset-usage",
+  "/api/ink/config",
+  "/api/ink/balance",
+  "/api/ink/preview",
+  "/api/ink/refill",
+  "/api/admin/ink-config",
+  "/api/admin/grant-ink",
 ]) {
   http.route({
     path,
