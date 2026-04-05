@@ -8,6 +8,11 @@ import { HabitTrackerBlock } from './planner/HabitTrackerBlock';
 import { GoalSectionBlock } from './planner/GoalSectionBlock';
 import { TimeBlockBlock } from './planner/TimeBlockBlock';
 import { DailySectionBlock } from './planner/DailySectionBlock';
+import { ProgressBarBlock } from './planner/ProgressBarBlock';
+import { RatingBlock } from './planner/RatingBlock';
+import { WaterTrackerBlock } from './planner/WaterTrackerBlock';
+import { SectionNavBlock } from './planner/SectionNavBlock';
+import { KanbanBlock } from './planner/KanbanBlock';
 
 interface BlockProps {
   block: Block;
@@ -393,6 +398,26 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
 
         {block.type === BlockType.DAILY_SECTION && (
           <DailySectionBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.PROGRESS_BAR && (
+          <ProgressBarBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.RATING && (
+          <RatingBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.WATER_TRACKER && (
+          <WaterTrackerBlock block={block} onChange={onChange} colorClasses={colorClasses} />
+        )}
+
+        {block.type === BlockType.SECTION_NAV && (
+          <SectionNavBlock block={block} onChange={onChange} colorClasses={colorClasses} allPages={allPages} onNavigate={onNavigate} />
+        )}
+
+        {block.type === BlockType.KANBAN && (
+          <KanbanBlock block={block} onChange={onChange} colorClasses={colorClasses} />
         )}
       </div>
     </div>
