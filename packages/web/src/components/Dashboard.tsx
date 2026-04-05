@@ -522,10 +522,10 @@ export const Dashboard: React.FC = () => {
         }
         return updated;
       });
-      const pageCount = newPages.length;
+      const generatedCount = newPages.length;
       addToast(
-        pageCount > 1
-          ? `Generated ${pageCount} pages!`
+        generatedCount > 1
+          ? `Generated ${generatedCount} pages!`
           : 'Page generated!',
         'success'
       );
@@ -1016,13 +1016,12 @@ export const Dashboard: React.FC = () => {
                       className="absolute inset-x-0 top-[15%] bottom-[10%] flex flex-col items-center justify-center px-6 text-center pointer-events-none"
                       style={{ zIndex: 20 }}
                     >
-                      {/* Gradient scrim so controls are always legible over any cover image */}
-                      <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none rounded-2xl" />
+                      {/* Gradient scrim removed — 3D scene provides enough contrast */}
 
                       <div className="relative z-10 flex flex-col items-center w-full max-h-full overflow-y-auto overflow-x-hidden scrollbar-hide">
                       {/* Title — always shown, looks "printed" on the cover */}
                       <input
-                        className="pointer-events-auto bg-transparent text-white text-3xl md:text-5xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md"
+                        className="pointer-events-auto bg-transparent text-white text-2xl md:text-4xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md"
                         style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
                         value={activeNotebook.title}
                         onChange={(e) => {
@@ -1038,15 +1037,15 @@ export const Dashboard: React.FC = () => {
                       </div>
 
                       {/* Cover Customization Panel */}
-                      <div className="pointer-events-auto flex flex-col items-center gap-3 mt-6 w-full max-w-md px-4">
+                      <div className="pointer-events-auto flex flex-col items-center gap-2 mt-4 w-full max-w-md px-4">
                         {/* Color Swatches — wrapping grid for all colors */}
-                        <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-3 bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-black/40">
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-black/40">
                           <Palette size={14} className="text-indigo-400 shrink-0" />
                           {COVER_COLORS.map(color => (
                             <button
                               key={color}
                               onClick={() => handleCoverColorChange(color)}
-                              className={`w-6 h-6 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color
+                              className={`w-5 h-5 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color
                                 ? 'border-white scale-125 shadow-lg shadow-white/20'
                                 : 'border-white/10 hover:border-white/40 hover:scale-110'
                                 }`}
@@ -1058,7 +1057,7 @@ export const Dashboard: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setShowCoverModal(true)}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600/80 to-violet-600/80 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600/80 to-violet-600/80 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
                           >
                             <Wand2 size={14} />
                             <span>AI Cover</span>
@@ -1066,18 +1065,19 @@ export const Dashboard: React.FC = () => {
                           {activeNotebook.coverImageUrl && (
                             <button
                               onClick={handleRemoveCoverImage}
-                              className="px-3 py-2.5 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-white/40 hover:text-red-400 rounded-xl text-xs transition-all"
+                              className="px-3 py-2 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-white/40 hover:text-red-400 rounded-xl text-xs transition-all"
                               title="Remove AI cover"
                             >
                               ✕
                             </button>
                           )}
                         </div>
-                      </div>                      {activeNotebook.pages.length > 0 ? (
+                      </div>
+                      {activeNotebook.pages.length > 0 ? (
                         !isOpening && (
                           <button
                             onClick={handleOpen3DCover}
-                            className="pointer-events-auto mt-6 text-white flex items-center gap-2.5 bg-indigo-600/80 hover:bg-indigo-500/90 backdrop-blur-sm px-7 py-3.5 rounded-2xl transition-all hover:scale-105 cursor-pointer font-medium shadow-xl shadow-indigo-900/30"
+                            className="pointer-events-auto mt-4 text-white flex items-center gap-2.5 bg-indigo-600/80 hover:bg-indigo-500/90 backdrop-blur-sm px-6 py-3 rounded-2xl transition-all hover:scale-105 cursor-pointer font-medium shadow-xl shadow-indigo-900/30"
                           >
                             <BookOpen size={18} />
                             <span>Open Notebook</span>
@@ -1086,18 +1086,18 @@ export const Dashboard: React.FC = () => {
                         )
                       ) : (
                         /* Onboarding Templates */
-                        <div className="pointer-events-auto mt-6 w-full max-w-lg">
-                          <div className="text-white/50 text-xs font-sans uppercase tracking-widest mb-3">Get Started</div>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <div className="pointer-events-auto mt-4 w-full max-w-lg">
+                          <div className="text-white/50 text-xs font-sans uppercase tracking-widest mb-2">Get Started</div>
+                          <div className="grid grid-cols-3 gap-1.5">
                             {STARTER_TEMPLATES.map(tpl => (
                               <button
                                 key={tpl.id}
                                 onClick={() => handleNewPage(tpl.blocks as Block[])}
-                                className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 transition-all text-left group/tpl"
+                                className="p-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 transition-all text-left group/tpl"
                               >
-                                <tpl.icon size={18} className="text-white/60 group-hover/tpl:text-white/90 transition-colors mb-1.5" />
-                                <div className="text-white/90 text-xs font-semibold">{tpl.title}</div>
-                                <div className="text-white/40 text-[10px] mt-0.5">{tpl.desc}</div>
+                                <tpl.icon size={16} className="text-white/60 group-hover/tpl:text-white/90 transition-colors mb-1" />
+                                <div className="text-white/90 text-[11px] font-semibold">{tpl.title}</div>
+                                <div className="text-white/40 text-[9px] mt-0.5">{tpl.desc}</div>
                               </button>
                             ))}
                           </div>

@@ -113,7 +113,7 @@ export const generateLayout = async (
         paperType: page.paperType || 'lined',
         themeColor: page.themeColor || 'slate',
         blocks: ((page.blocks || []) as Block[]).filter(
-          (b) => b.type === 'DIVIDER' || b.type === 'MOOD_TRACKER' || b.type === 'PRIORITY_MATRIX' || b.type === 'CALENDAR' || b.type === 'WEEKLY_VIEW' || b.type === 'HABIT_TRACKER' || b.type === 'GOAL_SECTION' || b.type === 'TIME_BLOCK' || b.type === 'DAILY_SECTION' || (b.content && b.content.trim().length > 0) || b.gridData
+          (b) => b.type === 'DIVIDER' || b.type === 'MOOD_TRACKER' || b.type === 'PRIORITY_MATRIX' || b.type === 'CALENDAR' || b.type === 'WEEKLY_VIEW' || b.type === 'HABIT_TRACKER' || b.type === 'GOAL_SECTION' || b.type === 'TIME_BLOCK' || b.type === 'DAILY_SECTION' || b.type === 'PROGRESS_BAR' || b.type === 'RATING' || b.type === 'WATER_TRACKER' || b.type === 'SECTION_NAV' || b.type === 'KANBAN' || (b.content && b.content.trim().length > 0) || b.gridData
         ),
       }))
       .filter((p) => p.blocks.length > 0);

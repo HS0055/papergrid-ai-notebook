@@ -85,6 +85,8 @@ const ALL_BLOCK_TYPES: BlockType[] = [
   BlockType.PRIORITY_MATRIX, BlockType.INDEX,
   BlockType.CALENDAR, BlockType.WEEKLY_VIEW, BlockType.HABIT_TRACKER,
   BlockType.GOAL_SECTION, BlockType.TIME_BLOCK, BlockType.DAILY_SECTION,
+  BlockType.PROGRESS_BAR, BlockType.RATING, BlockType.WATER_TRACKER,
+  BlockType.SECTION_NAV, BlockType.KANBAN,
 ];
 
 const PAPER_BLOCK_MAP: Record<string, BlockType[]> = {
@@ -118,6 +120,11 @@ const BLOCK_BUTTON_CONFIG: Record<BlockType, { icon: React.ReactNode; label: str
   [BlockType.GOAL_SECTION]: { icon: <Target size={18} />, label: 'Goals' },
   [BlockType.TIME_BLOCK]: { icon: <Clock size={18} />, label: 'Schedule' },
   [BlockType.DAILY_SECTION]: { icon: <Sun size={18} />, label: 'Daily' },
+  [BlockType.PROGRESS_BAR]: { icon: <span className="text-lg">▰</span>, label: 'Progress' },
+  [BlockType.RATING]: { icon: <span className="text-lg">★</span>, label: 'Rating' },
+  [BlockType.WATER_TRACKER]: { icon: <span className="text-lg">💧</span>, label: 'Water' },
+  [BlockType.SECTION_NAV]: { icon: <List size={18} />, label: 'Nav' },
+  [BlockType.KANBAN]: { icon: <LayoutGrid size={18} />, label: 'Kanban' },
 };
 
 const SortableBlock: React.FC<{ id: string; children: (props: { dragHandleProps: Record<string, any>; style: React.CSSProperties; isDragging: boolean }) => React.ReactNode }> = ({ id, children }) => {
