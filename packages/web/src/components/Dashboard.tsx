@@ -484,7 +484,7 @@ export const Dashboard: React.FC = () => {
     }, 400);
   }, []);
 
-  const handleAiGeneration = async (prompt: string, industry?: string, aesthetic?: string) => {
+  const handleAiGeneration = async (prompt: string, industry?: string, aesthetic?: string, pageCount?: string) => {
     try {
       // Build context from last 5 existing pages so AI can continue intelligently
       const activeNb = notebooks.find(n => n.id === activeNotebookId);
@@ -499,7 +499,7 @@ export const Dashboard: React.FC = () => {
         }));
       }
 
-      const generatedPages = await generateLayout(prompt, industry, aesthetic, existingPageCtx);
+      const generatedPages = await generateLayout(prompt, industry, aesthetic, existingPageCtx, pageCount);
       const newPages: NotebookPage[] = generatedPages.map(layout => ({
         id: crypto.randomUUID(),
         title: layout.title,
@@ -1013,13 +1013,13 @@ export const Dashboard: React.FC = () => {
                     </Canvas3DErrorBoundary>
                     {/* DOM overlay for title editing, color picker, CTA */}
                     <div
-                      className="absolute inset-0 flex flex-col items-center justify-end pb-6 md:pb-10 px-6 text-center pointer-events-none"
+                      className="absolute inset-x-0 top-[15%] bottom-[10%] flex flex-col items-center justify-center px-6 text-center pointer-events-none"
                       style={{ zIndex: 20 }}
                     >
                       {/* Gradient scrim so controls are always legible over any cover image */}
-                      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none" />
+                      <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none rounded-2xl" />
 
-                      <div className="relative z-10 flex flex-col items-center w-full">
+                      <div className="relative z-10 flex flex-col items-center w-full max-h-full overflow-y-auto overflow-x-hidden scrollbar-hide">
                       {/* Title — always shown, looks "printed" on the cover */}
                       <input
                         className="pointer-events-auto bg-transparent text-white text-3xl md:text-5xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md"

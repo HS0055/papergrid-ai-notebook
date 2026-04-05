@@ -69,6 +69,7 @@ export const generateLayout = async (
   industry?: string,
   aesthetic?: string,
   existingPages?: ExistingPageContext[],
+  pageCount?: string,
 ): Promise<GeneratedPage[]> => {
   const sessionToken = localStorage.getItem('papergrid_session');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -78,6 +79,9 @@ export const generateLayout = async (
   const payload: Record<string, unknown> = { prompt, industry, aesthetic };
   if (existingPages && existingPages.length > 0) {
     payload.existingPages = existingPages;
+  }
+  if (pageCount) {
+    payload.pageCount = pageCount;
   }
 
   const doFetch = async (): Promise<GeneratedPage[]> => {

@@ -6,7 +6,7 @@ import { previewInkCost } from '../services/geminiService';
 interface LayoutGeneratorProps {
   isOpen: boolean;
   onClose: () => void;
-  onGenerate: (prompt: string, industry?: string, aesthetic?: string) => Promise<void>;
+  onGenerate: (prompt: string, industry?: string, aesthetic?: string, pageCount?: string) => Promise<void>;
 }
 
 const AESTHETICS = [
@@ -49,6 +49,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
   const [isLoading, setIsLoading] = useState(false);
   const [showFullUI, setShowFullUI] = useState(false);
   const [inkPreview, setInkPreview] = useState<{ cost: number; balance: number; canAfford: boolean } | null>(null);
+  const [pageCount, setPageCount] = useState<'1' | '2-3' | '4-5'>('1');
 
   const activeAesthetic = useMemo(() => AESTHETICS.find(a => a.id === aesthetic), [aesthetic]);
 
@@ -90,11 +91,12 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
 
     setIsLoading(true);
     try {
-      await onGenerate(prompt, industry, aesthetic);
+      await onGenerate(prompt, industry, aesthetic, pageCount);
       onClose();
       setPrompt('');
       setIndustry('');
       setAesthetic('pastel');
+      setPageCount('1');
     } catch (error) {
       // Parent handles toast
     } finally {
@@ -201,6 +203,34 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
               ))}
             </div>
 
+            {/* Page Count Selector */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                <Layers size={12} /> Pages to Generate
+              </label>
+              <div className="flex gap-2">
+                {([
+                  { value: '1' as const, label: '1 Page', desc: 'Single page' },
+                  { value: '2-3' as const, label: '2-3 Pages', desc: 'Multi-page spread' },
+                  { value: '4-5' as const, label: '4-5 Pages', desc: 'Full planner set' },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setPageCount(opt.value)}
+                    className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-center transition-all ${
+                      pageCount === opt.value
+                        ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+                        : 'border-gray-100 bg-white hover:border-gray-200'
+                    }`}
+                  >
+                    <div className={`text-sm font-bold ${pageCount === opt.value ? 'text-indigo-600' : 'text-gray-700'}`}>{opt.label}</div>
+                    <div className="text-[9px] text-gray-400 mt-0.5">{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Footer Actions */}
             <div className="pt-4 flex flex-col gap-3 border-t border-gray-100">
               {inkPreview && (
@@ -226,7 +256,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
               )}
               <div className="flex items-center justify-between">
                 <div className="text-[10px] text-gray-400 max-w-[200px]">
-                  AI will generate 1-5 pages based on your request. Planners get multiple pages automatically.
+                  {pageCount === '1' ? 'One focused page.' : `AI will generate ${pageCount} pages with sequential dates.`}
                 </div>
                 <div className="flex gap-3">
                   <button

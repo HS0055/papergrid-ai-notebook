@@ -465,11 +465,12 @@ http.route({
       }
 
       const body = await request.json();
-      const { prompt, industry, aesthetic, existingPages } = body as {
+      const { prompt, industry, aesthetic, existingPages, pageCount } = body as {
         prompt: string;
         industry?: string;
         aesthetic?: string;
         existingPages?: Array<{ title: string; paperType: string; themeColor: string; blockSummary: string }>;
+        pageCount?: string;
       };
 
       if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
@@ -569,34 +570,23 @@ ${designPrinciples}
 
 ${domainRules}
 
-=== PAGE PLANNING ===
-YOU decide how many pages this request needs (1 to 5 pages max per generation).
+=== PAGE COUNT ===
+${pageCount === "1" ? "Generate EXACTLY 1 page. Do NOT generate multiple pages. Focus all content into a single, rich, well-designed page." : pageCount === "2-3" ? "Generate 2 to 3 pages. Each page should serve a different purpose (e.g. overview + detail, or tracker + reflection)." : pageCount === "4-5" ? "Generate 4 to 5 pages. Create a complete planner set with varied page types (overview, daily/weekly spreads, trackers, reflections)." : "Generate EXACTLY 1 page unless the prompt clearly implies multiple pages."}
 
-CRITICAL DATE RULES:
+=== DATE RULES ===
 - Current date is ${currentDate}.
-- When generating multi-page planners, EACH PAGE must cover a DIFFERENT time period:
-  * "weekly planner" → Page 1: "Week of April 6-12", Page 2: "Week of April 13-19", Page 3: "Week of April 20-26"
-  * "daily planner" → Page 1: "Monday, April 6", Page 2: "Tuesday, April 7", Page 3: "Wednesday, April 8"
-  * "monthly planner" → Page 1: "April 2026 Overview", Page 2: "Week of April 6-12", etc.
-- NEVER repeat the same date or date range across multiple pages.
-- Calculate the next Monday from ${currentDate} and use that as the start of the first week.
-- Use actual calendar math: April has 30 days, days of the week must be correct.
-- Fill WEEKLY_VIEW blocks with the correct day labels for that specific week.
-- Fill CALENDAR blocks with the correct month/year.
-
-PAGE COUNT GUIDELINES:
-- "meeting notes" or "grocery list" → 1 page
-- "weekly planner" → 2-3 pages (different weeks or overview + weekly spread)
-- "monthly planner" → 4-5 pages (month overview + weekly spreads + reflection)
-- "daily planner for the week" → 5 pages (Mon-Fri with correct sequential dates)
-- "travel itinerary 3 days" → 3-4 pages (each with correct date)
-- "budget tracker" → 3 pages (income + expenses + savings goals/reflection)
-- "social media planner" → 3 pages (accounts audit + content calendar + posting schedule)
-- "study notes for chapter" → 1-2 pages
-Think like a real planner designer: what set of pages would make a COMPLETE, useful section?
+- ALL dates inside blocks MUST match the page they belong to. This is CRITICAL:
+  * DAILY_SECTION blocks: dayLabel and date fields MUST match the page title. If page is "Monday, April 7" then dayLabel = "Monday, April 7" and date = "2026-04-07". NEVER use a different date.
+  * WEEKLY_VIEW blocks: day labels MUST use correct days for that week. "Week of April 7-13" → Monday April 7 through Sunday April 13.
+  * CALENDAR blocks: month/year MUST match page context.
+  * TIME_BLOCK entries should reflect the page's date.
+  * HEADING and TEXT blocks with dates MUST match the page title date.
+- When generating multiple pages, EACH page covers a DIFFERENT time period. NEVER repeat dates across pages.
+- Calculate the next Monday from ${currentDate} as start of first week.
+- Use actual calendar math: April has 30 days, correct day-of-week names.
 
 Each page is a SEPARATE notebook page with its own title, paper type, theme color, and blocks.
-Vary the page designs — different pages should serve different roles (overview vs detail, schedule vs reflection, tracker vs notes).
+${pageCount !== "1" ? "Vary the page designs — different pages should serve different roles (overview vs detail, schedule vs reflection, tracker vs notes)." : ""}
 ${existingPages && existingPages.length > 0 ? "IMPORTANT: This is a CONTINUATION. The user already has pages. Generate the NEXT logical pages that follow from what exists. Do not repeat content." : ""}
 
 === AESTHETIC RULES ===
@@ -1613,6 +1603,36 @@ http.route({
 });
 
 // ── Admin endpoints ──────────────────────────────────────
+
+// Bootstrap first admin (one-time, only works when no admin exists)
+http.route({
+  path: "/api/admin/bootstrap",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      const result = await ctx.runMutation(api.users.bootstrapAdmin, { sessionToken });
+      return new Response(JSON.stringify(result), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Bootstrap failed");
+      const status = message.includes("Forbidden") ? 403 : message.includes("Not authenticated") ? 401 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/bootstrap",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, request) => {
+    return new Response(null, { status: 204, headers: makeCorsHeaders(request) });
+  }),
+});
 
 http.route({
   path: "/api/admin/users",
