@@ -439,29 +439,31 @@ http.route({
     }
 
     try {
-      // --- Ink spending (replaces old generation counter) ---
-      let inkResult: { allowed: boolean; balance: number; cost: number } = { allowed: true, balance: 0, cost: 0 };
+      // --- Ink pre-check (verify user has at least 1 Ink before generating) ---
+      let sessionToken: string | undefined;
+      let inkBalance = 0;
       try {
-        const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+        sessionToken = getSessionTokenFromRequest(request) ?? undefined;
         if (sessionToken) {
-          inkResult = await ctx.runMutation(api.users.spendInk, {
+          const preview = await ctx.runQuery(api.users.previewInkCost, {
             sessionToken,
             action: "layout",
           });
+          inkBalance = preview.balance;
+          if (inkBalance < 1) {
+            return new Response(
+              JSON.stringify({
+                error: "Not enough Ink. You need at least 1 Ink to generate.",
+                inkRequired: 1,
+                inkBalance,
+              }),
+              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
       } catch (e) {
         // If auth fails, allow generation but don't track
-        console.warn("Ink spending skipped:", e);
-      }
-      if (!inkResult.allowed) {
-        return new Response(
-          JSON.stringify({
-            error: "Not enough Ink for this generation.",
-            inkRequired: inkResult.cost,
-            inkBalance: inkResult.balance,
-          }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.warn("Ink pre-check skipped:", e);
       }
 
       const body = await request.json();
@@ -1032,7 +1034,7 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         : [layoutData];
 
       // Structural block types that are valid even without text content
-      const structuralTypes = new Set(["DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION", "INDEX"]);
+      const structuralTypes = new Set(["DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION", "INDEX", "PROGRESS_BAR", "RATING", "WATER_TRACKER", "SECTION_NAV", "KANBAN"]);
 
       const pages = rawPages.map((page: Record<string, unknown>) => {
         const allBlocks = hydrateBlocks(
@@ -1060,7 +1062,26 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         );
       }
 
-      const result = { pages };
+      // --- Charge Ink per page generated ---
+      let inkCharged = 0;
+      try {
+        if (sessionToken && pages.length > 0) {
+          const chargeResult = await ctx.runMutation(api.users.spendInk, {
+            sessionToken,
+            action: "layout",
+            amount: pages.length, // 1 Ink per page
+          });
+          inkCharged = pages.length;
+          if (!chargeResult.allowed) {
+            // User ran out mid-generation — still return pages but warn
+            inkCharged = 0;
+          }
+        }
+      } catch (e) {
+        console.warn("Ink charging skipped:", e);
+      }
+
+      const result = { pages, inkCharged, pageCount: pages.length };
 
       return new Response(JSON.stringify(result), {
         status: 200,

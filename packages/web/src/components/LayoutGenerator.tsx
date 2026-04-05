@@ -216,7 +216,7 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
                 <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${multiPage ? 'translate-x-6' : 'translate-x-0.5'}`} />
               </button>
               <span className="text-xs text-gray-500 ml-2 flex-1">
-                {multiPage ? 'AI decides how many pages your request needs' : 'Single page only'}
+                {multiPage ? 'AI decides page count (up to 5). Generate more to continue.' : 'Single page only'}
               </span>
             </div>
 
@@ -225,10 +225,14 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
               {inkPreview && (
                 <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium ${inkPreview.canAfford ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
                   {inkPreview.canAfford ? (
-                    <span>This will use <strong>{inkPreview.cost} Ink</strong>. You have <strong>{inkPreview.balance} Ink</strong> remaining.</span>
+                    <span>
+                      <strong>1 Ink per page</strong> generated.
+                      {multiPage ? ' Multi-page: AI decides count, you pay per page.' : ' Single page = 1 Ink.'}
+                      {' '}You have <strong>{inkPreview.balance} Ink</strong>.
+                    </span>
                   ) : (
                     <span>
-                      This requires <strong>{inkPreview.cost} Ink</strong> but you only have <strong>{inkPreview.balance}</strong>.{' '}
+                      You need at least <strong>1 Ink</strong> but you have <strong>{inkPreview.balance}</strong>.{' '}
                       <button type="button" onClick={() => { onClose(); navigate('/pricing'); }} className="underline font-bold hover:text-red-900 transition-colors">Buy Ink</button>
                     </span>
                   )}

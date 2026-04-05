@@ -12,6 +12,7 @@ export const PLAN_LIMITS = {
 } as const;
 
 // Default Ink configuration (admin can override via appSettings)
+// Layout/cover costs are PER PAGE generated (not per request)
 export const DEFAULT_INK_CONFIG = {
   plans: {
     free:    { inkPerMonth: 12,  notebooks: 1,   rolloverMax: 0,   pagesPerNotebook: 10 },
@@ -274,16 +275,25 @@ export const loginWithEmailPassword = mutation({
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) throw new Error("Email is required");
 
-    let user = await ctx.db
+    // Find all users with this email and prefer the one with a passwordHash
+    // (handles duplicate user records from multiple signup paths)
+    const candidates = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
-      .first();
-    if (!user && email.trim() !== normalizedEmail) {
-      user = await ctx.db
+      .collect();
+    if (candidates.length === 0 && email.trim() !== normalizedEmail) {
+      const fallback = await ctx.db
         .query("users")
         .withIndex("by_email", (q) => q.eq("email", email.trim()))
-        .first();
+        .collect();
+      candidates.push(...fallback);
     }
+    // Prefer user with passwordHash; among those, prefer one with admin role
+    let user =
+      candidates.find((u) => u.passwordHash && u.role === "admin") ??
+      candidates.find((u) => u.passwordHash) ??
+      candidates[0] ??
+      null;
     if (!user) {
       throw new Error("Invalid email or password");
     }
@@ -463,6 +473,72 @@ export const adminSetRole = mutation({
     await requireAdmin(ctx, sessionToken);
     await ctx.db.patch(targetUserId, { role });
     return { success: true };
+  },
+});
+
+// Bootstrap: promote the first admin when no admins exist yet
+// This is a one-time operation — once an admin exists, it becomes a no-op
+export const bootstrapAdmin = mutation({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    // Check if any admin already exists
+    const existingAdmin = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("role"), "admin"))
+      .first();
+    if (existingAdmin) {
+      throw new Error("Forbidden: an admin already exists. Use adminSetRole instead.");
+    }
+    // Authenticate the caller
+    const user =
+      (await getUserFromIdentity(ctx as AuthCtx)) ??
+      (await getUserFromSessionToken(ctx as AuthCtx, sessionToken));
+    if (!user) throw new Error("Not authenticated");
+    // Promote caller to admin
+    await ctx.db.patch(user._id, { role: "admin" as const });
+    return { success: true, userId: user._id };
+  },
+});
+
+// CLI-only: promote all user records with a given email to admin
+// Run via: npx convex run users:promoteByEmail '{"email":"you@example.com"}'
+export const promoteByEmail = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const normalizedEmail = normalizeEmail(email);
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .collect();
+    if (users.length === 0) throw new Error(`No user found with email: ${normalizedEmail}`);
+    const promoted: string[] = [];
+    for (const u of users) {
+      await ctx.db.patch(u._id, { role: "admin" as const });
+      promoted.push(u._id);
+    }
+    return { promoted, count: promoted.length };
+  },
+});
+
+// CLI-only: debug session — show which user a session resolves to
+export const debugSession = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const session = await ctx.db
+      .query("authSessions")
+      .withIndex("by_token", (q) => q.eq("token", sessionToken))
+      .first();
+    if (!session) return { error: "Session not found" };
+    if (new Date(session.expiresAt).getTime() <= Date.now()) return { error: "Session expired", expiresAt: session.expiresAt };
+    const user = await ctx.db.get(session.userId);
+    if (!user) return { error: "User not found", userId: session.userId };
+    return {
+      sessionUserId: session.userId,
+      email: user.email,
+      role: user.role ?? "unset",
+      tokenIdentifier: user.tokenIdentifier,
+      createdAt: user._creationTime,
+    };
   },
 });
 

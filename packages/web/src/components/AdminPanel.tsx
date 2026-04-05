@@ -418,7 +418,7 @@ export function AdminPanel() {
               ) : (
                 <div className="text-lg font-bold text-gray-900">{inkConfig.costs.layout}</div>
               )}
-              <div className="text-xs text-gray-400">Ink / action</div>
+              <div className="text-xs text-gray-400">Ink / page</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Advanced</div>
@@ -436,7 +436,7 @@ export function AdminPanel() {
               ) : (
                 <div className="text-lg font-bold text-gray-900">{inkConfig.costs.advanced_layout}</div>
               )}
-              <div className="text-xs text-gray-400">Ink / action</div>
+              <div className="text-xs text-gray-400">Ink / page</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Cover</div>
@@ -454,7 +454,7 @@ export function AdminPanel() {
               ) : (
                 <div className="text-lg font-bold text-gray-900">{inkConfig.costs.cover}</div>
               )}
-              <div className="text-xs text-gray-400">Ink / action</div>
+              <div className="text-xs text-gray-400">Ink / page</div>
             </div>
             <div className="bg-white rounded-xl border p-3">
               <div className="text-xs text-gray-500 mb-1">Premium Cover</div>
@@ -472,7 +472,7 @@ export function AdminPanel() {
               ) : (
                 <div className="text-lg font-bold text-gray-900">{inkConfig.costs.premium_cover}</div>
               )}
-              <div className="text-xs text-gray-400">Ink / action</div>
+              <div className="text-xs text-gray-400">Ink / page</div>
             </div>
           </div>
         </div>
