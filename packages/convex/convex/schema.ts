@@ -86,6 +86,11 @@ export default defineSchema({
     goalSectionData: v.optional(v.any()),
     timeBlockData: v.optional(v.any()),
     dailySectionData: v.optional(v.any()),
+    progressBarData: v.optional(v.any()),
+    ratingData: v.optional(v.any()),
+    waterTrackerData: v.optional(v.any()),
+    sectionNavData: v.optional(v.any()),
+    kanbanData: v.optional(v.any()),
   }).index("by_page", ["pageId"]),
 
   referenceLayouts: defineTable({
