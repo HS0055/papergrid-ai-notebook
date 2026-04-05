@@ -565,11 +565,25 @@ ${domainRules}
 
 === PAGE PLANNING ===
 YOU decide how many pages this request needs (1 to 5 pages max per generation).
+
+CRITICAL DATE RULES:
+- Current date is ${currentDate}.
+- When generating multi-page planners, EACH PAGE must cover a DIFFERENT time period:
+  * "weekly planner" → Page 1: "Week of April 6-12", Page 2: "Week of April 13-19", Page 3: "Week of April 20-26"
+  * "daily planner" → Page 1: "Monday, April 6", Page 2: "Tuesday, April 7", Page 3: "Wednesday, April 8"
+  * "monthly planner" → Page 1: "April 2026 Overview", Page 2: "Week of April 6-12", etc.
+- NEVER repeat the same date or date range across multiple pages.
+- Calculate the next Monday from ${currentDate} and use that as the start of the first week.
+- Use actual calendar math: April has 30 days, days of the week must be correct.
+- Fill WEEKLY_VIEW blocks with the correct day labels for that specific week.
+- Fill CALENDAR blocks with the correct month/year.
+
+PAGE COUNT GUIDELINES:
 - "meeting notes" or "grocery list" → 1 page
-- "weekly planner" → 2-3 pages (overview + weekly spreads)
+- "weekly planner" → 2-3 pages (different weeks or overview + weekly spread)
 - "monthly planner" → 4-5 pages (month overview + weekly spreads + reflection)
-- "daily planner for the week" → 5 pages (one per weekday, Mon-Fri)
-- "travel itinerary 3 days" → 3-4 pages (one per day + packing list)
+- "daily planner for the week" → 5 pages (Mon-Fri with correct sequential dates)
+- "travel itinerary 3 days" → 3-4 pages (each with correct date)
 - "budget tracker" → 3 pages (income + expenses + savings goals/reflection)
 - "social media planner" → 3 pages (accounts audit + content calendar + posting schedule)
 - "study notes for chapter" → 1-2 pages
