@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const SESSION_KEY = 'papergrid_session';
 
-type Plan = 'free' | 'starter' | 'pro' | 'founder';
+type Plan = 'free' | 'starter' | 'pro' | 'founder' | 'creator';
 type Role = 'user' | 'admin';
 
 interface AdminUser {
@@ -16,6 +16,9 @@ interface AdminUser {
   role?: Role;
   aiGenerationsUsed?: number;
   aiGenerationsResetAt?: string;
+  inkSubscription?: number;
+  inkPurchased?: number;
+  inkResetAt?: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   _creationTime: number;
@@ -28,12 +31,13 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
-const PLANS: Plan[] = ['free', 'starter', 'pro', 'founder'];
+const PLANS: Plan[] = ['free', 'starter', 'pro', 'founder', 'creator'];
 const PLAN_COLORS: Record<Plan, string> = {
   free: 'bg-gray-100 text-gray-700',
   starter: 'bg-blue-100 text-blue-700',
   pro: 'bg-purple-100 text-purple-700',
   founder: 'bg-amber-100 text-amber-700',
+  creator: 'bg-emerald-100 text-emerald-700',
 };
 
 export function AdminPanel() {
@@ -132,6 +136,38 @@ export function AdminPanel() {
     }
   };
 
+  const grantInk = async (targetUserId: string) => {
+    const input = window.prompt('Enter Ink amount to grant:');
+    if (!input) return;
+    const amount = parseInt(input, 10);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Please enter a valid positive number.');
+      return;
+    }
+    setActionLoading(targetUserId);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/grant-ink`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ targetUserId, amount }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed');
+      }
+      const data = await res.json();
+      setUsers(prev => prev.map(u =>
+        u._id === targetUserId
+          ? { ...u, inkPurchased: data.inkPurchased ?? (u.inkPurchased ?? 0) + amount }
+          : u
+      ));
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to grant Ink');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -187,7 +223,7 @@ export function AdminPanel() {
 
       {/* Stats summary */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
           {PLANS.map(plan => {
             const count = users.filter(u => u.plan === plan).length;
             return (
@@ -199,6 +235,58 @@ export function AdminPanel() {
           })}
         </div>
 
+        {/* Ink Economy */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-gray-900">Ink Economy</h2>
+            <button
+              onClick={() => alert('Coming soon: edit via /api/admin/ink-config')}
+              className="text-xs text-indigo-600 hover:text-indigo-700 font-medium px-3 py-1 rounded-lg border border-indigo-200 hover:border-indigo-300 transition-colors"
+            >
+              Edit
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+            {/* Plan Ink Allocations */}
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-xs text-gray-500 mb-1">Free Plan</div>
+              <div className="text-lg font-bold text-gray-900">12</div>
+              <div className="text-xs text-gray-400">Ink / month</div>
+            </div>
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-xs text-gray-500 mb-1">Pro Plan</div>
+              <div className="text-lg font-bold text-purple-700">120</div>
+              <div className="text-xs text-gray-400">Ink / month</div>
+            </div>
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-xs text-gray-500 mb-1">Creator Plan</div>
+              <div className="text-lg font-bold text-emerald-700">350</div>
+              <div className="text-xs text-gray-400">Ink / month</div>
+            </div>
+            {/* Action Costs */}
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-xs text-gray-500 mb-1">Layout</div>
+              <div className="text-lg font-bold text-gray-900">1</div>
+              <div className="text-xs text-gray-400">Ink / action</div>
+            </div>
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-xs text-gray-500 mb-1">Advanced</div>
+              <div className="text-lg font-bold text-gray-900">2</div>
+              <div className="text-xs text-gray-400">Ink / action</div>
+            </div>
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-xs text-gray-500 mb-1">Cover</div>
+              <div className="text-lg font-bold text-gray-900">4</div>
+              <div className="text-xs text-gray-400">Ink / action</div>
+            </div>
+            <div className="bg-white rounded-xl border p-3">
+              <div className="text-xs text-gray-500 mb-1">Premium Cover</div>
+              <div className="text-lg font-bold text-gray-900">6</div>
+              <div className="text-xs text-gray-400">Ink / action</div>
+            </div>
+          </div>
+        </div>
+
         {/* Users table */}
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -208,7 +296,7 @@ export function AdminPanel() {
                   <th className="text-left px-4 py-3 font-medium text-gray-600">User</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Plan</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">AI Usage</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Ink Balance</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Joined</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
                 </tr>
@@ -249,17 +337,30 @@ export function AdminPanel() {
                         </select>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-900 font-medium">{u.aiGenerationsUsed ?? 0}</span>
-                          <button
-                            onClick={() => resetUsage(u._id)}
-                            disabled={isProcessing || (u.aiGenerationsUsed ?? 0) === 0}
-                            className="text-xs text-indigo-600 hover:text-indigo-700 disabled:text-gray-300 disabled:cursor-not-allowed"
-                            title="Reset AI usage counter"
-                          >
-                            reset
-                          </button>
-                        </div>
+                        {(() => {
+                          const sub = u.inkSubscription ?? 0;
+                          const purch = u.inkPurchased ?? 0;
+                          const total = sub + purch;
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="text-gray-900 font-medium cursor-help"
+                                title={`${sub} monthly + ${purch} purchased`}
+                              >
+                                {total} Ink
+                              </span>
+                              <button
+                                onClick={() => grantInk(u._id)}
+                                disabled={isProcessing}
+                                className="text-xs text-emerald-600 hover:text-emerald-700 disabled:text-gray-300 disabled:cursor-not-allowed font-medium"
+                                title="Grant Ink to user"
+                              >
+                                Grant
+                              </button>
+                              {/* TODO: Add Deduct button calling POST /api/admin/deduct-ink */}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
                         {new Date(u._creationTime).toLocaleDateString()}
