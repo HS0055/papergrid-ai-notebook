@@ -16,6 +16,11 @@ export enum BlockType {
   GOAL_SECTION = 'GOAL_SECTION',
   TIME_BLOCK = 'TIME_BLOCK',
   DAILY_SECTION = 'DAILY_SECTION',
+  PROGRESS_BAR = 'PROGRESS_BAR',
+  RATING = 'RATING',
+  WATER_TRACKER = 'WATER_TRACKER',
+  SECTION_NAV = 'SECTION_NAV',
+  KANBAN = 'KANBAN',
 }
 
 export interface GridCell {
@@ -107,6 +112,45 @@ export interface DailySectionData {
   sections: DailySectionEntry[];
 }
 
+export interface ProgressBarData {
+  label: string;
+  current: number;       // 0-100
+  target: string;        // e.g. "$5,000"
+  color: string;         // theme color
+}
+
+export interface RatingData {
+  label: string;
+  max: number;           // 5 or 10
+  value: number;         // current rating
+  style: 'star' | 'circle' | 'heart';
+}
+
+export interface WaterTrackerData {
+  goal: number;          // glasses per day (default 8)
+  filled: number;        // how many filled
+}
+
+export interface SectionNavData {
+  sections: Array<{ label: string; icon?: string; pageIndex?: number }>;
+}
+
+export interface KanbanCard {
+  id: string;
+  text: string;
+  checked?: boolean;
+}
+
+export interface KanbanColumn {
+  title: string;
+  color: string;
+  cards: KanbanCard[];
+}
+
+export interface KanbanData {
+  columns: KanbanColumn[];
+}
+
 export interface Block {
   id: string;
   type: BlockType;
@@ -134,6 +178,11 @@ export interface Block {
   goalSectionData?: GoalSectionData;
   timeBlockData?: TimeBlockData;
   dailySectionData?: DailySectionData;
+  progressBarData?: ProgressBarData;
+  ratingData?: RatingData;
+  waterTrackerData?: WaterTrackerData;
+  sectionNavData?: SectionNavData;
+  kanbanData?: KanbanData;
 }
 
 export interface NotebookPage {
