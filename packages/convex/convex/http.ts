@@ -612,6 +612,11 @@ Adhere to the requested aesthetic:
 7. Each page must have a unique, descriptive title using real dates: "Week of April 7-13" or "April Savings Dashboard".
 8. Vary themeColor subtly across pages for visual interest while maintaining aesthetic coherence.
 9. Every page needs 6-14 blocks minimum for a rich, professional look. Aim for 8-12.
+10. PROGRESS_BAR: Use for savings goals, budget remaining, project completion. Set current (0-100), target label, and color.
+11. RATING: Use for satisfaction, quality, mood ratings. Use star style for reviews, heart for wellness, circle for neutral. Set max=5 for quick, max=10 for detailed.
+12. WATER_TRACKER: Use for daily wellness pages. Default goal=8. Set filled=0 for fresh trackers.
+13. SECTION_NAV: Use on index/overview pages to link to other pages. Include descriptive labels and optional emoji icons.
+14. KANBAN: Use for project management, task boards, workflows. Create 3-4 columns (e.g. "To Do", "In Progress", "Done"). Pre-populate with realistic cards.
 
 Return a JSON object with a "pages" array. Each page has: title, paperType, themeColor, and blocks array.`;
 
@@ -621,7 +626,7 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         properties: {
           type: {
             type: "STRING" as const,
-            enum: ["TEXT", "HEADING", "GRID", "CHECKBOX", "CALLOUT", "QUOTE", "DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "INDEX", "MUSIC_STAFF", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION"],
+            enum: ["TEXT", "HEADING", "GRID", "CHECKBOX", "CALLOUT", "QUOTE", "DIVIDER", "MOOD_TRACKER", "PRIORITY_MATRIX", "INDEX", "MUSIC_STAFF", "CALENDAR", "WEEKLY_VIEW", "HABIT_TRACKER", "GOAL_SECTION", "TIME_BLOCK", "DAILY_SECTION", "PROGRESS_BAR", "RATING", "WATER_TRACKER", "SECTION_NAV", "KANBAN"],
           },
           content: { type: "STRING" as const },
           alignment: { type: "STRING" as const, enum: ["left", "center", "right"] },
@@ -693,6 +698,59 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
             properties: {
               date: { type: "STRING" as const }, dayLabel: { type: "STRING" as const },
               sections: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: { label: { type: "STRING" as const }, content: { type: "STRING" as const } } } },
+            },
+            nullable: true,
+          },
+          progressBarData: {
+            type: "OBJECT" as const,
+            properties: {
+              label: { type: "STRING" as const },
+              current: { type: "NUMBER" as const },
+              target: { type: "STRING" as const },
+              color: { type: "STRING" as const },
+            },
+            nullable: true,
+          },
+          ratingData: {
+            type: "OBJECT" as const,
+            properties: {
+              label: { type: "STRING" as const },
+              max: { type: "NUMBER" as const },
+              value: { type: "NUMBER" as const },
+              style: { type: "STRING" as const, enum: ["star", "circle", "heart"] },
+            },
+            nullable: true,
+          },
+          waterTrackerData: {
+            type: "OBJECT" as const,
+            properties: {
+              goal: { type: "NUMBER" as const },
+              filled: { type: "NUMBER" as const },
+            },
+            nullable: true,
+          },
+          sectionNavData: {
+            type: "OBJECT" as const,
+            properties: {
+              sections: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: {
+                label: { type: "STRING" as const },
+                icon: { type: "STRING" as const },
+                pageIndex: { type: "NUMBER" as const },
+              } } },
+            },
+            nullable: true,
+          },
+          kanbanData: {
+            type: "OBJECT" as const,
+            properties: {
+              columns: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: {
+                title: { type: "STRING" as const },
+                color: { type: "STRING" as const },
+                cards: { type: "ARRAY" as const, items: { type: "OBJECT" as const, properties: {
+                  text: { type: "STRING" as const },
+                  checked: { type: "BOOLEAN" as const },
+                } } },
+              } } },
             },
             nullable: true,
           },
