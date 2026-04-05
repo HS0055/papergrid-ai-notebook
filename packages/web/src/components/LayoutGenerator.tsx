@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sparkles, X, Loader2, Briefcase, Wand2, ChevronRight, Layers, Palette } from 'lucide-react';
+import { previewInkCost } from '../services/geminiService';
 
 interface LayoutGeneratorProps {
   isOpen: boolean;
@@ -40,11 +42,13 @@ const BLOCK_PREVIEW: Record<string, { height: string; label: string; style: stri
 };
 
 export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClose, onGenerate }) => {
+  const navigate = useNavigate();
   const [prompt, setPrompt] = useState('');
   const [industry, setIndustry] = useState('');
   const [aesthetic, setAesthetic] = useState('pastel');
   const [isLoading, setIsLoading] = useState(false);
   const [showFullUI, setShowFullUI] = useState(false);
+  const [inkPreview, setInkPreview] = useState<{ cost: number; balance: number; canAfford: boolean } | null>(null);
 
   const activeAesthetic = useMemo(() => AESTHETICS.find(a => a.id === aesthetic), [aesthetic]);
 
@@ -55,6 +59,18 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
     } else {
       setShowFullUI(false);
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setInkPreview(null);
+      return;
+    }
+    let cancelled = false;
+    previewInkCost('layout').then((result) => {
+      if (!cancelled) setInkPreview(result);
+    });
+    return () => { cancelled = true; };
   }, [isOpen]);
 
   useEffect(() => {
@@ -187,6 +203,18 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
 
             {/* Footer Actions */}
             <div className="pt-4 flex flex-col gap-3 border-t border-gray-100">
+              {inkPreview && (
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium ${inkPreview.canAfford ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+                  {inkPreview.canAfford ? (
+                    <span>This will use <strong>{inkPreview.cost} Ink</strong>. You have <strong>{inkPreview.balance} Ink</strong> remaining.</span>
+                  ) : (
+                    <span>
+                      This requires <strong>{inkPreview.cost} Ink</strong> but you only have <strong>{inkPreview.balance}</strong>.{' '}
+                      <button type="button" onClick={() => { onClose(); navigate('/pricing'); }} className="underline font-bold hover:text-red-900 transition-colors">Buy Ink</button>
+                    </span>
+                  )}
+                </div>
+              )}
               {isLoading && (
                 <div className="flex items-center gap-3 px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
                   <Loader2 className="animate-spin text-indigo-500 shrink-0" size={16} />
@@ -211,11 +239,13 @@ export const LayoutGenerator: React.FC<LayoutGeneratorProps> = ({ isOpen, onClos
                   </button>
                   <button
                     type="submit"
-                    disabled={isLoading || !prompt.trim()}
+                    disabled={isLoading || !prompt.trim() || (inkPreview !== null && !inkPreview.canAfford)}
                     className={`flex items-center gap-2 px-8 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-xl shadow-indigo-500/20 ${
                       isLoading
                         ? 'bg-indigo-400 text-white cursor-wait'
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white hover:scale-[1.02] active:scale-95'
+                        : (inkPreview !== null && !inkPreview.canAfford)
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white hover:scale-[1.02] active:scale-95'
                     }`}
                   >
                     {isLoading ? (

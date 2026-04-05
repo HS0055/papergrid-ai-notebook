@@ -148,6 +148,24 @@ export const generateLayout = async (
   }
 };
 
+export async function previewInkCost(action: string = 'layout'): Promise<{ cost: number; balance: number; canAfford: boolean }> {
+  const token = localStorage.getItem('papergrid_session');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/ink/preview`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action }),
+    });
+    if (!res.ok) return { cost: 1, balance: 0, canAfford: false };
+    return await res.json();
+  } catch {
+    return { cost: 1, balance: 0, canAfford: false };
+  }
+}
+
 export const generateCover = async (prompt: string, aesthetic?: string): Promise<{ imageUrl: string }> => {
   try {
     const response = await fetch(`${API_BASE}/api/generate-cover`, {
