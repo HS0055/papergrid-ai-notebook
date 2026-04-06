@@ -154,7 +154,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
   };
 
   return (
-    <div className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0">
+    <div data-block-type={block.type} className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0">
       {/* Block Controls (Hover) */}
       <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
         <div className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center text-gray-400 cursor-move hover:text-gray-600 active:bg-gray-100 rounded" {...dragHandleProps}>
@@ -202,15 +202,14 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
         )}
 
         {block.type === BlockType.TEXT && (
-          <div style={{ marginBottom: '0px' }}>
+          <div data-text-block="true" style={{ marginBottom: '0px' }}>
             <textarea
               ref={textRef}
-              className={`w-full bg-transparent font-hand text-xl text-gray-800 resize-none focus:outline-none overflow-hidden placeholder-gray-300 block p-0 m-0 border-none ${alignmentClass} ${emphasisClass}`}
+              data-baseline-locked="true"
+              className={`w-full bg-transparent font-hand text-gray-800 resize-none focus:outline-none overflow-hidden placeholder-gray-300 block p-0 m-0 border-none ${alignmentClass} ${emphasisClass}`}
               style={{
                 lineHeight: '32px',
                 minHeight: '32px',
-                position: 'relative',
-                top: '9px' // Fine-tune text to sit exactly on the baseline
               }}
               value={block.content}
               onChange={handleTextChange}

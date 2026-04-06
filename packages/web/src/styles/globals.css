@@ -51,14 +51,14 @@
 }
 
 /* Baseline-lock override for Patrick Hand on Lined paper.
-   Pins the baseline to land on the printed 32px line. Tuned empirically;
-   adjust ascent-override only if visual inspection shows drift. */
+   Self-hosted to avoid Google Fonts CDN URL drift (v19/v25/etc.).
+   ascent-override 97% pins the baseline near y=31 of each 32px line tile,
+   matching the .paper-lines printed grid. */
 @font-face {
   font-family: "Patrick Hand Baseline";
-  src: local("Patrick Hand"),
-       url("https://fonts.gstatic.com/s/patrickhand/v19/LDI1apSQOAYtSuYWp8ZhfYe8XsLL.woff2") format("woff2");
-  font-display: swap;
-  ascent-override: 87%;
+  src: url("/fonts/PatrickHand-Regular.ttf") format("truetype");
+  font-display: block;
+  ascent-override: 97%;
   descent-override: 13%;
   line-gap-override: 0%;
   size-adjust: 100%;
@@ -430,6 +430,24 @@
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
   font-size: 21px !important;
   line-height: 32px !important;
+}
+
+/* Lined paper baseline grid: zero out per-block vertical offsets so the
+   textarea's first line-box starts at the content-area top edge, where the
+   .paper-lines background pattern also starts. Without this every TEXT block
+   adds 4-6px of drift and accumulates across multiple blocks. */
+[data-page-font] [data-block-type="TEXT"] {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Force content-area top/bottom padding to a 32px multiple so the FIRST
+   line-box top sits at exactly y=0 of the .paper-lines background tile.
+   Mobile py-4 (16px) breaks this; this rule normalizes both. */
+[data-page-font] {
+  padding-top: 32px !important;
+  padding-bottom: 32px !important;
 }
 
 /* ========================================
