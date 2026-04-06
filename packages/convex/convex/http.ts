@@ -877,7 +877,8 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         );
       }
 
-      console.log(`Gemini response: ${generatedText.length} chars, finishReason: ${finishReason}`);
+      console.log(`Gemini response: ${generatedText.length} chars, finishReason: ${finishReason}, parts: ${allParts.length}, textParts: ${textParts.length}`);
+      console.log(`Gemini raw first 500 chars: ${generatedText.slice(0, 500)}`);
 
       // Parse and validate the response
       const layoutData = JSON.parse(generatedText);
