@@ -178,13 +178,14 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
 
       <div className={`w-full relative ${block.containerStyle && block.containerStyle !== 'none' ? getContainerClasses(block.containerStyle, colorClasses) : ''}`}>
         {block.type === BlockType.HEADING && (
-          <div className={`relative ${alignmentClass} ${block.icon ? 'flex items-center' : ''}`} style={{ minHeight: '32px', marginBottom: '32px' }}>
+          <div className={`relative ${alignmentClass} ${block.icon ? 'flex items-center' : ''}`} style={{ minHeight: '64px', marginBottom: '32px' }}>
             {block.icon && (
               <span className={`${block.emphasis === 'bold' ? 'text-sm' : 'text-2xl'} mr-2 select-none inline-block flex-shrink-0`} style={{ lineHeight: '32px', position: 'relative', top: block.emphasis === 'bold' ? '0px' : '7px' }}>
                 {block.icon}
               </span>
             )}
             <input
+              data-heading="true"
               className={`${block.icon ? 'flex-1' : 'w-full'} bg-transparent focus:outline-none border-none p-0 m-0 ${alignmentClass} ${
                 block.emphasis === 'bold'
                   ? `text-[11px] font-sans font-bold uppercase tracking-[0.2em] ${colorClasses.text}`
