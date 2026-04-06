@@ -864,8 +864,11 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         console.warn(`Gemini finishReason: ${finishReason}`);
       }
 
-      const generatedText =
-        geminiData?.candidates?.[0]?.content?.parts?.find((p: Record<string, unknown>) => typeof p.text === "string")?.text;
+      // With thinking mode, parts[0] may be thinking content, parts[last] is the actual response
+      // Get the LAST part that has a text field (the final JSON output)
+      const allParts = geminiData?.candidates?.[0]?.content?.parts || [];
+      const textParts = allParts.filter((p: Record<string, unknown>) => typeof p.text === "string" && !p.thought);
+      const generatedText = textParts.length > 0 ? textParts[textParts.length - 1].text : null;
       if (!generatedText) {
         console.error("Gemini returned no text. Full response:", JSON.stringify(geminiData).slice(0, 500));
         return new Response(
