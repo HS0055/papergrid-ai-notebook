@@ -78,6 +78,19 @@ const getEmphasisClass = (emphasis?: string, colorClasses?: ReturnType<typeof ge
   }
 };
 
+const getContainerClasses = (style?: string, colorClasses: ReturnType<typeof getColorClasses>): string => {
+  switch (style) {
+    case 'card':
+      return `bg-white/60 backdrop-blur-sm rounded-xl border ${colorClasses.border} shadow-sm p-4 mb-2`;
+    case 'banner':
+      return `${colorClasses.highlight} rounded-lg px-4 py-1 mb-1 shadow-sm border ${colorClasses.border}`;
+    case 'accent-left':
+      return `border-l-4 ${colorClasses.border} pl-4 mb-1`;
+    default:
+      return '';
+  }
+};
+
 export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete, focused, allPages, onNavigate, onInsertAfter, selectedPitch, selectedDuration, dragHandleProps, onPenScratch, onCheckboxClick }) => {
   const textRef = useRef<HTMLTextAreaElement>(null);
   const calloutRef = useRef<HTMLTextAreaElement>(null);
@@ -154,11 +167,16 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
         </button>
       </div>
 
-      <div className="w-full relative">
+      <div className={`w-full relative ${block.containerStyle && block.containerStyle !== 'none' ? getContainerClasses(block.containerStyle, colorClasses) : ''}`}>
         {block.type === BlockType.HEADING && (
-          <div className={`relative ${alignmentClass}`} style={{ minHeight: '32px', marginBottom: '32px' }}>
+          <div className={`relative ${alignmentClass} ${block.icon ? 'flex items-center' : ''}`} style={{ minHeight: '32px', marginBottom: '32px' }}>
+            {block.icon && (
+              <span className="text-2xl mr-2 select-none inline-block" style={{ lineHeight: '32px', position: 'relative', top: '7px' }}>
+                {block.icon}
+              </span>
+            )}
             <input
-              className={`w-full bg-transparent focus:outline-none border-none p-0 m-0 ${alignmentClass} ${
+              className={`${block.icon ? 'flex-1' : 'w-full'} bg-transparent focus:outline-none border-none p-0 m-0 ${alignmentClass} ${
                 block.emphasis === 'bold'
                   ? `text-[11px] font-sans font-bold uppercase tracking-[0.2em] ${colorClasses.text}`
                   : block.emphasis === 'highlight'
@@ -225,6 +243,11 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-12 h-5 ${colorClasses.highlight} opacity-90 rotate-[-2deg] shadow-sm border border-white/40 backdrop-blur-sm z-10`}></div>
             {/* Folded corner effect */}
             <div className={`absolute bottom-0 right-0 w-6 h-6 ${colorClasses.highlight} rounded-tl-lg shadow-[-2px_-2px_4px_rgba(0,0,0,0.05)]`}></div>
+            {block.icon && (
+              <span className="text-xl mr-2 select-none float-left" style={{ lineHeight: '32px' }}>
+                {block.icon}
+              </span>
+            )}
             <textarea
               ref={calloutRef}
               className={`w-full bg-transparent font-sans text-sm text-gray-800 resize-none focus:outline-none overflow-hidden placeholder-gray-400 block p-0 m-0 border-none ${alignmentClass} ${emphasisClass}`}
