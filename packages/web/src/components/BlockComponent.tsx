@@ -37,6 +37,8 @@ const getAccentColor = (color?: string): string => {
     case 'amber': return '#d97706';
     case 'sky': return '#0284c7';
     case 'slate': return '#475569';
+    case 'violet': return '#7c3aed';
+    case 'pink': return '#db2777';
     case 'gray':
     default: return '#6b7280';
   }
@@ -50,6 +52,8 @@ const getColorClasses = (color?: string) => {
     case 'amber': return { text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', highlight: 'bg-amber-100', focusBg: 'focus:bg-amber-50', hoverHighlight: 'hover:bg-amber-100' };
     case 'sky': return { text: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-200', highlight: 'bg-sky-100', focusBg: 'focus:bg-sky-50', hoverHighlight: 'hover:bg-sky-100' };
     case 'slate': return { text: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', highlight: 'bg-slate-100', focusBg: 'focus:bg-slate-50', hoverHighlight: 'hover:bg-slate-100' };
+    case 'violet': return { text: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200', highlight: 'bg-violet-100', focusBg: 'focus:bg-violet-50', hoverHighlight: 'hover:bg-violet-100' };
+    case 'pink': return { text: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200', highlight: 'bg-pink-100', focusBg: 'focus:bg-pink-50', hoverHighlight: 'hover:bg-pink-100' };
     case 'gray':
     default: return { text: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', highlight: 'bg-gray-100', focusBg: 'focus:bg-gray-50', hoverHighlight: 'hover:bg-gray-100' };
   }
@@ -136,7 +140,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
   };
 
   return (
-    <div className="group relative flex items-start -ml-16 mb-0 hover:bg-black/5 transition-colors rounded-lg pl-16 pr-2 py-0">
+    <div className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5">
       {/* Block Controls (Hover) */}
       <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
         <div className="p-1 text-gray-400 cursor-move hover:text-gray-600" {...dragHandleProps}>
@@ -154,8 +158,13 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
         {block.type === BlockType.HEADING && (
           <div className={`relative ${alignmentClass}`} style={{ minHeight: '32px', marginBottom: '32px' }}>
             <input
-              className={`w-full bg-transparent text-3xl font-bold font-hand text-gray-800 placeholder-gray-300 focus:outline-none border-none p-0 m-0 ${alignmentClass} ${block.emphasis === 'highlight' ? `${colorClasses.bg} px-4 rounded-lg shadow-sm` : colorClasses.text
-                }`}
+              className={`w-full bg-transparent focus:outline-none border-none p-0 m-0 ${alignmentClass} ${
+                block.emphasis === 'bold'
+                  ? `text-[11px] font-sans font-bold uppercase tracking-[0.2em] ${colorClasses.text}`
+                  : block.emphasis === 'highlight'
+                    ? `text-3xl font-bold font-hand ${colorClasses.bg} px-4 rounded-lg shadow-sm border ${colorClasses.border}`
+                    : `text-3xl font-bold font-hand text-gray-800 placeholder-gray-300`
+              }`}
               style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '7px' }}
               value={block.content}
               onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
@@ -186,13 +195,18 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
 
         {block.type === BlockType.CHECKBOX && (
           <div className={`flex items-center gap-3 ${block.alignment === 'center' ? 'justify-center' : block.alignment === 'right' ? 'justify-end' : ''}`} style={{ minHeight: '32px' }}>
-            <input
-              type="checkbox"
-              checked={block.checked}
-              onChange={(e) => { onChange(block.id, { checked: e.target.checked }); onCheckboxClick?.(); }}
-              className="w-5 h-5 cursor-pointer rounded border-gray-400"
-              style={{ position: 'relative', top: '9px', accentColor: getAccentColor(block.color) }}
-            />
+            <button
+              onClick={() => { onChange(block.id, { checked: !block.checked }); onCheckboxClick?.(); }}
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                block.checked
+                  ? `${colorClasses.highlight} ${colorClasses.border} ${colorClasses.text}`
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+              style={{ position: 'relative', top: '9px' }}
+              aria-label={block.checked ? 'Uncheck' : 'Check'}
+            >
+              {block.checked && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+            </button>
             <input
               className={`flex-1 bg-transparent font-hand text-xl text-gray-800 focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${emphasisClass}`}
               style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '9px' }}
@@ -205,7 +219,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
         )}
 
         {block.type === BlockType.CALLOUT && (
-          <div className={`w-full rounded-br-2xl rounded-tl-md rounded-tr-md rounded-bl-md border ${colorClasses.bg} ${colorClasses.border} shadow-[4px_4px_10px_rgba(0,0,0,0.05)] relative group/callout`}
+          <div className={`w-full rounded-xl border ${colorClasses.bg} ${colorClasses.border} shadow-[2px_3px_12px_rgba(0,0,0,0.06)] relative group/callout`}
             style={{ padding: '15px', marginBottom: '32px', boxSizing: 'border-box' }}>
             {/* Washi Tape */}
             <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-12 h-5 ${colorClasses.highlight} opacity-90 rotate-[-2deg] shadow-sm border border-white/40 backdrop-blur-sm z-10`}></div>
@@ -245,7 +259,11 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             ) : block.emphasis === 'italic' ? (
               <div className={`w-full border-t-2 border-dashed ${colorClasses.border}`}></div>
             ) : block.emphasis === 'highlight' ? (
-              <div className={`w-full border-t-4 border-double ${colorClasses.border}`}></div>
+              <div className="w-full flex items-center gap-3">
+                <div className={`flex-1 border-t ${colorClasses.border}`}></div>
+                <div className={`w-1.5 h-1.5 rounded-full ${colorClasses.highlight}`}></div>
+                <div className={`flex-1 border-t ${colorClasses.border}`}></div>
+              </div>
             ) : (
               <div className={`w-full border-t-2 ${colorClasses.border}`}></div>
             )}
@@ -313,7 +331,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
 
         {block.type === BlockType.GRID && block.gridData && (
           <div className="w-full relative" style={{ marginBottom: '32px' }}>
-            <div className={`bg-white/40 backdrop-blur-[2px] ring-2 ring-inset ${colorClasses.border.replace('border-', 'ring-')} rounded-sm shadow-sm overflow-hidden`} style={{ boxSizing: 'border-box' }}>
+            <div className={`bg-white/40 backdrop-blur-[2px] ring-2 ring-inset ${colorClasses.border.replace('border-', 'ring-')} rounded-xl shadow-sm overflow-hidden`} style={{ boxSizing: 'border-box' }}>
               {/* Grid Header */}
               {block.content && (
                 <input
@@ -338,7 +356,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
                   </thead>
                   <tbody>
                     {block.gridData.rows.map((row, rIdx) => (
-                      <tr key={rIdx} className={`border-b ${colorClasses.border} last:border-b-0`}>
+                      <tr key={rIdx} className={`border-b ${colorClasses.border} last:border-b-0 ${rIdx % 2 === 1 ? colorClasses.bg : ''}`}>
                         {row.map((cell, cIdx) => (
                           <td key={cell.id} className={`border-r ${colorClasses.border} last:border-r-0 p-0 relative align-top`} style={{ minHeight: '32px', boxSizing: 'border-box' }}>
                             <textarea
