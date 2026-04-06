@@ -104,7 +104,7 @@ export const TimeBlockBlock: React.FC<TimeBlockBlockProps> = ({ block, onChange,
         )}
 
         {/* Time entries */}
-        <div className="flex flex-col">
+        <div className="flex flex-col overflow-hidden">
           {entries.map((entry, i) => {
             const isCurrentHour = entry.time === currentHourLabel;
             return (
@@ -153,6 +153,34 @@ export const TimeBlockBlock: React.FC<TimeBlockBlockProps> = ({ block, onChange,
             );
           })}
         </div>
+
+        {/* Add entry button */}
+        <button
+          onClick={() => {
+            const lastEntry = entries[entries.length - 1];
+            // Parse last time to get next hour
+            let nextTime = 'New';
+            if (lastEntry?.time) {
+              const match = lastEntry.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if (match) {
+                let hour = parseInt(match[1]);
+                const period = match[3].toUpperCase();
+                if (period === 'PM' && hour !== 12) hour += 12;
+                if (period === 'AM' && hour === 12) hour = 0;
+                const nextHour = hour + 1;
+                nextTime = formatHour(nextHour > 23 ? 23 : nextHour);
+              }
+            }
+            const newEntries = [...entries, { time: nextTime, content: '', color: undefined }];
+            onChange(block.id, {
+              timeBlockData: { ...data, entries: newEntries },
+            });
+          }}
+          className={`w-full ${colorClasses.bg} ${colorClasses.hoverHighlight} ${colorClasses.text} text-xs font-sans border-t ${colorClasses.border} flex items-center justify-center gap-1 transition-colors`}
+          style={{ height: '32px' }}
+        >
+          + Add Entry
+        </button>
       </div>
     </div>
   );

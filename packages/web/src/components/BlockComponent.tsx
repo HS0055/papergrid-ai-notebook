@@ -81,7 +81,7 @@ const getEmphasisClass = (emphasis?: string, colorClasses?: ReturnType<typeof ge
 const getContainerClasses = (style: string | undefined, colorClasses: ReturnType<typeof getColorClasses>): string => {
   switch (style) {
     case 'card':
-      return `bg-white/60 backdrop-blur-sm rounded-xl border ${colorClasses.border} shadow-sm p-4 mb-2`;
+      return `bg-white/60 backdrop-blur-sm rounded-xl border ${colorClasses.border} shadow-sm p-4 mb-2 overflow-hidden`;
     case 'banner':
       return `${colorClasses.highlight} rounded-lg px-4 py-2 mb-2 shadow-sm border ${colorClasses.border}`;
     case 'accent-left':
@@ -153,7 +153,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
   };
 
   return (
-    <div className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5">
+    <div className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0 overflow-hidden">
       {/* Block Controls (Hover) */}
       <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
         <div className="p-1 text-gray-400 cursor-move hover:text-gray-600" {...dragHandleProps}>
