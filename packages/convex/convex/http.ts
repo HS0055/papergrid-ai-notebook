@@ -1037,7 +1037,15 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
             b.type === "PRIORITY_MATRIX"
               ? parseMatrixData(b.matrixData) || { q1: "", q2: "", q3: "", q4: "" }
               : undefined,
-          gridData: parseGridData(b.gridData),
+          gridData: parseGridData(b.gridData) || (
+            // Fallback: handle gridColumns/gridRowCount format from reference layouts
+            Array.isArray(b.gridColumns) ? {
+              columns: b.gridColumns as string[],
+              rows: Array.from({ length: typeof b.gridRowCount === "number" ? b.gridRowCount : 3 }, () =>
+                (b.gridColumns as string[]).map(() => ({ id: generateId(), content: "" }))
+              ),
+            } : undefined
+          ),
           calendarData:
             b.type === "CALENDAR"
               ? parseCalendarData(b.calendarData) || { month: new Date().getMonth() + 1, year: new Date().getFullYear(), highlights: [] }
