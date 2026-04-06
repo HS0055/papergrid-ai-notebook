@@ -30,7 +30,7 @@ const testimonials = [
     color: '#e11d48',
   },
   {
-    quote: 'I described our sprint planning session and got a fully formatted notebook page in about 3 seconds. Gemini is seriously impressive inside this app.',
+    quote: 'I described our sprint planning session and got a fully formatted notebook page in about 3 seconds. The AI layouts are seriously impressive.',
     name: 'Noah Park',
     role: 'Engineering Lead, Vercel',
     emoji: '👨‍💻',

@@ -17,10 +17,36 @@
   --color-amber-gold: #d97706;
   --color-indigo-brand: #4f46e5;
 
+  /* iOS semantic surfaces */
+  --color-surface-primary: #FFFFFF;
+  --color-surface-secondary: #F2F2F7;
+  --color-surface-tertiary: #FFFFFF;
+  --color-surface-elevated: #FFFFFF;
+
+  /* iOS semantic text */
+  --color-text-primary: #000000;
+  --color-text-secondary: rgba(60, 60, 67, 0.6);
+  --color-text-tertiary: rgba(60, 60, 67, 0.3);
+
+  /* iOS system colors */
+  --color-system-red: #FF3B30;
+  --color-system-green: #34C759;
+  --color-system-blue: #007AFF;
+  --color-system-yellow: #FFCC00;
+  --color-system-orange: #FF9500;
+
+  /* iOS separator */
+  --color-separator: rgba(60, 60, 67, 0.29);
+
+  /* iOS spring curves */
+  --ease-ios-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-ios-decelerate: cubic-bezier(0, 0, 0.58, 1);
+
   --font-hand: "Patrick Hand", cursive;
   --font-sans: "Inter", sans-serif;
   --font-serif: "Playfair Display", serif;
   --font-marker: "Caveat", cursive;
+  --font-system: -apple-system, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
   --font-hand-baseline: "Patrick Hand Baseline", "Patrick Hand", cursive;
 }
 
@@ -47,14 +73,71 @@
     width: 100%;
     min-height: 100%;
     background-color: #FAFAF9;
-    touch-action: manipulation;
+    /* pan-x pan-y allows scrolling in both directions but DISABLES pinch-zoom and double-tap zoom.
+       This is the right value for a native-feel app where accidental zoom is unwanted.
+       (touch-action: manipulation only prevents double-tap zoom, not pinch.) */
+    touch-action: pan-x pan-y;
     -webkit-tap-highlight-color: transparent;
+    /* Prevent the whole page from rubber-banding on iOS — only inner scrollers bounce */
+    overscroll-behavior-y: none;
+    /* Disable iOS Safari text size auto-adjust on rotation */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  html {
+    height: 100%;
+  }
+  body {
+    height: 100%;
+    /* Use dvh where supported for accurate iOS height (URL bar collapse) */
+    min-height: 100dvh;
   }
 
   #root {
     width: 100%;
     min-height: 100%;
+    height: 100%;
   }
+
+  /* iOS native scroll momentum on every overflow:auto/scroll element */
+  .overflow-y-auto, .overflow-auto, .overflow-y-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent iOS auto-zoom on input focus — needs >=16px font size.
+     Belt-and-braces with viewport `maximum-scale=1, user-scalable=no`.
+     EXCLUDE inputs on lined paper — they use grid-tuned font sizes
+     (text-xl, text-3xl) that align to the 32px line baseline. Forcing 16px
+     there breaks the carefully tuned `top: Npx` offsets in BlockComponent.tsx. */
+  @media (pointer: coarse) {
+    input, textarea, [contenteditable] {
+      font-size: 16px;
+    }
+    .paper-lines input, .paper-lines textarea, .paper-lines [contenteditable],
+    .paper-lines-legal input, .paper-lines-legal textarea, .paper-lines-legal [contenteditable],
+    .paper-lines-shaded input, .paper-lines-shaded textarea, .paper-lines-shaded [contenteditable],
+    .paper-lines-legal-shaded input, .paper-lines-legal-shaded textarea, .paper-lines-legal-shaded [contenteditable],
+    .paper-rows input, .paper-rows textarea, .paper-rows [contenteditable] {
+      font-size: revert;
+    }
+  }
+}
+
+/* iOS minimum touch target — 44pt per Apple HIG */
+@utility tap-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Dynamic viewport unit classes (iOS Safari URL bar safe) */
+@utility h-dvh {
+  height: 100dvh;
+}
+@utility min-h-dvh {
+  min-height: 100dvh;
+}
+@utility h-svh {
+  height: 100svh;
 }
 
 @utility mobile-safe-area {
@@ -73,6 +156,98 @@
 }
 
 /* ========================================
+   IOS DARK MODE
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface-primary: #000000;
+    --color-surface-secondary: #1C1C1E;
+    --color-surface-tertiary: #2C2C2E;
+    --color-surface-elevated: #1C1C1E;
+    --color-text-primary: #FFFFFF;
+    --color-text-secondary: rgba(235, 235, 245, 0.6);
+    --color-text-tertiary: rgba(235, 235, 245, 0.3);
+    --color-separator: rgba(84, 84, 88, 0.6);
+    --color-paper: #2C2A25;
+    --color-paper-dark: #1E1D19;
+    --color-line: #4A4A4F;
+    --color-line-strong: #636366;
+  }
+}
+
+/* ========================================
+   IOS NATIVE UTILITIES
+   ======================================== */
+
+@utility ios-spring {
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@utility ios-press {
+  transition: transform 100ms ease, opacity 100ms ease;
+  &:active {
+    transform: scale(0.97);
+    opacity: 0.8;
+  }
+}
+
+@utility ios-press-icon {
+  transition: transform 100ms ease;
+  &:active {
+    transform: scale(0.9);
+  }
+}
+
+@utility no-overscroll {
+  overscroll-behavior: none;
+}
+
+/* Skeleton shimmer */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@utility skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-secondary) 25%,
+    var(--color-surface-tertiary) 37%,
+    var(--color-surface-secondary) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+
+/* iOS toast (bottom, above tab bar) */
+@keyframes ios-toast-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ios-toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(20px); }
+}
+.ios-toast-enter { animation: ios-toast-in 0.3s cubic-bezier(0.32, 0.72, 0, 1) both; }
+.ios-toast-exit { animation: ios-toast-out 0.25s cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+/* iOS context menu */
+@keyframes ios-context-menu-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+.anim-context-menu { animation: ios-context-menu-in 0.2s cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+/* iOS bottom sheet */
+@keyframes ios-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.anim-sheet-in { animation: ios-sheet-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+/* ========================================
    CUSTOM SCROLLBAR
    ======================================== */
 
@@ -89,6 +264,29 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-line-strong);
+}
+
+/* Thin scrollbar for horizontal block scrollers (mobile multi-column blocks) */
+.scrollbar-thin::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
+
+/* Gentle pulse for the AI generation FAB */
+@keyframes ai-fab-pulse {
+  0%, 100% {
+    box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.5), 0 0 0 0 rgba(139, 92, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.6), 0 0 0 12px rgba(139, 92, 246, 0);
+  }
+}
+.anim-ai-fab-pulse {
+  animation: ai-fab-pulse 2.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* ========================================
@@ -148,7 +346,28 @@
   background-attachment: local;
 }
 
-.paper-rows {
+.paper-isometric {
+  background-color: var(--color-paper);
+  background-image: url("data:image/svg+xml,%3Csvg width='32' height='55.42' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M32 9.237L0 27.71m0-18.473l32 18.473M16 0v55.42' stroke='%23cbd5e1' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-size: 32px 55.42px;
+  background-attachment: local;
+}
+
+.paper-hex {
+  background-color: var(--color-paper);
+  background-image: url("data:image/svg+xml,%3Csvg width='56' height='98' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 16L0 32v32l28 16 28-16V32zm0 82v-32m-28-16l28 16 28-16' stroke='%23cbd5e1' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+  background-size: 56px 98px;
+  background-attachment: local;
+}
+
+.paper-lines-legal {
+  background-color: #fbf0d9;
+  background-image: linear-gradient(transparent 31px, var(--color-line) 31px);
+  background-size: 100% 32px;
+  background-attachment: local;
+}
+
+.paper-lines-shaded {
   background-color: var(--color-paper);
   background-image: repeating-linear-gradient(
     to bottom,
@@ -164,33 +383,53 @@
   background-attachment: local;
 }
 
-.paper-isometric {
-  background-color: var(--color-paper);
-  background-image: url("data:image/svg+xml,%3Csvg width='32' height='55.42' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M32 9.237L0 27.71m0-18.473l32 18.473M16 0v55.42' stroke='%23cbd5e1' stroke-width='1' fill='none'/%3E%3C/svg%3E");
-  background-size: 32px 55.42px;
-  background-attachment: local;
-}
-
-.paper-hex {
-  background-color: var(--color-paper);
-  background-image: url("data:image/svg+xml,%3Csvg width='56' height='98' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 16L0 32v32l28 16 28-16V32zm0 82v-32m-28-16l28 16 28-16' stroke='%23cbd5e1' stroke-width='1' fill='none'/%3E%3C/svg%3E");
-  background-size: 56px 98px;
-  background-attachment: local;
-}
-
-.paper-legal {
+.paper-lines-legal-shaded {
   background-color: #fbf0d9;
-  background-image:
-    linear-gradient(90deg, transparent 59px, #f87171 59px, #f87171 61px, transparent 61px),
-    linear-gradient(transparent 31px, var(--color-line) 31px);
-  background-size: 100% 100%, 100% 32px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 31px,
+    var(--color-line) 31px,
+    var(--color-line) 32px,
+    #f3e8c8 32px,
+    #f3e8c8 63px,
+    var(--color-line) 63px,
+    var(--color-line) 64px
+  );
   background-attachment: local;
 }
 
-.paper-crumpled {
-  background-color: var(--color-paper);
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.04' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
-  background-attachment: local;
+/* ========================================
+   PAGE FONT OVERRIDE (Lined paper setting)
+   Pins font-size + line-height to the baseline grid (32px) so all 4 fonts
+   keep text on the printed lines. Hand uses the baseline-locked variant.
+   ======================================== */
+[data-page-font="hand"] textarea,
+[data-page-font="hand"] input[type="text"]:not([data-heading]) {
+  font-family: var(--font-hand-baseline) !important;
+  font-size: 21px !important;
+  line-height: 32px !important;
+}
+
+[data-page-font="sans"] textarea,
+[data-page-font="sans"] input[type="text"]:not([data-heading]) {
+  font-family: var(--font-sans) !important;
+  font-size: 21px !important;
+  line-height: 32px !important;
+}
+
+[data-page-font="serif"] textarea,
+[data-page-font="serif"] input[type="text"]:not([data-heading]) {
+  font-family: var(--font-serif) !important;
+  font-size: 21px !important;
+  line-height: 32px !important;
+}
+
+[data-page-font="mono"] textarea,
+[data-page-font="mono"] input[type="text"]:not([data-heading]) {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
+  font-size: 21px !important;
+  line-height: 32px !important;
 }
 
 /* ========================================
@@ -580,6 +819,22 @@
 .hero-desc,
 .hero-btns {
   animation: heroSafetyFadeIn 0.5s ease-out 1.5s both;
+}
+
+/* ========================================
+   MATH ENGINE GHOST RESULT
+   ======================================== */
+
+.math-ghost {
+  display: inline-block;
+  color: rgba(99, 102, 241, 0.35);
+  font-family: var(--font-hand);
+  font-style: italic;
+  font-size: 1.125rem;
+  line-height: 32px;
+  user-select: none;
+  pointer-events: none;
+  margin-left: 4px;
 }
 
 /* ========================================

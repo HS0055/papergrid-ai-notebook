@@ -151,6 +151,47 @@ export interface KanbanData {
   columns: KanbanColumn[];
 }
 
+export interface HexNode {
+  id: string;
+  label: string;
+  color: string;       // theme color name
+  gridX: number;       // hex grid column
+  gridY: number;       // hex grid row
+}
+
+export interface HexEdge {
+  id: string;
+  from: string;        // node id
+  to: string;          // node id
+  label?: string;
+}
+
+export interface HexMapData {
+  nodes: HexNode[];
+  edges: HexEdge[];
+}
+
+export type IsoStepType = 'process' | 'decision' | 'start' | 'end';
+
+export interface IsoStep {
+  id: string;
+  label: string;
+  type: IsoStepType;
+  color: string;       // theme color name
+}
+
+export interface IsoConnection {
+  id: string;
+  from: string;        // step id
+  to: string;          // step id
+  label?: string;
+}
+
+export interface IsoFlowData {
+  steps: IsoStep[];
+  connections: IsoConnection[];
+}
+
 export interface Block {
   id: string;
   type: BlockType;
@@ -190,15 +231,27 @@ export interface Block {
   groupId?: string;      // blocks with same groupId share a visual container
 }
 
+export interface LinedPaperSettings {
+  showMargin: boolean;
+  marginSide: 'left' | 'right';
+  rowShading: boolean;
+  legalPadMode: boolean;
+  fontFamily: 'hand' | 'sans' | 'serif' | 'mono';
+}
+
 export interface NotebookPage {
   id: string;
   title: string;
   createdAt: string;
-  paperType: 'lined' | 'grid' | 'dotted' | 'blank' | 'music' | 'rows' | 'isometric' | 'hex' | 'legal' | 'crumpled';
+  paperType: 'lined' | 'grid' | 'dotted' | 'blank' | 'music' | 'isometric' | 'hex';
   blocks: Block[];
   aesthetic?: string;
   themeColor?: string;
   aiGenerated?: boolean;
+  linedSettings?: LinedPaperSettings;
+  showMathResults?: boolean;
+  hexMapData?: HexMapData;
+  isoFlowData?: IsoFlowData;
 }
 
 export interface Notebook {

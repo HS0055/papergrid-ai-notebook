@@ -11,8 +11,16 @@ export const BlockTypeSchema = z.enum([
 // Paper types - mirrors NotebookPage.paperType union
 export const PaperTypeSchema = z.enum([
   'lined', 'grid', 'dotted', 'blank', 'music',
-  'rows', 'isometric', 'hex', 'legal', 'crumpled',
+  'isometric', 'hex',
 ]);
+
+export const LinedPaperSettingsSchema = z.object({
+  showMargin: z.boolean().default(false),
+  marginSide: z.enum(['left', 'right']).default('left'),
+  rowShading: z.boolean().default(false),
+  legalPadMode: z.boolean().default(false),
+  fontFamily: z.enum(['hand', 'sans', 'serif', 'mono']).default('hand'),
+});
 
 // Theme colors used across the application
 export const ThemeColorSchema = z.enum([
@@ -185,6 +193,47 @@ export const KanbanDataSchema = z.object({
   columns: z.array(KanbanColumnSchema),
 });
 
+// HexMapData
+export const HexNodeSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  color: z.string(),
+  gridX: z.number(),
+  gridY: z.number(),
+});
+
+export const HexEdgeSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  to: z.string(),
+  label: z.string().optional(),
+});
+
+export const HexMapDataSchema = z.object({
+  nodes: z.array(HexNodeSchema),
+  edges: z.array(HexEdgeSchema),
+});
+
+// IsoFlowData
+export const IsoStepSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  type: z.enum(['process', 'decision', 'start', 'end']),
+  color: z.string(),
+});
+
+export const IsoConnectionSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  to: z.string(),
+  label: z.string().optional(),
+});
+
+export const IsoFlowDataSchema = z.object({
+  steps: z.array(IsoStepSchema),
+  connections: z.array(IsoConnectionSchema),
+});
+
 // Block - mirrors Block interface
 export const BlockSchema = z.object({
   id: z.string(),
@@ -224,6 +273,10 @@ export const NotebookPageSchema = z.object({
   blocks: z.array(BlockSchema),
   aesthetic: z.string().optional(),
   themeColor: z.string().optional(),
+  linedSettings: LinedPaperSettingsSchema.optional(),
+  showMathResults: z.boolean().optional(),
+  hexMapData: HexMapDataSchema.optional(),
+  isoFlowData: IsoFlowDataSchema.optional(),
 });
 
 // Notebook - mirrors Notebook interface
@@ -342,3 +395,9 @@ export type SectionNavDataZ = z.infer<typeof SectionNavDataSchema>;
 export type KanbanCardZ = z.infer<typeof KanbanCardSchema>;
 export type KanbanColumnZ = z.infer<typeof KanbanColumnSchema>;
 export type KanbanDataZ = z.infer<typeof KanbanDataSchema>;
+export type HexNodeZ = z.infer<typeof HexNodeSchema>;
+export type HexEdgeZ = z.infer<typeof HexEdgeSchema>;
+export type HexMapDataZ = z.infer<typeof HexMapDataSchema>;
+export type IsoStepZ = z.infer<typeof IsoStepSchema>;
+export type IsoConnectionZ = z.infer<typeof IsoConnectionSchema>;
+export type IsoFlowDataZ = z.infer<typeof IsoFlowDataSchema>;

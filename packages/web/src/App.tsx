@@ -7,6 +7,7 @@ import { AuthPage } from './components/AuthPage';
 import { PricingPage } from './components/PricingPage';
 import { AdminPanel } from './components/AdminPanel';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { isNativeApp } from './utils/platform';
 import { BaselineTest } from './components/__debug__/BaselineTest';
 
 // Protected route wrapper
@@ -51,12 +52,15 @@ export default function App() {
     return <BaselineTest />;
   }
 
+  const native = isNativeApp();
+
   return (
     <ErrorBoundary>
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
+            {/* On native iOS, skip the marketing landing page — go straight to login */}
+            <Route path="/" element={native ? <Navigate to="/login" replace /> : <LandingPage />} />
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/app" element={
@@ -64,12 +68,15 @@ export default function App() {
                 <Dashboard />
               </ProtectedRoute>
             } />
-            <Route path="/admin" element={
-              <ProtectedRoute>
-                <AdminPanel />
-              </ProtectedRoute>
-            } />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Admin panel is hidden on native builds to avoid App Store rejection */}
+            {!native && (
+              <Route path="/admin" element={
+                <ProtectedRoute>
+                  <AdminPanel />
+                </ProtectedRoute>
+              } />
+            )}
+            <Route path="*" element={<Navigate to={native ? "/login" : "/"} replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

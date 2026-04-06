@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Block, WeeklyViewData, WeeklyViewDay, WeeklyViewTask } from '@papergrid/core';
 import { Check, Plus } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 interface WeeklyViewBlockProps {
   block: Block;
@@ -37,6 +38,7 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
 
   const [addingTaskDay, setAddingTaskDay] = useState<number | null>(null);
   const [newTaskText, setNewTaskText] = useState('');
+  const isMobile = useIsMobile();
 
   const updateDays = (newDays: WeeklyViewDay[]) => {
     onChange(block.id, {
@@ -195,18 +197,24 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
 
   return (
     <div className="w-full" style={{ marginBottom: '32px' }}>
-      <div className="flex flex-col gap-2">
-        {/* Top row: first 4 days */}
-        <div className="grid grid-cols-4 gap-2">
-          {topRow.map((day, i) => renderDayCard(day, i))}
+      {isMobile ? (
+        /* Mobile: 1 day per row, vertical scroll — readable, no truncation */
+        <div className="flex flex-col gap-2">
+          {days.map((day, i) => renderDayCard(day, i))}
         </div>
-        {/* Bottom row: remaining days */}
-        {bottomRow.length > 0 && (
-          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${bottomRow.length}, minmax(0, 1fr))` }}>
-            {bottomRow.map((day, i) => renderDayCard(day, i + topRow.length))}
+      ) : (
+        /* Desktop: Mon-Thu top row, Fri-Sun bottom row */
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-4 gap-2">
+            {topRow.map((day, i) => renderDayCard(day, i))}
           </div>
-        )}
-      </div>
+          {bottomRow.length > 0 && (
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${bottomRow.length}, minmax(0, 1fr))` }}>
+              {bottomRow.map((day, i) => renderDayCard(day, i + topRow.length))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

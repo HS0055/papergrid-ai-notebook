@@ -758,3 +758,16 @@ export function legacyPageToLayout(page: NotebookPage): PageLayout {
     aiGenerated: page.aiGenerated,
   };
 }
+
+// ---------------------------------------------------------------------------
+// migratePaperType — converts legacy paper types to the 7-type system
+// ---------------------------------------------------------------------------
+
+export function migratePaperType(paperType: string): 'lined' | 'grid' | 'dotted' | 'blank' | 'music' | 'isometric' | 'hex' {
+  switch (paperType) {
+    case 'crumpled': return 'blank';
+    case 'rows': return 'lined';
+    case 'legal': return 'lined';
+    default: return paperType as any;
+  }
+}

@@ -14,7 +14,7 @@ const steps = [
     num: '02',
     icon: <Sparkles size={28} />,
     title: 'Generate',
-    desc: 'Gemini 2.5 Flash designs a full two-page spread — paper style, headings, grids, callouts, and mood trackers.',
+    desc: 'AI designs a full two-page spread — paper style, headings, grids, callouts, and mood trackers.',
     color: '#d97706',
     lightBg: '#fffbeb',
   },

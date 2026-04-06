@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback, Component, ErrorInfo, ReactNode } from 'react';
-import { NotebookPage, Block, BlockType } from '@papergrid/core';
+import { NotebookPage, Block, BlockType, LinedPaperSettings, HexMapData, IsoFlowData } from '@papergrid/core';
 import { BlockComponent } from './BlockComponent';
+import { useMathEngine } from '../hooks/useMathEngine';
 import { PianoKeyboard } from './PianoKeyboard';
-import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music, Calendar, CalendarDays, CheckSquare, Target, Clock, Sun, AlertTriangle } from 'lucide-react';
+import { HexPaperCanvas } from './planner/HexPaperCanvas';
+import { IsoPaperCanvas } from './planner/IsoPaperCanvas';
+import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music, Calendar, CalendarDays, CheckSquare, Target, Clock, Sun, AlertTriangle, Bookmark } from 'lucide-react';
+import { isNativeApp } from '../utils/platform';
+import { triggerHaptic } from '../utils/haptics';
+import { ImpactStyle } from '@capacitor/haptics';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -51,19 +57,23 @@ interface NotebookViewProps {
   onNavigate?: (pageId: string) => void;
   onBlockDeleted?: (block: Block, index: number) => void;
   sounds?: SoundCallbacks;
+  /** Native-only: toggle bookmark for this page */
+  isBookmarked?: boolean;
+  onToggleBookmark?: () => void;
+  /** Native-only: open AI layout generator */
+  onOpenAIGenerator?: () => void;
+  /** Native-only: append a new page to the notebook */
+  onAddPage?: () => void;
 }
 
 const PAPER_TYPES = [
-  { value: 'lined', label: 'Lined' },
-  { value: 'legal', label: 'Legal' },
-  { value: 'rows', label: 'Rows' },
+  { value: 'lined', label: 'Writing' },
   { value: 'grid', label: 'Grid' },
   { value: 'dotted', label: 'Dotted' },
   { value: 'music', label: 'Music' },
   { value: 'isometric', label: 'Iso' },
   { value: 'hex', label: 'Hex' },
   { value: 'blank', label: 'Blank' },
-  { value: 'crumpled', label: 'Crumpled' },
 ] as const;
 
 const PAPER_BG_MAP: Record<string, string> = {
@@ -72,11 +82,8 @@ const PAPER_BG_MAP: Record<string, string> = {
   dotted: 'paper-dots',
   blank: 'bg-paper',
   music: 'paper-music',
-  rows: 'paper-rows',
   isometric: 'paper-isometric',
   hex: 'paper-hex',
-  legal: 'paper-legal',
-  crumpled: 'paper-crumpled',
 };
 
 const ALL_BLOCK_TYPES: BlockType[] = [
@@ -91,10 +98,7 @@ const ALL_BLOCK_TYPES: BlockType[] = [
 
 const PAPER_BLOCK_MAP: Record<string, BlockType[]> = {
   lined: ALL_BLOCK_TYPES,
-  rows: ALL_BLOCK_TYPES,
-  legal: ALL_BLOCK_TYPES,
   blank: ALL_BLOCK_TYPES,
-  crumpled: ALL_BLOCK_TYPES,
   music: [BlockType.MUSIC_STAFF, BlockType.TEXT, BlockType.HEADING, BlockType.DIVIDER],
   grid: [BlockType.TEXT, BlockType.HEADING, BlockType.GRID, BlockType.CHECKBOX, BlockType.DIVIDER],
   dotted: [BlockType.TEXT, BlockType.HEADING, BlockType.CHECKBOX, BlockType.CALLOUT, BlockType.MOOD_TRACKER, BlockType.DIVIDER],
@@ -169,7 +173,11 @@ function groupConsecutiveBlocks(blocks: Block[]): BlockGroup[] {
   return groups;
 }
 
-export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, allPages, onNavigate, onBlockDeleted, sounds }) => {
+export const NotebookView: React.FC<NotebookViewProps> = ({
+  page, onUpdatePage, allPages, onNavigate, onBlockDeleted, sounds,
+  isBookmarked, onToggleBookmark, onOpenAIGenerator,
+}) => {
+  const native = isNativeApp();
   const [openMenu, setOpenMenu] = useState<'left' | 'right' | null>(null);
   const [showPaperPicker, setShowPaperPicker] = useState(false);
   const [mobileSide, setMobileSide] = useState<'left' | 'right'>('left');
@@ -178,6 +186,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   const [selectedPitch, setSelectedPitch] = useState<{ pitch: string; octave: number } | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<'whole' | 'half' | 'quarter' | 'eighth'>('quarter');
   const paperPickerRef = useRef<HTMLDivElement>(null);
+
+  // Math Engine
+  const showMath = page.showMathResults !== false;
+  const mathResults = useMathEngine(page.blocks, showMath);
 
   // Close paper picker on outside click
   useEffect(() => {
@@ -272,7 +284,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   const handleEmptySpaceClick = (e: React.MouseEvent, side: 'left' | 'right') => {
     const target = e.target as HTMLElement;
     if (target.closest('[data-block-id]')) return;
+    // On hex/iso paper the canvas owns empty-space clicks — don't auto-add a text block.
+    if (page.paperType === 'hex' || page.paperType === 'isometric') return;
     addBlock(BlockType.TEXT, side);
+  };
+
+  const handleHexMapChange = (next: HexMapData) => {
+    onUpdatePage({ ...page, hexMapData: next });
+  };
+
+  const handleIsoFlowChange = (next: IsoFlowData) => {
+    onUpdatePage({ ...page, isoFlowData: next });
   };
 
   const handleDragEnd = (event: DragEndEvent, side: 'left' | 'right') => {
@@ -295,7 +317,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
     sounds?.dragRustle();
   };
 
-  const bgClass = PAPER_BG_MAP[page.paperType || 'lined'];
+  const getLinedBgClass = (settings?: LinedPaperSettings): string => {
+    if (!settings) return 'paper-lines';
+    if (settings.legalPadMode && settings.rowShading) return 'paper-lines-legal-shaded';
+    if (settings.legalPadMode) return 'paper-lines-legal';
+    if (settings.rowShading) return 'paper-lines-shaded';
+    return 'paper-lines';
+  };
+
+  const bgClass = page.paperType === 'lined'
+    ? getLinedBgClass(page.linedSettings)
+    : (PAPER_BG_MAP[page.paperType || 'lined'] || 'paper-lines');
 
   const getThemeColorClass = (color?: string) => {
     switch (color) {
@@ -360,22 +392,68 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
 
   // ── FAB Button ────────────────────────────────────────────
   const renderFAB = (side: 'left' | 'right') => (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+    <div
+      className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+      style={{ bottom: '12px' }}
+    >
       {renderBlockMenu(side)}
       <button
         onClick={() => setOpenMenu(openMenu === side ? null : side)}
-        className={`pointer-events-auto w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 ${
+        className={`pointer-events-auto w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 ${
           openMenu === side
-            ? 'bg-gray-800 text-white rotate-45 scale-110'
+            ? 'bg-gray-800 text-white rotate-45'
             : 'bg-indigo-600 text-white hover:bg-indigo-500 hover:scale-105 hover:shadow-xl'
         }`}
         aria-label={openMenu === side ? 'Close block menu' : `Add block to ${side} page`}
         aria-expanded={openMenu === side}
       >
-        <Plus size={20} />
+        <Plus size={22} />
       </button>
     </div>
   );
+
+  // ── Native AI FAB ─────────────────────────────────────────
+  // Floating sparkle button for AI layout generation. Native-only, pulses to draw attention.
+  const renderAIFab = () => {
+    if (!native || !onOpenAIGenerator) return null;
+    return (
+      <div
+        className="absolute right-4 z-40 pointer-events-none"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 76px)' }}
+      >
+        <button
+          onClick={() => {
+            triggerHaptic.impact(ImpactStyle.Medium);
+            onOpenAIGenerator();
+          }}
+          className="pointer-events-auto w-14 h-14 rounded-full flex items-center justify-center bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 text-white shadow-2xl shadow-indigo-900/40 active:scale-95 transition-transform anim-ai-fab-pulse"
+          aria-label="Generate AI layout"
+        >
+          <Sparkles size={24} strokeWidth={2.25} fill="currentColor" />
+        </button>
+      </div>
+    );
+  };
+
+  // ── Lined settings helpers ────────────────────────────────
+  const updateLinedSettings = (partial: Partial<LinedPaperSettings>) => {
+    const current: LinedPaperSettings = page.linedSettings ?? {
+      showMargin: false,
+      marginSide: 'left',
+      rowShading: false,
+      legalPadMode: false,
+      fontFamily: 'hand',
+    };
+    onUpdatePage({ ...page, linedSettings: { ...current, ...partial } });
+  };
+
+  const linedSettings: LinedPaperSettings = page.linedSettings ?? {
+    showMargin: false,
+    marginSide: 'left',
+    rowShading: false,
+    legalPadMode: false,
+    fontFamily: 'hand',
+  };
 
   // ── Paper Type Picker Popover ─────────────────────────────
   const renderPaperPicker = () => (
@@ -396,12 +474,90 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
               }`}
             >
               <div className={`w-10 h-10 rounded-md border border-gray-300 overflow-hidden ${PAPER_BG_MAP[pt.value]}`}
-                style={{ backgroundSize: pt.value === 'lined' || pt.value === 'rows' || pt.value === 'legal' ? '100% 8px' : pt.value === 'grid' ? '8px 8px' : pt.value === 'dotted' ? '8px 8px' : undefined }}
+                style={{ backgroundSize: pt.value === 'lined' ? '100% 8px' : pt.value === 'grid' ? '8px 8px' : pt.value === 'dotted' ? '8px 8px' : undefined }}
               />
               <span className="text-[9px] font-medium text-gray-500 leading-tight">{pt.label}</span>
             </button>
           ))}
         </div>
+
+        {/* Lined-specific settings appear only when Lined is the active paper */}
+        {page.paperType === 'lined' && (
+          <div className="mt-3 pt-3 border-t border-gray-200 space-y-2.5">
+            {/* Margin */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-sans uppercase tracking-wider text-gray-500">Margin</span>
+              <div className="flex bg-gray-100 rounded-md p-0.5 text-[10px] font-sans">
+                <button
+                  onClick={() => updateLinedSettings({ showMargin: false })}
+                  className={`px-2 py-0.5 rounded ${!linedSettings.showMargin ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Off
+                </button>
+                <button
+                  onClick={() => updateLinedSettings({ showMargin: true, marginSide: 'left' })}
+                  className={`px-2 py-0.5 rounded ${linedSettings.showMargin && linedSettings.marginSide === 'left' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Left
+                </button>
+                <button
+                  onClick={() => updateLinedSettings({ showMargin: true, marginSide: 'right' })}
+                  className={`px-2 py-0.5 rounded ${linedSettings.showMargin && linedSettings.marginSide === 'right' ? 'bg-white shadow-sm text-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Right
+                </button>
+              </div>
+            </div>
+
+            {/* Row shading */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-sans uppercase tracking-wider text-gray-500">Row shading</span>
+              <button
+                onClick={() => updateLinedSettings({ rowShading: !linedSettings.rowShading })}
+                className={`relative w-8 h-4 rounded-full transition-colors ${linedSettings.rowShading ? 'bg-indigo-400' : 'bg-gray-200'}`}
+                aria-label="Toggle row shading"
+              >
+                <span
+                  className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${linedSettings.rowShading ? 'translate-x-4' : 'translate-x-0.5'}`}
+                />
+              </button>
+            </div>
+
+            {/* Legal pad */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-sans uppercase tracking-wider text-gray-500">Legal pad</span>
+              <button
+                onClick={() => updateLinedSettings({ legalPadMode: !linedSettings.legalPadMode })}
+                className={`relative w-8 h-4 rounded-full transition-colors ${linedSettings.legalPadMode ? 'bg-amber-400' : 'bg-gray-200'}`}
+                aria-label="Toggle legal pad mode"
+              >
+                <span
+                  className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${linedSettings.legalPadMode ? 'translate-x-4' : 'translate-x-0.5'}`}
+                />
+              </button>
+            </div>
+
+            {/* Font */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-sans uppercase tracking-wider text-gray-500">Font</span>
+              <div className="flex bg-gray-100 rounded-md p-0.5 text-[10px]">
+                {(['hand', 'sans', 'serif', 'mono'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => updateLinedSettings({ fontFamily: f })}
+                    className={`px-2 py-0.5 rounded capitalize ${
+                      linedSettings.fontFamily === f
+                        ? 'bg-white shadow-sm text-gray-700'
+                        : 'text-gray-400 hover:text-gray-600'
+                    } ${f === 'hand' ? 'font-hand' : f === 'sans' ? 'font-sans' : f === 'serif' ? 'font-serif' : 'font-mono'}`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -426,55 +582,140 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
         </>
       )}
 
-      {/* Header */}
-      {isLeft ? (
-        <div className="h-16 border-b border-gray-200 flex items-end px-6 md:px-10 pb-2 bg-gradient-to-b from-white to-gray-50 shrink-0">
-          <input
-            className={`w-full text-3xl md:text-4xl text-gray-800 bg-transparent outline-none placeholder-gray-300 ${titleFontClass}`}
-            value={page.title}
-            onChange={(e) => onUpdatePage({...page, title: e.target.value})}
-            placeholder="Untitled Page"
-          />
-        </div>
-      ) : (
-        <div className="h-16 border-b border-gray-200 flex items-end justify-between px-6 md:px-10 pb-2 bg-gradient-to-b from-white to-gray-50 shrink-0">
-          {/* Paper Type Picker */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPaperPicker(!showPaperPicker)}
-              className="flex items-center gap-1 text-xs font-sans text-gray-400 mb-2 uppercase tracking-widest hover:text-gray-600 transition-colors"
-              aria-label="Change paper type"
-              aria-expanded={showPaperPicker}
-            >
-              <span>{PAPER_TYPES.find(p => p.value === (page.paperType || 'lined'))?.label || 'Lined'}</span>
-              <ChevronDown size={12} className={`transition-transform ${showPaperPicker ? 'rotate-180' : ''}`} />
-            </button>
-            {showPaperPicker && renderPaperPicker()}
-          </div>
-          <div className="flex items-center gap-2 text-xs font-sans text-gray-400 mb-2 uppercase tracking-widest whitespace-nowrap">
-            {page.aiGenerated && (
-              <span className="flex items-center gap-1 text-indigo-400" title="AI Generated">
-                <Sparkles size={12} />
-                <span className="text-[10px]">AI</span>
-              </span>
+      {/* Header
+          Native: single 36px combo row on left panel only (title + paper + bookmark + L/R switch)
+                  right panel header is hidden — controls live in the left header
+          Web:    separate 48/64px headers per page (unchanged) */}
+      {native ? (
+        isLeft && (
+          <div className="h-9 border-b border-gray-200 flex items-center gap-2 px-3 bg-gradient-to-b from-white to-gray-50 shrink-0">
+            <input
+              className={`flex-1 min-w-0 text-base text-gray-800 bg-transparent outline-none placeholder-gray-300 truncate ${titleFontClass}`}
+              value={page.title}
+              onChange={(e) => onUpdatePage({...page, title: e.target.value})}
+              placeholder="Untitled"
+            />
+            {/* Paper type pill */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPaperPicker(!showPaperPicker)}
+                className="flex items-center gap-0.5 px-2 h-6 rounded-full bg-gray-100 text-[10px] font-sans uppercase tracking-wider text-gray-600 active:scale-95 transition-transform"
+                aria-label="Change paper type"
+                aria-expanded={showPaperPicker}
+              >
+                <span>{PAPER_TYPES.find(p => p.value === (page.paperType || 'lined'))?.label || 'Lined'}</span>
+                <ChevronDown size={10} className={`transition-transform ${showPaperPicker ? 'rotate-180' : ''}`} />
+              </button>
+              {showPaperPicker && renderPaperPicker()}
+            </div>
+            {/* Bookmark toggle */}
+            {onToggleBookmark && (
+              <button
+                onClick={onToggleBookmark}
+                className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors active:scale-90 ${
+                  isBookmarked ? 'text-amber-500' : 'text-gray-300'
+                }`}
+                aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark page'}
+              >
+                <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
+              </button>
             )}
-            {new Date(page.createdAt).toLocaleDateString()}
+            {/* Side switch — micro segmented control */}
+            <div className="flex bg-gray-100 rounded-full p-0.5">
+              <button
+                onClick={() => setMobileSide('left')}
+                className={`w-7 h-5 rounded-full text-[9px] font-bold transition-all ${
+                  mobileSide === 'left' ? 'bg-indigo-600 text-white' : 'text-gray-400'
+                }`}
+                aria-label="Show left page"
+              >
+                L
+              </button>
+              <button
+                onClick={() => setMobileSide('right')}
+                className={`w-7 h-5 rounded-full text-[9px] font-bold transition-all ${
+                  mobileSide === 'right' ? 'bg-indigo-600 text-white' : 'text-gray-400'
+                }`}
+                aria-label="Show right page"
+              >
+                R
+              </button>
+            </div>
           </div>
-        </div>
+        )
+      ) : (
+        isLeft ? (
+          <div className="h-12 md:h-16 border-b border-gray-200 flex items-end px-3 md:px-10 pb-2 bg-gradient-to-b from-white to-gray-50 shrink-0">
+            <input
+              className={`w-full text-xl md:text-4xl text-gray-800 bg-transparent outline-none placeholder-gray-300 truncate ${titleFontClass}`}
+              value={page.title}
+              onChange={(e) => onUpdatePage({...page, title: e.target.value})}
+              placeholder="Untitled Page"
+            />
+          </div>
+        ) : (
+          <div className="h-12 md:h-16 border-b border-gray-200 flex items-end justify-between px-3 md:px-10 pb-2 bg-gradient-to-b from-white to-gray-50 shrink-0">
+            <div className="relative">
+              <button
+                onClick={() => setShowPaperPicker(!showPaperPicker)}
+                className="flex items-center gap-1 text-xs font-sans text-gray-400 mb-2 uppercase tracking-widest hover:text-gray-600 transition-colors"
+                aria-label="Change paper type"
+                aria-expanded={showPaperPicker}
+              >
+                <span>{PAPER_TYPES.find(p => p.value === (page.paperType || 'lined'))?.label || 'Lined'}</span>
+                <ChevronDown size={12} className={`transition-transform ${showPaperPicker ? 'rotate-180' : ''}`} />
+              </button>
+              {showPaperPicker && renderPaperPicker()}
+            </div>
+            <div className="flex items-center gap-2 text-xs font-sans text-gray-400 mb-2 uppercase tracking-widest whitespace-nowrap">
+              {page.aiGenerated && (
+                <span className="flex items-center gap-1 text-indigo-400" title="AI Generated">
+                  <Sparkles size={12} />
+                  <span className="text-[10px]">AI</span>
+                </span>
+              )}
+              {new Date(page.createdAt).toLocaleDateString()}
+            </div>
+          </div>
+        )
       )}
 
-      {/* Content Area */}
+      {/* Content Area — bottom padding clears the FAB on mobile */}
       <div
-        className={`flex-1 overflow-y-auto px-6 md:px-10 py-8 ${bgClass} relative cursor-text`}
+        className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 md:px-10 pt-3 md:pt-8 pb-20 md:pb-8 ${bgClass} relative cursor-text`}
+        data-page-font={page.paperType === 'lined' ? (page.linedSettings?.fontFamily ?? 'hand') : undefined}
+        style={{ WebkitOverflowScrolling: 'touch' }}
         onClick={(e) => handleEmptySpaceClick(e, side)}
       >
-        {page.paperType !== 'blank' && page.paperType !== 'legal' && page.paperType !== 'crumpled' && (
+        {page.paperType === 'lined' && page.linedSettings?.showMargin && (
+          <div className={`absolute top-0 bottom-0 ${
+            (page.linedSettings.marginSide === 'right' || (!page.linedSettings.marginSide && !isLeft))
+              ? 'right-[60px]' : 'left-[60px]'
+          } w-[2px] bg-red-400/60 pointer-events-none z-0`} />
+        )}
+        {page.paperType === 'lined' && page.linedSettings?.legalPadMode && (
+          <div className={`absolute top-0 bottom-0 left-[60px] w-[2px] bg-red-400/60 pointer-events-none z-0`} />
+        )}
+        {page.paperType !== 'blank' && page.paperType !== 'lined' && page.paperType !== 'hex' && page.paperType !== 'isometric' && (
           <div className={`absolute top-0 bottom-0 left-12 md:left-16 w-px ${marginColorClass} pointer-events-none z-0`} />
         )}
-        <div className="relative z-10 min-h-full pb-14">
-          {blocks.length === 0 && (
-            <div className="text-gray-400 font-hand text-2xl text-center mt-20 opacity-50 select-none pointer-events-none">
-              Click anywhere to start typing...
+        {page.paperType === 'hex' && isLeft && (
+          <HexPaperCanvas data={page.hexMapData} onChange={handleHexMapChange} />
+        )}
+        {page.paperType === 'isometric' && isLeft && (
+          <IsoPaperCanvas data={page.isoFlowData} onChange={handleIsoFlowChange} />
+        )}
+        <div className={`relative z-10 min-h-full ${(page.paperType === 'hex' || page.paperType === 'isometric') ? 'pointer-events-none [&_[data-block-id]]:pointer-events-auto' : ''}`}>
+          {blocks.length === 0 && page.paperType !== 'hex' && page.paperType !== 'isometric' && (
+            <div className="text-gray-400 font-hand text-xl md:text-2xl text-center mt-16 md:mt-20 opacity-50 select-none pointer-events-none">
+              Tap anywhere to start writing
+            </div>
+          )}
+          {blocks.length === 0 && (page.paperType === 'hex' || page.paperType === 'isometric') && isLeft && (
+            <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
+              {page.paperType === 'hex'
+                ? 'Tap anywhere to place a hex · Shift-click a hex to connect'
+                : 'Tap anywhere to place a step · Shift-click a step to connect'}
             </div>
           )}
           <DndContext
@@ -513,6 +754,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
                                 dragHandleProps={dragHandleProps}
                                 onPenScratch={sounds?.penScratch}
                                 onCheckboxClick={sounds?.checkboxClick}
+                                mathResult={mathResults.get(block.id) ?? null}
                               />
                             </BlockErrorBoundary>
                           </div>
@@ -539,6 +781,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
                               dragHandleProps={dragHandleProps}
                               onPenScratch={sounds?.penScratch}
                               onCheckboxClick={sounds?.checkboxClick}
+                              mathResult={mathResults.get(block.id) ?? null}
                             />
                           </BlockErrorBoundary>
                         </div>
@@ -568,45 +811,55 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
   );
 
   return (
-    <div className="flex-1 h-full overflow-hidden bg-[#e5e5e5] flex flex-col justify-center p-4 md:p-8 relative">
-      {/* Mobile Page Toggle */}
-      <div className="md:hidden flex justify-center mb-2">
-        <div className="bg-white/80 backdrop-blur-sm rounded-full p-0.5 flex shadow-sm border border-gray-200">
-          <button
-            onClick={() => setMobileSide('left')}
-            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
-              mobileSide === 'left' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Left Page
-          </button>
-          <button
-            onClick={() => setMobileSide('right')}
-            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
-              mobileSide === 'right' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Right Page
-          </button>
+    <div
+      data-native={native ? 'true' : undefined}
+      className={`flex-1 h-full min-h-0 overflow-hidden bg-[#e5e5e5] flex flex-col relative ${native ? 'p-0' : 'p-1 md:p-8 md:justify-center'}`}
+    >
+      {/* Mobile Page Toggle — only shown on non-native mobile (web mobile Safari).
+          Native replaces it with the compact L/R switch inside the header row. */}
+      {!native && (
+        <div className="md:hidden flex justify-center pt-1 pb-1.5 shrink-0">
+          <div className="bg-white/90 backdrop-blur-sm rounded-full p-0.5 flex shadow-sm border border-gray-200">
+            <button
+              onClick={() => setMobileSide('left')}
+              className={`px-4 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                mobileSide === 'left' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500'
+              }`}
+            >
+              Left
+            </button>
+            <button
+              onClick={() => setMobileSide('right')}
+              className={`px-4 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                mobileSide === 'right' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500'
+              }`}
+            >
+              Right
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Book */}
-      <div data-export-target className="w-full max-w-6xl h-full mx-auto bg-slate-800 p-1 md:p-2 rounded-xl shadow-2xl flex flex-col md:flex-row relative">
-        {/* Desktop: show both pages | Mobile: show selected page */}
+      {/* Book — fills available space, no centering on mobile */}
+      <div data-export-target className={`w-full max-w-6xl flex-1 min-h-0 mx-auto bg-slate-800 ${native ? 'p-0 rounded-none' : 'p-0.5 md:p-2 rounded-lg md:rounded-xl'} shadow-2xl flex flex-col md:flex-row relative`}>
+        {/* Desktop: show both pages */}
         <div className="hidden md:contents">
           {renderPagePanel('left', leftBlocks, true)}
           <div className="w-1 h-full bg-black/40 shadow-[0_0_10px_rgba(0,0,0,0.5)] z-30" />
           {renderPagePanel('right', rightBlocks, false)}
         </div>
 
-        <div className="md:hidden flex-1 flex flex-col">
+        {/* Mobile: single selected page */}
+        <div className="md:hidden flex-1 min-h-0 flex flex-col">
           {mobileSide === 'left'
             ? renderPagePanel('left', leftBlocks, true)
             : renderPagePanel('right', rightBlocks, false)
           }
         </div>
       </div>
+
+      {/* Native AI FAB — floats over entire notebook */}
+      {renderAIFab()}
     </div>
   );
 };

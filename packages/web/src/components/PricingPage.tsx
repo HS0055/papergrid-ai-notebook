@@ -1,16 +1,29 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { isIOSApp } from '../utils/platform';
 import {
     Check, X, Sparkles, Crown, Zap, ArrowLeft, Star,
     BookOpen, ShoppingCart
 } from 'lucide-react';
 
-// Stripe publishable key
-const STRIPE_PK = 'pk_live_51SkEKrDEbr4pKiCH2J8giee38nLRjmfTAtNL8FY3LFrEEjAd3AmPRoOzKBT2RnqUrQTc906oXZjiKUIP0Dt2U8DG00f2nVwx6Y';
+// Stripe config — only used on web (iOS MUST use StoreKit/Apple IAP per Guideline 3.1.1)
+const STRIPE_PK = isIOSApp() ? '' : 'pk_live_51SkEKrDEbr4pKiCH2J8giee38nLRjmfTAtNL8FY3LFrEEjAd3AmPRoOzKBT2RnqUrQTc906oXZjiKUIP0Dt2U8DG00f2nVwx6Y';
 
-// TODO: Update these price IDs to match new Ink-based plans in Stripe dashboard
-const PRICE_IDS = {
+// StoreKit product IDs for iOS
+const IOS_PRODUCT_IDS = {
+    pro_monthly: 'com.papera.pro.monthly',
+    pro_yearly: 'com.papera.pro.yearly',
+    creator_monthly: 'com.papera.creator.monthly',
+    creator_yearly: 'com.papera.creator.yearly',
+    ink_25: 'com.papera.ink.25',
+    ink_75: 'com.papera.ink.75',
+    ink_200: 'com.papera.ink.200',
+    ink_500: 'com.papera.ink.500',
+};
+
+// Stripe price IDs for web
+const STRIPE_PRICE_IDS = {
     pro_monthly: 'price_1SlKWMDEbr4pKiCHscvQPE8Y',
     creator_monthly: 'price_TODO_CREATOR_MONTHLY',
     ink_25: 'price_TODO_INK_25',
@@ -18,6 +31,9 @@ const PRICE_IDS = {
     ink_200: 'price_TODO_INK_200',
     ink_500: 'price_TODO_INK_500',
 };
+
+// Use the correct IDs based on platform
+const PRICE_IDS = isIOSApp() ? IOS_PRODUCT_IDS : STRIPE_PRICE_IDS;
 
 /** Inline water-droplet SVG used next to Ink amounts. */
 function InkDropIcon({ className = '' }: { className?: string }) {
@@ -176,23 +192,16 @@ export const PricingPage: React.FC = () => {
 
         setLoadingTier(tier.id);
         try {
-            // TODO: Call Convex HTTP action to create Stripe Checkout Session
-            // const response = await fetch('/api/create-checkout-session', {
-            //   method: 'POST',
-            //   headers: { 'Content-Type': 'application/json' },
-            //   body: JSON.stringify({
-            //     priceId: tier.priceId,
-            //     mode: tier.mode,
-            //     userId: user?.id,
-            //     successUrl: `${window.location.origin}/app?upgraded=true`,
-            //     cancelUrl: `${window.location.origin}/pricing`,
-            //   }),
-            // });
-            // const { url } = await response.json();
-            // window.location.href = url;
-
-            // Placeholder until Convex + Stripe is wired
-            alert(`Stripe Checkout will open for ${tier.name} plan (${tier.priceId}). Deploy Convex backend first.`);
+            if (isIOSApp()) {
+                // iOS: use StoreKit 2 via Capacitor plugin
+                // TODO: Integrate RevenueCat or @capawesome/capacitor-purchases
+                // await Purchases.purchaseProduct(tier.priceId);
+                alert(`StoreKit purchase: ${tier.name} (${tier.priceId}). StoreKit 2 integration pending.`);
+            } else {
+                // Web: use Stripe Checkout
+                // TODO: Call Convex HTTP action to create Stripe Checkout Session
+                alert(`Stripe Checkout will open for ${tier.name} plan (${tier.priceId}). Deploy Convex backend first.`);
+            }
         } catch (error) {
             if (error instanceof Error) {
                 // eslint-disable-next-line no-console
@@ -211,8 +220,15 @@ export const PricingPage: React.FC = () => {
 
         setLoadingPack(pack.amount);
         try {
-            // TODO: Call Convex HTTP action to create Stripe Checkout Session for one-time pack
-            alert(`Stripe Checkout will open for ${pack.amount} Ink pack (${pack.priceId}). Deploy Convex backend first.`);
+            if (isIOSApp()) {
+                // iOS: use StoreKit 2 for consumable IAP
+                // TODO: Integrate RevenueCat or @capawesome/capacitor-purchases
+                // await Purchases.purchaseProduct(pack.priceId);
+                alert(`StoreKit purchase: ${pack.amount} Ink (${pack.priceId}). StoreKit 2 integration pending.`);
+            } else {
+                // Web: use Stripe Checkout
+                alert(`Stripe Checkout will open for ${pack.amount} Ink pack (${pack.priceId}). Deploy Convex backend first.`);
+            }
         } catch (error) {
             if (error instanceof Error) {
                 // eslint-disable-next-line no-console
@@ -220,6 +236,20 @@ export const PricingPage: React.FC = () => {
             }
         } finally {
             setLoadingPack(null);
+        }
+    };
+
+    const handleRestorePurchases = async () => {
+        if (!isIOSApp()) return;
+        try {
+            // TODO: Integrate RevenueCat or @capawesome/capacitor-purchases
+            // await Purchases.restorePurchases();
+            alert('Restore purchases: StoreKit 2 integration pending.');
+        } catch (error) {
+            if (error instanceof Error) {
+                // eslint-disable-next-line no-console
+                console.error('Restore error:', error.message);
+            }
         }
     };
 
@@ -412,6 +442,18 @@ export const PricingPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Restore Purchases (iOS only — required by Apple for App Store approval) */}
+            {isIOSApp() && (
+                <div className="max-w-7xl mx-auto px-4 pb-6 text-center">
+                    <button
+                        onClick={handleRestorePurchases}
+                        className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors"
+                    >
+                        Restore Purchases
+                    </button>
+                </div>
+            )}
 
             {/* Footer trust line */}
             <div className="max-w-7xl mx-auto px-4 pb-12 text-center">

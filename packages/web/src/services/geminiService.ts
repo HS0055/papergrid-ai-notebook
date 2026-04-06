@@ -4,7 +4,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export interface GeneratedPage {
   title: string;
-  paperType: 'lined' | 'grid' | 'dotted' | 'blank' | 'music' | 'rows' | 'isometric' | 'hex' | 'legal' | 'crumpled';
+  paperType: 'lined' | 'grid' | 'dotted' | 'blank' | 'music' | 'isometric' | 'hex';
   themeColor: string;
   blocks: Block[];
 }

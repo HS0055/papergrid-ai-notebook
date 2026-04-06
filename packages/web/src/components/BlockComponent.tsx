@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { Block, BlockType, GridCell, NotebookPage } from '@papergrid/core';
+import { Block, BlockType, GridCell, NotebookPage, MathResult } from '@papergrid/core';
 import { Trash2, GripVertical, Plus, Info, Quote, ArrowLeftRight } from 'lucide-react';
 import { MusicStaffBlock } from './MusicStaffBlock';
 import { CalendarBlock } from './planner/CalendarBlock';
@@ -27,6 +27,7 @@ interface BlockProps {
   dragHandleProps?: Record<string, any>;
   onPenScratch?: () => void;
   onCheckboxClick?: () => void;
+  mathResult?: MathResult | null;
 }
 
 const getAccentColor = (color?: string): string => {
@@ -91,7 +92,7 @@ const getContainerClasses = (style: string | undefined, colorClasses: ReturnType
   }
 };
 
-export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete, focused, allPages, onNavigate, onInsertAfter, selectedPitch, selectedDuration, dragHandleProps, onPenScratch, onCheckboxClick }) => {
+export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete, focused, allPages, onNavigate, onInsertAfter, selectedPitch, selectedDuration, dragHandleProps, onPenScratch, onCheckboxClick, mathResult }) => {
   const textRef = useRef<HTMLTextAreaElement>(null);
   const calloutRef = useRef<HTMLTextAreaElement>(null);
   const quoteRef = useRef<HTMLTextAreaElement>(null);
@@ -156,13 +157,21 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
     <div className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0">
       {/* Block Controls (Hover) */}
       <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
-        <div className="p-1 text-gray-400 cursor-move hover:text-gray-600" {...dragHandleProps}>
-          <GripVertical size={16} />
+        <div className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center text-gray-400 cursor-move hover:text-gray-600 active:bg-gray-100 rounded" {...dragHandleProps}>
+          <GripVertical size={18} />
         </div>
-        <button onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })} className="p-1 hover:bg-blue-100 rounded text-gray-400 hover:text-blue-500" aria-label="Move block to other page">
+        <button
+          onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })}
+          className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center hover:bg-blue-100 active:bg-blue-200 rounded text-gray-400 hover:text-blue-500"
+          aria-label="Move block to other page"
+        >
           <ArrowLeftRight size={16} />
         </button>
-        <button onClick={() => onDelete(block.id)} className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-500" aria-label="Delete block">
+        <button
+          onClick={() => onDelete(block.id)}
+          className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center hover:bg-red-100 active:bg-red-200 rounded text-gray-400 hover:text-red-500"
+          aria-label="Delete block"
+        >
           <Trash2 size={16} />
         </button>
       </div>
@@ -208,22 +217,29 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
               placeholder="Write here..."
               spellCheck={false}
             />
+            {mathResult && (
+              <span className="math-ghost" aria-hidden="true">
+                = {mathResult.displayResult}
+              </span>
+            )}
           </div>
         )}
 
         {block.type === BlockType.CHECKBOX && (
-          <div className={`flex items-center gap-3 ${block.alignment === 'center' ? 'justify-center' : block.alignment === 'right' ? 'justify-end' : ''}`} style={{ minHeight: '32px' }}>
+          <div className={`flex items-center gap-2 ${block.alignment === 'center' ? 'justify-center' : block.alignment === 'right' ? 'justify-end' : ''}`} style={{ minHeight: '32px' }}>
             <button
               onClick={() => { onChange(block.id, { checked: !block.checked }); onCheckboxClick?.(); }}
-              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-                block.checked
-                  ? `${colorClasses.highlight} ${colorClasses.border} ${colorClasses.text}`
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
-              style={{ position: 'relative', top: '9px' }}
+              className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
+              style={{ position: 'relative', top: '4px' }}
               aria-label={block.checked ? 'Uncheck' : 'Check'}
             >
-              {block.checked && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+              <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                block.checked
+                  ? `${colorClasses.highlight} ${colorClasses.border} ${colorClasses.text}`
+                  : 'border-gray-300'
+              }`}>
+                {block.checked && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+              </span>
             </button>
             <input
               className={`flex-1 bg-transparent font-hand text-xl text-gray-800 focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${emphasisClass}`}

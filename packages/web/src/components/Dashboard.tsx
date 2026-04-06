@@ -21,6 +21,9 @@ import {
 } from '../utils/notebookStorage';
 import { useConvexNotebooks } from '../hooks/useConvexNotebooks';
 import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
+import { TabBar, type TabId } from './ios/TabBar';
+import { BottomSheet } from './ios/BottomSheet';
+import { isNativeApp } from '../utils/platform';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
 const BookCoverScene = lazy(() => import('./three/notebook/BookCoverScene'));
@@ -161,6 +164,10 @@ export const Dashboard: React.FC = () => {
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // iOS tab bar state
+  const [activeTab, setActiveTab] = useState<TabId>('notebooks');
+  const native = isNativeApp();
 
   // AI generation approval flow
   const [pendingPages, setPendingPages] = useState<NotebookPage[] | null>(null);
@@ -658,21 +665,31 @@ export const Dashboard: React.FC = () => {
     return `Page ${activePageIndex + 1} of ${activeNotebook.pages.length}`;
   };
 
+  // iOS tab bar handler
+  const handleTabChange = useCallback((tab: TabId) => {
+    setActiveTab(tab);
+    if (tab === 'create') {
+      setIsGeneratorOpen(true);
+    } else if (tab === 'ink') {
+      navigate('/pricing');
+    }
+  }, [navigate]);
+
   if (!activeNotebook) return null;
 
   return (
     <div className="flex h-screen w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in">
-      {/* Sidebar backdrop (mobile) */}
-      {isSidebarOpen && (
+      {/* Sidebar backdrop (mobile) — hidden on native iOS (uses tab bar) */}
+      {!native && isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-10 md:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — hidden on native iOS (replaced by tab bar navigation) */}
       <aside
-        className={`${isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'}
+        className={`${native ? 'hidden' : isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'}
         bg-[#1a1c23] text-gray-300 transition-all duration-300 ease-in-out flex flex-col border-r border-gray-800 absolute z-20 md:relative h-full shadow-2xl overflow-hidden`}
       >
         <div className="p-6 flex items-center gap-3 text-white border-b border-gray-800/50">
@@ -855,33 +872,51 @@ export const Dashboard: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 relative flex flex-col h-full overflow-hidden items-center justify-center p-4 md:p-12">
-        {/* Mobile Header / Sidebar Toggle */}
-        <div className="absolute top-4 left-4 z-30 flex gap-2">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white transition-colors"
-            aria-label={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-            aria-expanded={isSidebarOpen}
+      {/* Main Content Area — on native, reserve space for top safe area + tab bar */}
+      <main
+        className={`flex-1 relative flex flex-col items-center overflow-hidden ${native ? 'px-0 justify-start' : 'p-4 md:p-12 justify-center'}`}
+        style={native ? {
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 56px)',
+          height: '100dvh',
+        } : undefined}
+      >
+        {/* Top-left controls — desktop only (tab bar owns left side on native) */}
+        {!native && (
+          <div
+            className="absolute left-3 z-30 flex gap-2"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
           >
-            <Menu size={20} />
-          </button>
-          <button
-            onClick={sfx.toggle}
-            className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${sfx.enabled
-              ? 'bg-indigo-100 border-indigo-300 text-indigo-600'
-              : 'bg-white/80 border-gray-200 text-gray-400 hover:bg-white hover:text-gray-600'
-              }`}
-            aria-label={sfx.enabled ? 'Mute sounds' : 'Enable sounds'}
-            title={sfx.enabled ? 'Sound effects on' : 'Sound effects off'}
-          >
-            {sfx.enabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-          </button>
-        </div>
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white transition-colors"
+              aria-label={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+              aria-expanded={isSidebarOpen}
+            >
+              <Menu size={20} />
+            </button>
+            <button
+              onClick={sfx.toggle}
+              className={`p-2 backdrop-blur rounded-lg shadow-sm border transition-colors ${sfx.enabled
+                ? 'bg-indigo-100 border-indigo-300 text-indigo-600'
+                : 'bg-white/80 border-gray-200 text-gray-400 hover:bg-white hover:text-gray-600'
+                }`}
+              aria-label={sfx.enabled ? 'Mute sounds' : 'Enable sounds'}
+              title={sfx.enabled ? 'Sound effects on' : 'Sound effects off'}
+            >
+              {sfx.enabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+            </button>
+          </div>
+        )}
 
-        {/* Navigation & Actions */}
-        <div className="absolute top-4 right-4 z-30 flex gap-1.5 md:gap-2">
+        {/* Navigation & Actions — desktop cluster only.
+            On native: bookmark + AI + add-page move into the NotebookView header
+            and the floating AI FAB. */}
+        {!native && (
+        <div
+          className="absolute right-3 z-30 flex gap-1.5 md:gap-2"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
+        >
           {activePage && (
             <>
               {/* Bookmark ribbon toggle — top corner tassel style */}
@@ -901,6 +936,7 @@ export const Dashboard: React.FC = () => {
               <button
                 onClick={() => setIsGeneratorOpen(true)}
                 className="py-2 px-3 md:px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium shadow-lg shadow-indigo-900/50 transition-all transform hover:scale-[1.02]"
+                aria-label="Generate AI layout"
               >
                 <Sparkles size={16} />
                 <span className="hidden sm:inline">AI Layout</span>
@@ -936,9 +972,10 @@ export const Dashboard: React.FC = () => {
             </>
           )}
         </div>
+        )}
 
-        {/* Notebook Container */}
-        <div className="w-full max-w-6xl h-full flex flex-col items-center justify-center relative">
+        {/* Notebook Container — flex-fills available main space */}
+        <div className="w-full max-w-6xl flex-1 min-h-0 flex flex-col items-center justify-center relative">
 
           {/* Bookmark Ribbon Tassels — left edge of notebook */}
           {activePageIndex >= 0 && bookmarkedPages.length > 0 && (
@@ -1006,7 +1043,7 @@ export const Dashboard: React.FC = () => {
           {/* The Book — animated wrapper */}
           <div
             key={`${activeNotebookId}-${activePageIndex}-${contentKey}`}
-            className={`w-full flex-1 max-h-[900px] relative ${getPageAnimClass()}`}
+            className={`w-full flex-1 min-h-0 max-h-[900px] relative ${getPageAnimClass()}`}
             onAnimationEnd={() => setPageDirection(null)}
           >
             {activePageIndex === -1 ? (
@@ -1035,7 +1072,7 @@ export const Dashboard: React.FC = () => {
                     </Canvas3DErrorBoundary>
                     {/* DOM overlay for title editing, color picker, CTA */}
                     <div
-                      className="absolute inset-x-0 top-[15%] bottom-[10%] flex flex-col items-center justify-center px-6 text-center pointer-events-none"
+                      className="absolute inset-x-0 top-[20%] md:top-[15%] bottom-[8%] md:bottom-[10%] flex flex-col items-center justify-center px-3 md:px-6 text-center pointer-events-none"
                       style={{ zIndex: 20 }}
                     >
                       {/* Gradient scrim removed — 3D scene provides enough contrast */}
@@ -1043,7 +1080,7 @@ export const Dashboard: React.FC = () => {
                       <div className="relative z-10 flex flex-col items-center w-full max-h-full overflow-y-auto overflow-x-hidden scrollbar-hide">
                       {/* Title — always shown, looks "printed" on the cover */}
                       <input
-                        className="pointer-events-auto bg-transparent text-white text-2xl md:text-4xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md"
+                        className="pointer-events-auto bg-transparent text-white text-xl md:text-4xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md px-2"
                         style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
                         value={activeNotebook.title}
                         onChange={(e) => {
@@ -1052,22 +1089,23 @@ export const Dashboard: React.FC = () => {
                       />
 
                       <div
-                        className="mt-2 text-white/60 font-sans tracking-widest uppercase text-xs"
+                        className="mt-1 md:mt-2 text-white/60 font-sans tracking-widest uppercase text-[10px] md:text-xs"
                         style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
                       >
                         {activeNotebook.pages.length} Spreads
                       </div>
 
                       {/* Cover Customization Panel */}
-                      <div className="pointer-events-auto flex flex-col items-center gap-2 mt-4 w-full max-w-md px-4">
+                      <div className="pointer-events-auto flex flex-col items-center gap-1.5 mt-2 md:mt-4 w-full max-w-md px-2 md:px-4">
                         {/* Color Swatches — wrapping grid for all colors */}
-                        <div className="flex flex-wrap items-center justify-center gap-1.5 px-3 py-2 bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-black/40">
-                          <Palette size={14} className="text-indigo-400 shrink-0" />
+                        <div className="flex flex-wrap items-center justify-center gap-1 md:gap-1.5 px-2 md:px-3 py-1.5 md:py-2 bg-black/40 backdrop-blur-xl rounded-xl md:rounded-2xl border border-white/10 shadow-2xl shadow-black/40">
+                          <Palette size={12} className="text-indigo-400 shrink-0 md:hidden" />
+                          <Palette size={14} className="text-indigo-400 shrink-0 hidden md:block" />
                           {COVER_COLORS.map(color => (
                             <button
                               key={color}
                               onClick={() => handleCoverColorChange(color)}
-                              className={`w-5 h-5 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color
+                              className={`w-4 h-4 md:w-5 md:h-5 rounded-full ${color} border-2 transition-all duration-300 ${activeNotebook.coverColor === color
                                 ? 'border-white scale-125 shadow-lg shadow-white/20'
                                 : 'border-white/10 hover:border-white/40 hover:scale-110'
                                 }`}
@@ -1079,9 +1117,9 @@ export const Dashboard: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setShowCoverModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600/80 to-violet-600/80 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+                            className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-indigo-600/80 to-violet-600/80 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg md:rounded-xl text-[11px] md:text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
                           >
-                            <Wand2 size={14} />
+                            <Wand2 size={12} />
                             <span>AI Cover</span>
                           </button>
                           {activeNotebook.coverImageUrl && (
@@ -1099,11 +1137,13 @@ export const Dashboard: React.FC = () => {
                         !isOpening && (
                           <button
                             onClick={handleOpen3DCover}
-                            className="pointer-events-auto mt-4 text-white flex items-center gap-2.5 bg-indigo-600/80 hover:bg-indigo-500/90 backdrop-blur-sm px-6 py-3 rounded-2xl transition-all hover:scale-105 cursor-pointer font-medium shadow-xl shadow-indigo-900/30"
+                            className="pointer-events-auto mt-3 text-white flex items-center gap-2 bg-indigo-600/80 hover:bg-indigo-500/90 backdrop-blur-sm px-4 py-2 md:px-6 md:py-3 rounded-xl md:rounded-2xl transition-all hover:scale-105 cursor-pointer text-sm md:text-base font-medium shadow-xl shadow-indigo-900/30"
                           >
-                            <BookOpen size={18} />
+                            <BookOpen size={16} className="md:hidden" />
+                            <BookOpen size={18} className="hidden md:block" />
                             <span>Open Notebook</span>
-                            <ChevronRight size={16} />
+                            <ChevronRight size={14} className="md:hidden" />
+                            <ChevronRight size={16} className="hidden md:block" />
                           </button>
                         )
                       ) : (
@@ -1152,6 +1192,10 @@ export const Dashboard: React.FC = () => {
                   blockDelete: sfx.blockDelete,
                   dragRustle: sfx.dragRustle,
                 }}
+                isBookmarked={(activeNotebook.bookmarks ?? []).includes(activePage.id)}
+                onToggleBookmark={toggleBookmark}
+                onOpenAIGenerator={() => setIsGeneratorOpen(true)}
+                onAddPage={() => handleNewPage()}
               />
             ) : (
               /* Empty State (End of book) */
@@ -1180,8 +1224,19 @@ export const Dashboard: React.FC = () => {
             </button>
           )}
 
-          {/* Page Position Indicator + Add Page */}
-          <div className="mt-3 flex items-center justify-center gap-3 shrink-0">
+          {/* Page Position Indicator + Add Page
+              Native: ultra-compact "13/13" pill, no dots, no add button (lives in FAB)
+              Web:    full dot strip + label + add button */}
+          {native ? (
+            activePageIndex !== -1 && activeNotebook.pages.length > 0 ? (
+              <div className="mt-0.5 flex items-center justify-center shrink-0 pointer-events-none">
+                <span className="px-2 py-0.5 rounded-full bg-black/30 backdrop-blur text-white text-[10px] font-sans tabular-nums tracking-wide">
+                  {activePageIndex + 1}/{activeNotebook.pages.length}
+                </span>
+              </div>
+            ) : null
+          ) : (
+          <div className="mt-1.5 md:mt-3 flex items-center justify-center gap-2 md:gap-3 shrink-0">
             <span className="text-xs font-sans text-gray-400 uppercase tracking-widest">
               {getPageLabel()}
             </span>
@@ -1211,14 +1266,36 @@ export const Dashboard: React.FC = () => {
               <Plus size={14} />
             </button>
           </div>
+          )}
         </div>
       </main>
 
-      <LayoutGenerator
-        isOpen={isGeneratorOpen}
-        onClose={() => setIsGeneratorOpen(false)}
-        onGenerate={handleAiGeneration}
-      />
+      {/* AI Layout Generator — BottomSheet on native iOS, modal on web */}
+      {native ? (
+        <BottomSheet
+          isOpen={isGeneratorOpen}
+          initialDetent="full"
+          onClose={() => {
+            setIsGeneratorOpen(false);
+            setActiveTab('notebooks');
+          }}
+        >
+          <LayoutGenerator
+            isOpen={isGeneratorOpen}
+            onClose={() => {
+              setIsGeneratorOpen(false);
+              setActiveTab('notebooks');
+            }}
+            onGenerate={handleAiGeneration}
+          />
+        </BottomSheet>
+      ) : (
+        <LayoutGenerator
+          isOpen={isGeneratorOpen}
+          onClose={() => setIsGeneratorOpen(false)}
+          onGenerate={handleAiGeneration}
+        />
+      )}
 
       {/* AI Generation Approval Dialog */}
       {pendingPages && (
@@ -1314,6 +1391,9 @@ export const Dashboard: React.FC = () => {
         currentCoverUrl={activeNotebook?.coverImageUrl}
         isGenerating={isGeneratingCover}
       />
+
+      {/* iOS Tab Bar — only renders on native */}
+      <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
     </div>
   );
 };
