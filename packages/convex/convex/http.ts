@@ -658,6 +658,14 @@ SIDE-BY-SIDE LAYOUT (Premium Etsy Feature):
 - Good "-row" candidates: PROGRESS_BAR + PROGRESS_BAR, RATING + WATER_TRACKER, MOOD_TRACKER + RATING, CALLOUT + CALLOUT, CHECKBOX + CHECKBOX (short pairs), TEXT + TEXT (two reflection prompts).
 - Use at least 1-2 "-row" groups per page for professional layout variety. This is what makes Etsy planners look premium.
 
+SECTION CONTAINERS (Level 3 — Premium Design):
+- For rich section containers, combine a banner HEADING + "-row" group:
+  * First block: HEADING with containerStyle:"banner" → spans full width as section header
+  * Next 2 blocks: small blocks that appear side by side below the header
+  * Example: groupId "finances-row" with [HEADING "📊 MONTHLY FINANCES" (banner), PROGRESS_BAR "Income", PROGRESS_BAR "Expenses"]
+  * This creates a professional container: colored header bar on top, two metrics side by side below
+- Mix vertical groups and "-row" groups on each page for visual variety.
+
 Return ONLY a JSON object. No markdown, no explanation. Exact format:
 {
   "pages": [

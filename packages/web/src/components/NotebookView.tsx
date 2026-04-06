@@ -488,10 +488,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
                   <div key={`group-${group.key}`} className={`bg-white/40 backdrop-blur-sm rounded-xl border border-gray-200/60 shadow-sm p-3 mb-3 ${
                     group.groupId?.endsWith('-row') ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : 'space-y-0'
                   }`}>
-                    {group.blocks.map((block) => (
+                    {group.blocks.map((block) => {
+                      // In "-row" groups, banner headings and wide blocks span full width
+                      const isRowGroup = group.groupId?.endsWith('-row');
+                      const spanFull = isRowGroup && (
+                        block.containerStyle === 'banner' ||
+                        ['WEEKLY_VIEW','KANBAN','GRID','TIME_BLOCK','CALENDAR','HABIT_TRACKER','DAILY_SECTION','GOAL_SECTION','PRIORITY_MATRIX'].includes(block.type)
+                      );
+                      return (
                       <SortableBlock key={block.id} id={block.id}>
                         {({ dragHandleProps }) => (
-                          <div data-block-id={block.id} className={block.id === newBlockId ? 'anim-block-enter' : ''}>
+                          <div data-block-id={block.id} className={`${block.id === newBlockId ? 'anim-block-enter' : ''} ${spanFull ? 'sm:col-span-2' : ''}`}>
                             <BlockErrorBoundary blockType={block.type} blockId={block.id}>
                               <BlockComponent
                                 block={block}
@@ -511,7 +518,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
                           </div>
                         )}
                       </SortableBlock>
-                    ))}
+                    )})}
                   </div>
                 ) : (
                   group.blocks.map((block) => (

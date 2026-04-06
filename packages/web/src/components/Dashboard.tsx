@@ -554,7 +554,7 @@ export const Dashboard: React.FC = () => {
   const declineGeneratedPages = () => {
     setPendingPages(null);
     setPendingInkCost(0);
-    addToast('Generation discarded — no Ink charged', 'info');
+    addToast('Generation discarded — no Ink charged', 'success');
   };
 
   const toggleBookmark = () => {

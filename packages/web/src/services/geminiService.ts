@@ -120,7 +120,7 @@ export const generateLayout = async (
             if (b.content && b.content.trim().length > 0) return true;
             if (b.gridData) return true;
             // Fallback: check for any data field (AI may use unexpected shapes)
-            if ((b as Record<string, unknown>).gridColumns) return true;
+            if ((b as unknown as Record<string, unknown>).gridColumns) return true;
             return false;
           }
         ),
