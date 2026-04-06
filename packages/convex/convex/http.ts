@@ -787,9 +787,10 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
           containerStyle: {
             type: "STRING" as const,
             enum: ["card", "banner", "accent-left", "none"],
+            nullable: true,
           },
-          icon: { type: "STRING" as const },
-          groupId: { type: "STRING" as const },
+          icon: { type: "STRING" as const, nullable: true },
+          groupId: { type: "STRING" as const, nullable: true },
         },
         required: ["type", "content"],
       };
