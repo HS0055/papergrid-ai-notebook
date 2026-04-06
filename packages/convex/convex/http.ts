@@ -801,8 +801,7 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         ],
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: 32768,
-          thinkingConfig: { thinkingBudget: 2048 },
+          thinkingConfig: { thinkingBudget: 4096 },
           responseSchema: {
             type: "OBJECT" as const,
             properties: {
