@@ -143,6 +143,32 @@ const SortableBlock: React.FC<{ id: string; children: (props: { dragHandleProps:
   );
 };
 
+interface BlockGroup {
+  key: string;
+  groupId?: string;
+  blocks: Block[];
+}
+
+function groupConsecutiveBlocks(blocks: Block[]): BlockGroup[] {
+  const groups: BlockGroup[] = [];
+  let current: BlockGroup | null = null;
+
+  for (const block of blocks) {
+    if (block.groupId && current?.groupId === block.groupId) {
+      current.blocks.push(block);
+    } else {
+      if (current) groups.push(current);
+      current = {
+        key: block.groupId || block.id,
+        groupId: block.groupId,
+        blocks: [block],
+      };
+    }
+  }
+  if (current) groups.push(current);
+  return groups;
+}
+
 export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, allPages, onNavigate, onBlockDeleted, sounds }) => {
   const [openMenu, setOpenMenu] = useState<'left' | 'right' | null>(null);
   const [showPaperPicker, setShowPaperPicker] = useState(false);
@@ -457,30 +483,61 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
             onDragEnd={(event) => handleDragEnd(event, side)}
           >
             <SortableContext items={blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
-              {blocks.map(block => (
-                <SortableBlock key={block.id} id={block.id}>
-                  {({ dragHandleProps }) => (
-                    <div data-block-id={block.id} className={block.id === newBlockId ? 'anim-block-enter' : ''}>
-                      <BlockErrorBoundary blockType={block.type} blockId={block.id}>
-                        <BlockComponent
-                          block={block}
-                          onChange={handleBlockChange}
-                          onDelete={handleBlockDelete}
-                          allPages={allPages}
-                          onNavigate={onNavigate}
-                          focused={block.id === focusedBlockId}
-                          onInsertAfter={(type) => insertBlockAfter(block.id, type, side)}
-                          selectedPitch={page.paperType === 'music' ? selectedPitch : undefined}
-                          selectedDuration={page.paperType === 'music' ? selectedDuration : undefined}
-                          dragHandleProps={dragHandleProps}
-                          onPenScratch={sounds?.penScratch}
-                          onCheckboxClick={sounds?.checkboxClick}
-                        />
-                      </BlockErrorBoundary>
-                    </div>
-                  )}
-                </SortableBlock>
-              ))}
+              {groupConsecutiveBlocks(blocks).map((group) =>
+                group.groupId ? (
+                  <div key={`group-${group.key}`} className="bg-white/40 backdrop-blur-sm rounded-xl border border-gray-200/60 shadow-sm p-3 mb-3 space-y-0">
+                    {group.blocks.map((block) => (
+                      <SortableBlock key={block.id} id={block.id}>
+                        {({ dragHandleProps }) => (
+                          <div data-block-id={block.id} className={block.id === newBlockId ? 'anim-block-enter' : ''}>
+                            <BlockErrorBoundary blockType={block.type} blockId={block.id}>
+                              <BlockComponent
+                                block={block}
+                                onChange={handleBlockChange}
+                                onDelete={handleBlockDelete}
+                                allPages={allPages}
+                                onNavigate={onNavigate}
+                                focused={block.id === focusedBlockId}
+                                onInsertAfter={(type) => insertBlockAfter(block.id, type, side)}
+                                selectedPitch={page.paperType === 'music' ? selectedPitch : undefined}
+                                selectedDuration={page.paperType === 'music' ? selectedDuration : undefined}
+                                dragHandleProps={dragHandleProps}
+                                onPenScratch={sounds?.penScratch}
+                                onCheckboxClick={sounds?.checkboxClick}
+                              />
+                            </BlockErrorBoundary>
+                          </div>
+                        )}
+                      </SortableBlock>
+                    ))}
+                  </div>
+                ) : (
+                  group.blocks.map((block) => (
+                    <SortableBlock key={block.id} id={block.id}>
+                      {({ dragHandleProps }) => (
+                        <div data-block-id={block.id} className={block.id === newBlockId ? 'anim-block-enter' : ''}>
+                          <BlockErrorBoundary blockType={block.type} blockId={block.id}>
+                            <BlockComponent
+                              block={block}
+                              onChange={handleBlockChange}
+                              onDelete={handleBlockDelete}
+                              allPages={allPages}
+                              onNavigate={onNavigate}
+                              focused={block.id === focusedBlockId}
+                              onInsertAfter={(type) => insertBlockAfter(block.id, type, side)}
+                              selectedPitch={page.paperType === 'music' ? selectedPitch : undefined}
+                              selectedDuration={page.paperType === 'music' ? selectedDuration : undefined}
+                              dragHandleProps={dragHandleProps}
+                              onPenScratch={sounds?.penScratch}
+                              onCheckboxClick={sounds?.checkboxClick}
+                            />
+                          </BlockErrorBoundary>
+                        </div>
+                      )}
+                    </SortableBlock>
+                  ))
+                )
+              )}
             </SortableContext>
           </DndContext>
         </div>
