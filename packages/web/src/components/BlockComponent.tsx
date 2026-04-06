@@ -153,7 +153,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
   };
 
   return (
-    <div className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0 overflow-hidden">
+    <div className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0">
       {/* Block Controls (Hover) */}
       <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
         <div className="p-1 text-gray-400 cursor-move hover:text-gray-600" {...dragHandleProps}>
@@ -294,7 +294,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
         )}
 
         {block.type === BlockType.MOOD_TRACKER && (
-          <div className="flex items-center gap-4" style={{ height: '32px', marginBottom: '32px' }}>
+          <div className="flex items-center gap-3 flex-wrap py-2" style={{ minHeight: '48px', marginBottom: '16px' }}>
             <span className="font-sans text-sm font-bold text-gray-400 uppercase tracking-widest">Mood:</span>
             {['😢', '😕', '😐', '🙂', '😄'].map((emoji, i) => (
               <button
