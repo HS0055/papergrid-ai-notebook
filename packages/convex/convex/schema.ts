@@ -97,6 +97,10 @@ export default defineSchema({
     waterTrackerData: v.optional(v.any()),
     sectionNavData: v.optional(v.any()),
     kanbanData: v.optional(v.any()),
+    // Visual styling
+    containerStyle: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    groupId: v.optional(v.string()),
   }).index("by_page", ["pageId"]),
 
   referenceLayouts: defineTable({
