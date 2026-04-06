@@ -605,7 +605,11 @@ Adhere to the requested aesthetic:
 2. For "planners", "trackers", or "logs": favor GRID with specific columns, WEEKLY_VIEW for weekly spreads, HABIT_TRACKER for habits, TIME_BLOCK for hourly schedules, DAILY_SECTION for day structure, CALENDAR for month views.
 3. Prefer specialized block types: WEEKLY_VIEW over 7-row GRID, HABIT_TRACKER over habits-in-columns GRID, TIME_BLOCK over time-slot GRID.
 4. Use REAL dates based on ${currentDate}. Fill in actual day names, dates, month names — never placeholders like "___".
-5. Assign 'left' or 'right' to each block's side property for 2-page spread layout.
+5. CRITICAL — SPREAD LAYOUT: Each page is a 2-page spread (left page + right page). You MUST use BOTH sides:
+   - Put roughly HALF the blocks on side:"left" and HALF on side:"right".
+   - The first 2-3 sections go on the left page, the remaining sections go on the right page.
+   - NEVER put all blocks on one side. A page with 10 blocks should have ~5 left and ~5 right.
+   - Each side should have at least 3 blocks. An empty right page looks broken.
 6. Pre-populate GRID blocks with realistic headers AND example data rows. CHECKBOX blocks default checked=false.
 7. Each page must have a unique, descriptive title using real dates: "Week of April 7-13" or "April Savings Dashboard".
 8. Vary themeColor subtly across pages for visual interest while maintaining aesthetic coherence.
@@ -635,10 +639,13 @@ GROUP IDS:
 - Use descriptive groupId names: "priorities", "habits", "finances", "schedule", "goals", "notes", "reflection".
 - Every page should have 2-4 visual groups. Do NOT put ALL blocks in one group.
 
-HEADING STYLES:
-- emphasis "bold": Renders as ALL-CAPS SANS-SERIF LABEL (small, tracked). Use for section labels like "PRIORITIES", "HABIT TRACKER", "MONTHLY OVERVIEW".
-- emphasis "highlight": Renders as colored background pill heading. Use for page subtitles.
-- Default (no emphasis): Renders as large handwriting font. Use for page titles and personal headings.
+HEADING RULES:
+- Use MAX 3-4 HEADING blocks per page. More headings = cluttered, not professional.
+- emphasis "bold" + containerStyle "banner": ALL-CAPS section label. Use ONCE per section group.
+- emphasis "highlight": Colored pill subtitle. Use sparingly (1-2 per page max).
+- Default (no emphasis): Large handwriting font. Use only for the page's main title area.
+- NEVER repeat the same heading text. Each heading must be unique and descriptive.
+- A good page: 1 default heading (title area) + 2-3 bold banner headings (section labels) + content blocks.
 
 COLOR VARIETY:
 - Use different colors for different sections on the same page. Finance group = emerald, Goals group = indigo, Habits group = amber, Wellness = pink, Schedule = sky.
