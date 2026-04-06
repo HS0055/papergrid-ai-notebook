@@ -7,6 +7,7 @@ import { AuthPage } from './components/AuthPage';
 import { PricingPage } from './components/PricingPage';
 import { AdminPanel } from './components/AdminPanel';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { BaselineTest } from './components/__debug__/BaselineTest';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -46,6 +47,10 @@ function LoginRoute() {
 }
 
 export default function App() {
+  if (typeof window !== 'undefined' && window.location.search.includes('baselinetest')) {
+    return <BaselineTest />;
+  }
+
   return (
     <ErrorBoundary>
       <AuthProvider>

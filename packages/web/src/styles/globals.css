@@ -21,6 +21,21 @@
   --font-sans: "Inter", sans-serif;
   --font-serif: "Playfair Display", serif;
   --font-marker: "Caveat", cursive;
+  --font-hand-baseline: "Patrick Hand Baseline", "Patrick Hand", cursive;
+}
+
+/* Baseline-lock override for Patrick Hand on Lined paper.
+   Pins the baseline to land on the printed 32px line. Tuned empirically;
+   adjust ascent-override only if visual inspection shows drift. */
+@font-face {
+  font-family: "Patrick Hand Baseline";
+  src: local("Patrick Hand"),
+       url("https://fonts.gstatic.com/s/patrickhand/v19/LDI1apSQOAYtSuYWp8ZhfYe8XsLL.woff2") format("woff2");
+  font-display: swap;
+  ascent-override: 87%;
+  descent-override: 13%;
+  line-gap-override: 0%;
+  size-adjust: 100%;
 }
 
 /* ========================================
