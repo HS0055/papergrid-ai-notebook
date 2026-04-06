@@ -620,32 +620,28 @@ Adhere to the requested aesthetic:
 13. SECTION_NAV: Use on index/overview pages to link to other pages. Include descriptive labels and optional emoji icons.
 14. KANBAN: Use for project management, task boards, workflows. Create 3-4 columns (e.g. "To Do", "In Progress", "Done"). Pre-populate with realistic cards.
 
-=== VISUAL DESIGN (Etsy-Quality) ===
-Make every page look like a PREMIUM Etsy planner template, not a basic app. Use these features:
+=== MANDATORY VISUAL DESIGN ===
+EVERY page MUST use these visual features. Do NOT skip them even when generating multiple pages.
 
-CONTAINER STYLES:
-- containerStyle "banner": Use on HEADING blocks that introduce major sections. Creates a colored background bar. Example: a finance section heading gets containerStyle:"banner", color:"emerald", emphasis:"bold", icon:"💰".
-- containerStyle "card": Use to wrap important standalone blocks (GRID, GOAL_SECTION, KANBAN) in a rounded card with border and shadow.
-- containerStyle "accent-left": Use for sidebar-style content like notes, tips, or reflections. Creates a thick colored left border.
+REQUIRED on EVERY HEADING block:
+- icon: ALWAYS set an emoji icon. Use: ⏰📅🎯💰📊✅📝💡⚡💪🧘💧🍽️📚🏃✈️📈🤝
+- containerStyle: ALWAYS set to "banner" on section headings, "card" on standalone blocks
+- emphasis: "bold" for section labels (ALL-CAPS), default for page titles
 
-ICONS:
-- Add emoji icon field to HEADING and CALLOUT blocks. Use contextual emoji:
-  Financial: 💰 📊 💳 | Goals: 🎯 ⭐ | Habits: ✅ 📋 | Wellness: 🧘 💧 🌿 | Time: ⏰ 📅 | Notes: 📝 💡 | Priority: ⚡ 🔥 | Fitness: 💪 🏃 | Food: 🍽️ 🛒 | Travel: ✈️ 🗺️ | Business: 📈 🤝 | Academic: 📚 🎓
+REQUIRED on EVERY page:
+- groupId: EVERY block MUST have a groupId. Group 2-5 consecutive related blocks with the same groupId.
+- Each page needs 3-4 groups. Name them: "top-priorities", "schedule", "habits", "notes", "reflection", "tracking", etc.
+- Each group uses a DIFFERENT color for visual contrast.
 
-GROUP IDS:
-- Assign matching groupId strings to consecutive blocks that form a visual section. Grouped blocks render inside a shared rounded container.
-- Pattern: HEADING(banner) + related blocks (CHECKBOX, GRID, TEXT), all with same groupId.
-- Example: groupId:"priorities" on a HEADING + 3 CHECKBOXes + a CALLOUT tip.
-- Use descriptive groupId names: "priorities", "habits", "finances", "schedule", "goals", "notes", "reflection".
-- Every page should have 2-4 visual groups. Do NOT put ALL blocks in one group.
+CONTAINER STYLES (use on every page):
+- "banner" on HEADING blocks = colored background section bar
+- "card" on GRID, GOAL_SECTION, KANBAN, HABIT_TRACKER = rounded card with shadow
+- "accent-left" on CALLOUT, QUOTE = colored left border
 
 HEADING RULES:
-- Use MAX 3-4 HEADING blocks per page. More headings = cluttered, not professional.
-- emphasis "bold" + containerStyle "banner": ALL-CAPS section label. Use ONCE per section group.
-- emphasis "highlight": Colored pill subtitle. Use sparingly (1-2 per page max).
-- Default (no emphasis): Large handwriting font. Use only for the page's main title area.
-- NEVER repeat the same heading text. Each heading must be unique and descriptive.
-- A good page: 1 default heading (title area) + 2-3 bold banner headings (section labels) + content blocks.
+- MAX 3-4 HEADING blocks per page.
+- NEVER repeat the same heading text.
+- 1 default heading (page title) + 2-3 bold banner headings (section labels).
 
 COLOR VARIETY:
 - Use different colors for different sections on the same page. Finance group = emerald, Goals group = indigo, Habits group = amber, Wellness = pink, Schedule = sky.
@@ -791,10 +787,9 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
           containerStyle: {
             type: "STRING" as const,
             enum: ["card", "banner", "accent-left", "none"],
-            nullable: true,
           },
-          icon: { type: "STRING" as const, nullable: true },
-          groupId: { type: "STRING" as const, nullable: true },
+          icon: { type: "STRING" as const },
+          groupId: { type: "STRING" as const },
         },
         required: ["type", "content"],
       };
@@ -805,8 +800,8 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         ],
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: 16384,
-          thinkingConfig: { thinkingBudget: 4096 },
+          maxOutputTokens: 32768,
+          thinkingConfig: { thinkingBudget: 2048 },
           responseSchema: {
             type: "OBJECT" as const,
             properties: {
