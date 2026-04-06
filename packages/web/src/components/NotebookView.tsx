@@ -485,7 +485,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({ page, onUpdatePage, 
             <SortableContext items={blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
               {groupConsecutiveBlocks(blocks).map((group) =>
                 group.groupId ? (
-                  <div key={`group-${group.key}`} className="bg-white/40 backdrop-blur-sm rounded-xl border border-gray-200/60 shadow-sm p-3 mb-3 space-y-0">
+                  <div key={`group-${group.key}`} className={`bg-white/40 backdrop-blur-sm rounded-xl border border-gray-200/60 shadow-sm p-3 mb-3 ${
+                    group.groupId?.endsWith('-row') ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : 'space-y-0'
+                  }`}>
                     {group.blocks.map((block) => (
                       <SortableBlock key={block.id} id={block.id}>
                         {({ dragHandleProps }) => (

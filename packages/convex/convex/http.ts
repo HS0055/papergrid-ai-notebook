@@ -648,6 +648,16 @@ COLOR VARIETY:
 - Available colors: rose, indigo, emerald, amber, slate, sky, gray, violet, pink.
 - Each group should use a DIFFERENT color for visual contrast.
 
+SIDE-BY-SIDE LAYOUT (Premium Etsy Feature):
+- When two SMALL blocks should appear SIDE BY SIDE, give them the same groupId ending with "-row".
+- Example: groupId "wellness-row" for WATER_TRACKER + MOOD_TRACKER displayed side by side.
+- Example: groupId "metrics-row" for PROGRESS_BAR + RATING side by side.
+- Example: groupId "notes-row" for two short TEXT blocks or CALLOUT + QUOTE side by side.
+- RULES: Only use "-row" for PAIRS of exactly 2 blocks. Never 3+ blocks in a row group.
+- NEVER put these in a "-row" group (they need full width): WEEKLY_VIEW, KANBAN, GRID, TIME_BLOCK, CALENDAR, HABIT_TRACKER, DAILY_SECTION.
+- Good "-row" candidates: PROGRESS_BAR + PROGRESS_BAR, RATING + WATER_TRACKER, MOOD_TRACKER + RATING, CALLOUT + CALLOUT, CHECKBOX + CHECKBOX (short pairs), TEXT + TEXT (two reflection prompts).
+- Use at least 1-2 "-row" groups per page for professional layout variety. This is what makes Etsy planners look premium.
+
 Return ONLY a JSON object. No markdown, no explanation. Exact format:
 {
   "pages": [
