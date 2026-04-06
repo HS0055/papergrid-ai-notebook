@@ -616,6 +616,35 @@ Adhere to the requested aesthetic:
 13. SECTION_NAV: Use on index/overview pages to link to other pages. Include descriptive labels and optional emoji icons.
 14. KANBAN: Use for project management, task boards, workflows. Create 3-4 columns (e.g. "To Do", "In Progress", "Done"). Pre-populate with realistic cards.
 
+=== VISUAL DESIGN (Etsy-Quality) ===
+Make every page look like a PREMIUM Etsy planner template, not a basic app. Use these features:
+
+CONTAINER STYLES:
+- containerStyle "banner": Use on HEADING blocks that introduce major sections. Creates a colored background bar. Example: a finance section heading gets containerStyle:"banner", color:"emerald", emphasis:"bold", icon:"💰".
+- containerStyle "card": Use to wrap important standalone blocks (GRID, GOAL_SECTION, KANBAN) in a rounded card with border and shadow.
+- containerStyle "accent-left": Use for sidebar-style content like notes, tips, or reflections. Creates a thick colored left border.
+
+ICONS:
+- Add emoji icon field to HEADING and CALLOUT blocks. Use contextual emoji:
+  Financial: 💰 📊 💳 | Goals: 🎯 ⭐ | Habits: ✅ 📋 | Wellness: 🧘 💧 🌿 | Time: ⏰ 📅 | Notes: 📝 💡 | Priority: ⚡ 🔥 | Fitness: 💪 🏃 | Food: 🍽️ 🛒 | Travel: ✈️ 🗺️ | Business: 📈 🤝 | Academic: 📚 🎓
+
+GROUP IDS:
+- Assign matching groupId strings to consecutive blocks that form a visual section. Grouped blocks render inside a shared rounded container.
+- Pattern: HEADING(banner) + related blocks (CHECKBOX, GRID, TEXT), all with same groupId.
+- Example: groupId:"priorities" on a HEADING + 3 CHECKBOXes + a CALLOUT tip.
+- Use descriptive groupId names: "priorities", "habits", "finances", "schedule", "goals", "notes", "reflection".
+- Every page should have 2-4 visual groups. Do NOT put ALL blocks in one group.
+
+HEADING STYLES:
+- emphasis "bold": Renders as ALL-CAPS SANS-SERIF LABEL (small, tracked). Use for section labels like "PRIORITIES", "HABIT TRACKER", "MONTHLY OVERVIEW".
+- emphasis "highlight": Renders as colored background pill heading. Use for page subtitles.
+- Default (no emphasis): Renders as large handwriting font. Use for page titles and personal headings.
+
+COLOR VARIETY:
+- Use different colors for different sections on the same page. Finance group = emerald, Goals group = indigo, Habits group = amber, Wellness = pink, Schedule = sky.
+- Available colors: rose, indigo, emerald, amber, slate, sky, gray, violet, pink.
+- Each group should use a DIFFERENT color for visual contrast.
+
 Return a JSON object with a "pages" array. Each page has: title, paperType, themeColor, and blocks array.`;
 
       // Block schema (reused for each page)
@@ -629,7 +658,7 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
           content: { type: "STRING" as const },
           alignment: { type: "STRING" as const, enum: ["left", "center", "right"] },
           emphasis: { type: "STRING" as const, enum: ["bold", "italic", "highlight", "none"] },
-          color: { type: "STRING" as const, enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray"] },
+          color: { type: "STRING" as const, enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray", "violet", "pink"] },
           side: { type: "STRING" as const, enum: ["left", "right"] },
           gridData: {
             type: "OBJECT" as const,
@@ -752,6 +781,13 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
             },
             nullable: true,
           },
+          containerStyle: {
+            type: "STRING" as const,
+            enum: ["card", "banner", "accent-left", "none"],
+            nullable: true,
+          },
+          icon: { type: "STRING" as const, nullable: true },
+          groupId: { type: "STRING" as const, nullable: true },
         },
         required: ["type", "content"],
       };
@@ -778,7 +814,7 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
                     },
                     themeColor: {
                       type: "STRING" as const,
-                      enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray"],
+                      enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray", "violet", "pink"],
                     },
                     blocks: { type: "ARRAY" as const, items: blockSchema },
                   },
