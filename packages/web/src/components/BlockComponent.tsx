@@ -83,7 +83,7 @@ const getContainerClasses = (style: string | undefined, colorClasses: ReturnType
     case 'card':
       return `bg-white/60 backdrop-blur-sm rounded-xl border ${colorClasses.border} shadow-sm p-4 mb-2`;
     case 'banner':
-      return `${colorClasses.highlight} rounded-lg px-4 py-1 mb-1 shadow-sm border ${colorClasses.border}`;
+      return `${colorClasses.highlight} rounded-lg px-4 py-2 mb-2 shadow-sm border ${colorClasses.border}`;
     case 'accent-left':
       return `border-l-4 ${colorClasses.border} pl-4 mb-1`;
     default:
@@ -171,7 +171,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
         {block.type === BlockType.HEADING && (
           <div className={`relative ${alignmentClass} ${block.icon ? 'flex items-center' : ''}`} style={{ minHeight: '32px', marginBottom: '32px' }}>
             {block.icon && (
-              <span className="text-2xl mr-2 select-none inline-block" style={{ lineHeight: '32px', position: 'relative', top: '7px' }}>
+              <span className={`${block.emphasis === 'bold' ? 'text-sm' : 'text-2xl'} mr-2 select-none inline-block flex-shrink-0`} style={{ lineHeight: '32px', position: 'relative', top: block.emphasis === 'bold' ? '0px' : '7px' }}>
                 {block.icon}
               </span>
             )}
