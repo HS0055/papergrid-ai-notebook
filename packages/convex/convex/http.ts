@@ -648,7 +648,65 @@ COLOR VARIETY:
 - Available colors: rose, indigo, emerald, amber, slate, sky, gray, violet, pink.
 - Each group should use a DIFFERENT color for visual contrast.
 
-Return a JSON object with a "pages" array. Each page has: title, paperType, themeColor, and blocks array.`;
+Return ONLY a JSON object. No markdown, no explanation. Exact format:
+{
+  "pages": [
+    {
+      "title": "Page Title With Real Date",
+      "paperType": "dotted",
+      "themeColor": "indigo",
+      "blocks": [
+        {
+          "type": "HEADING",
+          "content": "Section Title",
+          "side": "left",
+          "color": "indigo",
+          "emphasis": "bold",
+          "containerStyle": "banner",
+          "icon": "🎯",
+          "groupId": "section-name"
+        },
+        {
+          "type": "CHECKBOX",
+          "content": "Task description",
+          "side": "left",
+          "color": "indigo",
+          "checked": false,
+          "groupId": "section-name"
+        },
+        {
+          "type": "WEEKLY_VIEW",
+          "content": "Weekly Schedule",
+          "side": "right",
+          "color": "sky",
+          "containerStyle": "card",
+          "groupId": "schedule",
+          "weeklyViewData": {
+            "startDate": "2026-04-06",
+            "days": [
+              {"label": "Monday", "content": "", "tasks": [{"text": "Team meeting", "checked": false}]},
+              {"label": "Tuesday", "content": "", "tasks": []},
+              {"label": "Wednesday", "content": "", "tasks": []},
+              {"label": "Thursday", "content": "", "tasks": []},
+              {"label": "Friday", "content": "", "tasks": []},
+              {"label": "Saturday", "content": "", "tasks": []},
+              {"label": "Sunday", "content": "", "tasks": []}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+Block types available: TEXT, HEADING, GRID, CHECKBOX, CALLOUT, QUOTE, DIVIDER, MOOD_TRACKER, PRIORITY_MATRIX, INDEX, CALENDAR, WEEKLY_VIEW, HABIT_TRACKER, GOAL_SECTION, TIME_BLOCK, DAILY_SECTION, PROGRESS_BAR, RATING, WATER_TRACKER, SECTION_NAV, KANBAN.
+Paper types: lined, grid, dotted, blank, music, rows, isometric, hex, legal, crumpled.
+Theme colors: rose, indigo, emerald, amber, slate, sky, gray, violet, pink.
+Container styles: banner, card, accent-left, none.
+Side: left, right (use BOTH sides on every page).
+Each block MUST have: type, content, side, color. Optional: emphasis, alignment, containerStyle, icon, groupId, checked, gridData, weeklyViewData, habitTrackerData, goalSectionData, timeBlockData, dailySectionData, calendarData, matrixData, progressBarData, ratingData, waterTrackerData, kanbanData, sectionNavData.
+
+Generate 8-14 blocks per page. Use diverse block types. Fill BOTH left and right sides.`;
 
       // Block schema (reused for each page)
       const blockSchema = {
@@ -802,31 +860,6 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         generationConfig: {
           responseMimeType: "application/json",
           thinkingConfig: { thinkingBudget: 4096 },
-          responseSchema: {
-            type: "OBJECT" as const,
-            properties: {
-              pages: {
-                type: "ARRAY" as const,
-                items: {
-                  type: "OBJECT" as const,
-                  properties: {
-                    title: { type: "STRING" as const },
-                    paperType: {
-                      type: "STRING" as const,
-                      enum: ["lined", "grid", "dotted", "blank", "music", "rows", "isometric", "hex", "legal", "crumpled"],
-                    },
-                    themeColor: {
-                      type: "STRING" as const,
-                      enum: ["rose", "indigo", "emerald", "amber", "slate", "sky", "gray", "violet", "pink"],
-                    },
-                    blocks: { type: "ARRAY" as const, items: blockSchema },
-                  },
-                  required: ["title", "paperType", "themeColor", "blocks"],
-                },
-              },
-            },
-            required: ["pages"],
-          },
         },
         systemInstruction: {
           parts: [
