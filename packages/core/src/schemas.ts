@@ -16,7 +16,7 @@ export const PaperTypeSchema = z.enum([
 
 // Theme colors used across the application
 export const ThemeColorSchema = z.enum([
-  'rose', 'indigo', 'emerald', 'amber', 'slate', 'sky', 'gray',
+  'rose', 'indigo', 'emerald', 'amber', 'slate', 'sky', 'gray', 'violet', 'pink',
 ]);
 
 // GridCell - mirrors GridCell interface
@@ -210,6 +210,9 @@ export const BlockSchema = z.object({
   waterTrackerData: WaterTrackerDataSchema.optional(),
   sectionNavData: SectionNavDataSchema.optional(),
   kanbanData: KanbanDataSchema.optional(),
+  containerStyle: z.enum(['card', 'banner', 'accent-left', 'none']).optional(),
+  icon: z.string().optional(),
+  groupId: z.string().optional(),
 });
 
 // NotebookPage - mirrors NotebookPage interface
@@ -272,6 +275,9 @@ export const AILayoutResponseSchema = z.object({
     waterTrackerData: WaterTrackerDataSchema.optional().nullable(),
     sectionNavData: SectionNavDataSchema.optional().nullable(),
     kanbanData: KanbanDataSchema.optional().nullable(),
+    containerStyle: z.enum(['card', 'banner', 'accent-left', 'none']).optional().nullable(),
+    icon: z.string().optional().nullable(),
+    groupId: z.string().optional().nullable(),
   })),
 });
 

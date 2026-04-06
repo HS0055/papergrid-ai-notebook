@@ -183,6 +183,11 @@ export interface Block {
   waterTrackerData?: WaterTrackerData;
   sectionNavData?: SectionNavData;
   kanbanData?: KanbanData;
+
+  // Visual styling (Etsy-quality planner design)
+  containerStyle?: 'card' | 'banner' | 'accent-left' | 'none';
+  icon?: string;         // emoji icon displayed before content
+  groupId?: string;      // blocks with same groupId share a visual container
 }
 
 export interface NotebookPage {
