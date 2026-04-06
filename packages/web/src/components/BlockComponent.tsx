@@ -78,7 +78,7 @@ const getEmphasisClass = (emphasis?: string, colorClasses?: ReturnType<typeof ge
   }
 };
 
-const getContainerClasses = (style?: string, colorClasses: ReturnType<typeof getColorClasses>): string => {
+const getContainerClasses = (style: string | undefined, colorClasses: ReturnType<typeof getColorClasses>): string => {
   switch (style) {
     case 'card':
       return `bg-white/60 backdrop-blur-sm rounded-xl border ${colorClasses.border} shadow-sm p-4 mb-2`;
