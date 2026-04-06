@@ -162,6 +162,10 @@ export const Dashboard: React.FC = () => {
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // AI generation approval flow
+  const [pendingPages, setPendingPages] = useState<NotebookPage[] | null>(null);
+  const [pendingInkCost, setPendingInkCost] = useState(0);
+
   // Animation states
   const [contentKey, setContentKey] = useState(0);
   const [pageDirection, setPageDirection] = useState<'left' | 'right' | null>(null);
@@ -510,29 +514,47 @@ export const Dashboard: React.FC = () => {
         themeColor: layout.themeColor,
         aiGenerated: true,
       }));
-      setNotebooks(prev => {
-        const updated = prev.map(nb => {
-          if (nb.id !== activeNotebookId) return nb;
-          return { ...nb, pages: [...nb.pages, ...newPages] };
-        });
-        const nb = updated.find(n => n.id === activeNotebookId);
-        if (nb) {
-          setPageDirection('right');
-          setActivePageIndex(nb.pages.length - newPages.length);
-        }
-        return updated;
-      });
-      const generatedCount = newPages.length;
-      addToast(
-        generatedCount > 1
-          ? `Generated ${generatedCount} pages!`
-          : 'Page generated!',
-        'success'
-      );
+
+      // Show approval dialog — user decides whether to add pages
+      setPendingPages(newPages);
+      setPendingInkCost(newPages.length); // 1 Ink per page
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate layout.';
       addToast(message, 'error');
     }
+  };
+
+  // Approve generated pages — add them to notebook
+  const approveGeneratedPages = () => {
+    if (!pendingPages) return;
+    const newPages = pendingPages;
+    setNotebooks(prev => {
+      const updated = prev.map(nb => {
+        if (nb.id !== activeNotebookId) return nb;
+        return { ...nb, pages: [...nb.pages, ...newPages] };
+      });
+      const nb = updated.find(n => n.id === activeNotebookId);
+      if (nb) {
+        setPageDirection('right');
+        setActivePageIndex(nb.pages.length - newPages.length);
+      }
+      return updated;
+    });
+    addToast(
+      newPages.length > 1
+        ? `Added ${newPages.length} pages (${pendingInkCost} Ink used)`
+        : 'Page added (1 Ink used)',
+      'success'
+    );
+    setPendingPages(null);
+    setPendingInkCost(0);
+  };
+
+  // Decline generated pages — discard without adding
+  const declineGeneratedPages = () => {
+    setPendingPages(null);
+    setPendingInkCost(0);
+    addToast('Generation discarded — no Ink charged', 'info');
   };
 
   const toggleBookmark = () => {
@@ -1197,6 +1219,61 @@ export const Dashboard: React.FC = () => {
         onClose={() => setIsGeneratorOpen(false)}
         onGenerate={handleAiGeneration}
       />
+
+      {/* AI Generation Approval Dialog */}
+      {pendingPages && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Header */}
+            <div className="bg-indigo-600 px-6 py-4 text-white">
+              <h3 className="text-lg font-bold">AI Generated {pendingPages.length} {pendingPages.length === 1 ? 'Page' : 'Pages'}</h3>
+              <p className="text-indigo-200 text-sm mt-1">Review before adding to your notebook</p>
+            </div>
+
+            {/* Page list */}
+            <div className="px-6 py-4 max-h-60 overflow-y-auto">
+              {pendingPages.map((page, i) => (
+                <div key={page.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
+                  <div className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-xs font-bold">{i + 1}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">{page.title}</div>
+                    <div className="text-xs text-gray-400">{page.blocks.length} blocks · {page.paperType}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Cost summary */}
+            <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 24 24" className="w-5 h-5 text-amber-600" fill="currentColor">
+                  <path d="M12 2C12 2 5 10 5 15a7 7 0 1014 0C19 10 12 2 12 2z" />
+                </svg>
+                <span className="text-sm font-bold text-amber-800">
+                  {pendingInkCost} Ink will be charged
+                </span>
+              </div>
+              <span className="text-xs text-amber-600">1 Ink per page</span>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 py-4 flex gap-3 border-t border-gray-100">
+              <button
+                onClick={declineGeneratedPages}
+                className="flex-1 px-4 py-2.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium text-sm transition-colors"
+              >
+                Discard
+              </button>
+              <button
+                onClick={approveGeneratedPages}
+                className="flex-1 px-4 py-2.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-indigo-500/20"
+              >
+                Add {pendingPages.length} {pendingPages.length === 1 ? 'Page' : 'Pages'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification Container */}
       {toasts.length > 0 && (

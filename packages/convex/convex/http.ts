@@ -1116,20 +1116,16 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         );
       }
 
-      // --- Charge Ink per page generated ---
+      // Charge Ink per page generated (1 Ink per page)
       let inkCharged = 0;
       try {
         if (sessionToken && pages.length > 0) {
           const chargeResult = await ctx.runMutation(api.users.spendInk, {
             sessionToken,
             action: "layout",
-            amount: pages.length, // 1 Ink per page
+            amount: pages.length,
           });
-          inkCharged = pages.length;
-          if (!chargeResult.allowed) {
-            // User ran out mid-generation — still return pages but warn
-            inkCharged = 0;
-          }
+          inkCharged = chargeResult.allowed ? pages.length : 0;
         }
       } catch (e) {
         console.warn("Ink charging skipped:", e);
