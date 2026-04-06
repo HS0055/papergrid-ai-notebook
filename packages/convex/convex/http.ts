@@ -805,6 +805,7 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
         ],
         generationConfig: {
           responseMimeType: "application/json",
+          maxOutputTokens: 16384,
           thinkingConfig: { thinkingBudget: 4096 },
           responseSchema: {
             type: "OBJECT" as const,
@@ -862,14 +863,23 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
       const geminiData = await geminiResponse.json();
 
       // Extract the generated text from Gemini response
+      // Check for finish reason issues
+      const finishReason = geminiData?.candidates?.[0]?.finishReason;
+      if (finishReason && finishReason !== "STOP") {
+        console.warn(`Gemini finishReason: ${finishReason}`);
+      }
+
       const generatedText =
-        geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        geminiData?.candidates?.[0]?.content?.parts?.find((p: Record<string, unknown>) => typeof p.text === "string")?.text;
       if (!generatedText) {
+        console.error("Gemini returned no text. Full response:", JSON.stringify(geminiData).slice(0, 500));
         return new Response(
-          JSON.stringify({ error: "No content generated" }),
+          JSON.stringify({ error: "No content generated", finishReason }),
           { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      console.log(`Gemini response: ${generatedText.length} chars, finishReason: ${finishReason}`);
 
       // Parse and validate the response
       const layoutData = JSON.parse(generatedText);
