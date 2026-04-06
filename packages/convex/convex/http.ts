@@ -1062,6 +1062,16 @@ Return a JSON object with a "pages" array. Each page has: title, paperType, them
             b.type === "DAILY_SECTION"
               ? parseDailySectionData(b.dailySectionData)
               : undefined,
+          // Phase 2 block types — pass through as-is
+          progressBarData: b.type === "PROGRESS_BAR" && b.progressBarData ? b.progressBarData : undefined,
+          ratingData: b.type === "RATING" && b.ratingData ? b.ratingData : undefined,
+          waterTrackerData: b.type === "WATER_TRACKER" && b.waterTrackerData ? b.waterTrackerData : undefined,
+          sectionNavData: b.type === "SECTION_NAV" && b.sectionNavData ? b.sectionNavData : undefined,
+          kanbanData: b.type === "KANBAN" && b.kanbanData ? b.kanbanData : undefined,
+          // Visual styling fields
+          containerStyle: typeof b.containerStyle === "string" ? b.containerStyle : undefined,
+          icon: typeof b.icon === "string" ? b.icon : undefined,
+          groupId: typeof b.groupId === "string" ? b.groupId : undefined,
         }));
 
       // Multi-page support: AI returns { pages: [...] }
