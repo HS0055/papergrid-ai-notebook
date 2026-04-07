@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
 import { detectDomain, getDomainRules, getDesignPrinciples } from "./domainDetection";
-import { REFERENCE_LAYOUTS, type CompactBlock, type CompactReference } from "./referenceLayouts";
+import type { CompactBlock, CompactReference } from "./referenceLayouts";
 
 // Generate a procedural premium SVG data URL as fallback cover
 function buildFallbackCover(prompt: string): string {
@@ -1520,6 +1520,44 @@ http.route({
   }),
 });
 
+// ── iOS Launch Waitlist ───────────────────────────────────
+http.route({
+  path: "/api/waitlist",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const body = await request.json();
+      const email = typeof body?.email === "string" ? body.email.trim() : "";
+      const source = typeof body?.source === "string" ? body.source : "ios-landing";
+      const referrer = request.headers.get("referer") ?? undefined;
+
+      if (!email) {
+        return new Response(JSON.stringify({ error: "Email is required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (email.length > 254) {
+        return new Response(JSON.stringify({ error: "Email is too long" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await ctx.runMutation(api.waitlist.join, { email, source, referrer });
+      // Always return the same shape regardless of isNew so the client can't
+      // tell whether the email was already on the list (no enumeration).
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to join waitlist");
+      return new Response(JSON.stringify({ error: message }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // ── Notebook sync: full load ──────────────────────────────
 http.route({
   path: "/api/notebooks",
@@ -1995,6 +2033,7 @@ for (const path of [
   "/api/auth/logout",
   "/api/auth/forgot-password",
   "/api/auth/reset-password",
+  "/api/waitlist",
   "/api/notebooks",
   "/api/notebooks/save",
   "/api/notebooks/delete",

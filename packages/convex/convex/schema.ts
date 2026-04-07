@@ -51,6 +51,21 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_code", ["code"]),
 
+  // iOS launch waitlist — emails collected from the landing page
+  // IOSWaitlistSection. Submitter gets a confirmation email + 25-ink bonus on
+  // launch day + 20% lifetime Pro discount.
+  waitlist: defineTable({
+    email: v.string(),
+    source: v.optional(v.string()),
+    referrer: v.optional(v.string()),
+    notifiedAt: v.optional(v.string()),
+    redeemedAt: v.optional(v.string()),
+    convertedUserId: v.optional(v.id("users")),
+    createdAt: v.string(),
+  })
+    .index("by_email", ["email"])
+    .index("by_source", ["source"]),
+
   notebooks: defineTable({
     userId: v.id("users"),
     title: v.string(),
