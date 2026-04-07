@@ -239,6 +239,17 @@ export interface LinedPaperSettings {
   fontFamily: 'hand' | 'sans' | 'serif' | 'mono';
 }
 
+/**
+ * Page-level data for Grid paper. Each printed grid cell can hold ONE
+ * character. The grid is sparse — cells default to empty. Coordinates are
+ * in cell units (not pixels), where (0,0) is the top-left cell of the
+ * paper content area.
+ */
+export interface GridSheetData {
+  /** Sparse map of "row,col" → single character. */
+  cells: Record<string, string>;
+}
+
 export interface NotebookPage {
   id: string;
   title: string;
@@ -252,6 +263,7 @@ export interface NotebookPage {
   showMathResults?: boolean;
   hexMapData?: HexMapData;
   isoFlowData?: IsoFlowData;
+  gridSheetData?: GridSheetData;
 }
 
 export interface Notebook {

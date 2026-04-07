@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback, Component, ErrorInfo, ReactNode } from 'react';
-import { NotebookPage, Block, BlockType, LinedPaperSettings, HexMapData, IsoFlowData } from '@papergrid/core';
+import { NotebookPage, Block, BlockType, LinedPaperSettings, HexMapData, IsoFlowData, GridSheetData } from '@papergrid/core';
 import { BlockComponent } from './BlockComponent';
 import { useMathEngine } from '../hooks/useMathEngine';
 import { PianoKeyboard } from './PianoKeyboard';
 import { HexPaperCanvas } from './planner/HexPaperCanvas';
 import { IsoPaperCanvas } from './planner/IsoPaperCanvas';
+import { GridPaperCanvas } from './planner/GridPaperCanvas';
 import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music, Calendar, CalendarDays, CheckSquare, Target, Clock, Sun, AlertTriangle, Bookmark } from 'lucide-react';
 import { isNativeApp } from '../utils/platform';
 import { triggerHaptic } from '../utils/haptics';
 import { ImpactStyle } from '@capacitor/haptics';
+import { useKeyboardHandler } from '../hooks/useKeyboardHandler';
+import { KeyboardToolbar } from './ios/KeyboardToolbar';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -178,6 +181,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   isBookmarked, onToggleBookmark, onOpenAIGenerator,
 }) => {
   const native = isNativeApp();
+  const { keyboardVisible, keyboardHeight } = useKeyboardHandler();
   const [openMenu, setOpenMenu] = useState<'left' | 'right' | null>(null);
   const [showPaperPicker, setShowPaperPicker] = useState(false);
   const [mobileSide, setMobileSide] = useState<'left' | 'right'>('left');
@@ -187,8 +191,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const [selectedDuration, setSelectedDuration] = useState<'whole' | 'half' | 'quarter' | 'eighth'>('quarter');
   const paperPickerRef = useRef<HTMLDivElement>(null);
 
-  // Math Engine
-  const showMath = page.showMathResults !== false;
+  // Math Engine — only runs on Grid paper. Other papers (Lined, Music, Hex, Iso, Dotted, Blank)
+  // are NOT calculator surfaces; auto-evaluation there pollutes the writing experience.
+  const showMath = page.paperType === 'grid' && page.showMathResults !== false;
   const mathResults = useMathEngine(page.blocks, showMath);
 
   // Close paper picker on outside click
@@ -217,6 +222,90 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       return () => clearTimeout(timer);
     }
   }, [focusedBlockId]);
+
+  // ── Auto-scroll focused input above the iOS keyboard ──────
+  // Manual scrollTop on the nearest [data-scroll-container] — scrollIntoView
+  // is unreliable on WKWebView with nested scroll containers. Runs on every
+  // focusin (not gated on keyboardVisible) so switching between blocks while
+  // the keyboard stays up also scrolls the cursor into view.
+  useEffect(() => {
+    if (!native) return;
+
+    const scrollFocusedIntoView = () => {
+      const el = document.activeElement;
+      if (
+        !(el instanceof HTMLElement) ||
+        !el.matches('input, textarea, [contenteditable="true"], [contenteditable=""]')
+      ) {
+        return;
+      }
+      requestAnimationFrame(() => {
+        const container = el.closest<HTMLElement>('[data-scroll-container]');
+        if (!container) return;
+        const elRect = el.getBoundingClientRect();
+        const cRect = container.getBoundingClientRect();
+        const elTop = elRect.top - cRect.top + container.scrollTop;
+        const targetTop = elTop - cRect.height / 2 + elRect.height / 2;
+        container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+      });
+    };
+
+    document.addEventListener('focusin', scrollFocusedIntoView);
+    // Re-scroll on viewport resize (keyboard show/hide with resize:body)
+    const onResize = () => scrollFocusedIntoView();
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      document.removeEventListener('focusin', scrollFocusedIntoView);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [native]);
+
+  // ── Tap-outside-to-dismiss keyboard ───────────────────────
+  // Mirrors iOS Notes.app: tapping any non-input region collapses
+  // the keyboard. Uses pointerdown (not click) to fire BEFORE the
+  // browser shifts focus, so the active textarea blurs cleanly.
+  useEffect(() => {
+    if (!native || !keyboardVisible) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest('input, textarea, [contenteditable="true"], [contenteditable=""]') ||
+        target.closest('[data-keyboard-toolbar]') ||
+        target.closest('button')
+      ) {
+        return;
+      }
+      import('@capacitor/keyboard').then(({ Keyboard }) => {
+        Keyboard.hide().catch(() => {});
+      });
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    return () => document.removeEventListener('pointerdown', handlePointerDown, { capture: true } as EventListenerOptions);
+  }, [native, keyboardVisible]);
+
+  // ── Keyboard toolbar handlers ─────────────────────────────
+  // No-op formatting actions for now — full rich-text wiring lands in
+  // a follow-up. Done button uses Capacitor.Keyboard.hide() which
+  // also blurs the active element in WKWebView.
+  const handleKeyboardToolbarAction = (actionId: string) => {
+    void actionId;
+  };
+
+  const handleKeyboardDismiss = () => {
+    if (!isNativeApp()) {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      return;
+    }
+    import('@capacitor/keyboard').then(({ Keyboard }) => {
+      Keyboard.hide().catch(() => {});
+    });
+  };
 
   const handleBlockChange = (id: string, updated: Partial<Block>) => {
     const newBlocks = page.blocks.map(b => b.id === id ? { ...b, ...updated } : b);
@@ -284,8 +373,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const handleEmptySpaceClick = (e: React.MouseEvent, side: 'left' | 'right') => {
     const target = e.target as HTMLElement;
     if (target.closest('[data-block-id]')) return;
-    // On hex/iso paper the canvas owns empty-space clicks — don't auto-add a text block.
-    if (page.paperType === 'hex' || page.paperType === 'isometric') return;
+    // On hex/iso/grid paper the canvas owns empty-space clicks — don't auto-add a text block.
+    if (page.paperType === 'hex' || page.paperType === 'isometric' || page.paperType === 'grid') return;
     addBlock(BlockType.TEXT, side);
   };
 
@@ -295,6 +384,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
   const handleIsoFlowChange = (next: IsoFlowData) => {
     onUpdatePage({ ...page, isoFlowData: next });
+  };
+
+  const handleGridSheetChange = (next: GridSheetData) => {
+    onUpdatePage({ ...page, gridSheetData: next });
   };
 
   const handleDragEnd = (event: DragEndEvent, side: 'left' | 'right') => {
@@ -391,7 +484,12 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   };
 
   // ── FAB Button ────────────────────────────────────────────
-  const renderFAB = (side: 'left' | 'right') => (
+  // Completely unmount when keyboard is visible to avoid any z-index / stacking
+  // leakage above the keyboard. The tiny mount/unmount cost is negligible and
+  // gives us a guaranteed-clean hide.
+  const renderFAB = (side: 'left' | 'right') => {
+    if (keyboardVisible) return null;
+    return (
     <div
       className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none"
       style={{ bottom: '12px' }}
@@ -410,16 +508,20 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         <Plus size={22} />
       </button>
     </div>
-  );
+    );
+  };
 
   // ── Native AI FAB ─────────────────────────────────────────
   // Floating sparkle button for AI layout generation. Native-only, pulses to draw attention.
+  // Unmounted while the keyboard is visible so it cannot leak above it.
   const renderAIFab = () => {
-    if (!native || !onOpenAIGenerator) return null;
+    if (!native || !onOpenAIGenerator || keyboardVisible) return null;
     return (
       <div
         className="absolute right-4 z-40 pointer-events-none"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 76px)' }}
+        style={{
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 76px)',
+        }}
       >
         <button
           onClick={() => {
@@ -564,7 +666,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
   // ── Render a Page Panel ───────────────────────────────────
   const renderPagePanel = (side: 'left' | 'right', blocks: Block[], isLeft: boolean) => (
-    <div className={`flex-1 h-full bg-paper ${
+    <div className={`flex-1 min-h-0 bg-paper ${
       isLeft
         ? 'rounded-t-lg md:rounded-l-lg md:rounded-tr-none border-b md:border-b-0 md:border-r border-black/20'
         : 'rounded-b-lg md:rounded-r-lg md:rounded-bl-none border-t md:border-t-0 md:border-l border-white/50'
@@ -682,9 +784,16 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       {/* Content Area — bottom padding clears the FAB on mobile */}
       <div
+        data-scroll-container
         className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 md:px-10 pt-3 md:pt-8 pb-20 md:pb-8 ${bgClass} relative cursor-text`}
+        data-paper-type={page.paperType}
         data-page-font={page.paperType === 'lined' ? (page.linedSettings?.fontFamily ?? 'hand') : undefined}
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          // When keyboard is up, extend scroll padding so `scrollIntoView`
+          // doesn't land the cursor behind the toolbar (44px) + breathing room (44px).
+          scrollPaddingBottom: keyboardVisible ? '88px' : '0px',
+        }}
         onClick={(e) => handleEmptySpaceClick(e, side)}
       >
         {page.paperType === 'lined' && page.linedSettings?.showMargin && (
@@ -705,8 +814,11 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         {page.paperType === 'isometric' && isLeft && (
           <IsoPaperCanvas data={page.isoFlowData} onChange={handleIsoFlowChange} />
         )}
-        <div className={`relative z-10 min-h-full ${(page.paperType === 'hex' || page.paperType === 'isometric') ? 'pointer-events-none [&_[data-block-id]]:pointer-events-auto' : ''}`}>
-          {blocks.length === 0 && page.paperType !== 'hex' && page.paperType !== 'isometric' && (
+        {page.paperType === 'grid' && isLeft && (
+          <GridPaperCanvas data={page.gridSheetData} onChange={handleGridSheetChange} />
+        )}
+        <div className={`relative z-10 min-h-full ${(page.paperType === 'hex' || page.paperType === 'isometric' || page.paperType === 'grid') ? 'pointer-events-none [&_[data-block-id]]:pointer-events-auto' : ''}`}>
+          {blocks.length === 0 && page.paperType !== 'hex' && page.paperType !== 'isometric' && page.paperType !== 'grid' && (
             <div className="text-gray-400 font-hand text-xl md:text-2xl text-center mt-16 md:mt-20 opacity-50 select-none pointer-events-none">
               Tap anywhere to start writing
             </div>
@@ -716,6 +828,11 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               {page.paperType === 'hex'
                 ? 'Tap anywhere to place a hex · Shift-click a hex to connect'
                 : 'Tap anywhere to place a step · Shift-click a step to connect'}
+            </div>
+          )}
+          {blocks.length === 0 && page.paperType === 'grid' && isLeft && (
+            <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
+              Tap any cell to write · arrow keys move · backspace deletes
             </div>
           )}
           <DndContext
@@ -860,6 +977,14 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       {/* Native AI FAB — floats over entire notebook */}
       {renderAIFab()}
+
+      {/* iOS Keyboard Toolbar — pinned to top of keyboard, native-only */}
+      <KeyboardToolbar
+        visible={keyboardVisible}
+        keyboardHeight={keyboardHeight}
+        onAction={handleKeyboardToolbarAction}
+        onDismiss={handleKeyboardDismiss}
+      />
     </div>
   );
 };

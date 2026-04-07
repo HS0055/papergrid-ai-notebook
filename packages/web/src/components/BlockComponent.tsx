@@ -193,7 +193,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
                     ? `text-3xl font-bold font-hand ${colorClasses.bg} px-4 rounded-lg shadow-sm border ${colorClasses.border}`
                     : `text-3xl font-bold font-hand text-gray-800 placeholder-gray-300`
               }`}
-              style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '7px' }}
+              style={{ lineHeight: '32px', height: '32px' }}
               value={block.content}
               onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
               placeholder="Section Heading..."
@@ -230,7 +230,6 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             <button
               onClick={() => { onChange(block.id, { checked: !block.checked }); onCheckboxClick?.(); }}
               className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
-              style={{ position: 'relative', top: '4px' }}
               aria-label={block.checked ? 'Uncheck' : 'Check'}
             >
               <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
@@ -243,7 +242,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             </button>
             <input
               className={`flex-1 bg-transparent font-hand text-xl text-gray-800 focus:outline-none border-none p-0 m-0 placeholder-gray-300 ${emphasisClass}`}
-              style={{ lineHeight: '32px', height: '32px', position: 'relative', top: '9px' }}
+              style={{ lineHeight: '32px', height: '32px' }}
               value={block.content}
               onChange={(e) => { onChange(block.id, { content: e.target.value }); onPenScratch?.(); }}
               onKeyDown={handleKeyDown}
@@ -282,7 +281,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
             <textarea
               ref={quoteRef}
               className={`w-full bg-transparent font-serif text-2xl italic text-gray-700 resize-none focus:outline-none overflow-hidden placeholder-gray-300 block p-0 m-0 border-none ${alignmentClass}`}
-              style={{ lineHeight: '32px', minHeight: '32px', position: 'relative', top: '9px' }}
+              style={{ lineHeight: '32px', minHeight: '32px' }}
               value={block.content}
               onChange={handleTextChange}
               placeholder="Quote..."

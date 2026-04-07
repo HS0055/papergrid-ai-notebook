@@ -57,8 +57,13 @@
 @font-face {
   font-family: "Patrick Hand Baseline";
   src: url("/fonts/PatrickHand-Regular.ttf") format("truetype");
-  font-display: block;
-  ascent-override: 97%;
+  /* swap (not block) — avoid a 3s blank-text flash on cold WKWebView start */
+  font-display: swap;
+  /* 87%: 87% × 21px = 18.27px ascent + 13% × 21px = 2.73px descent = 21px content.
+     Within a 32px line box, baseline lands at ~23.8px from top → just above the
+     printed rule at y=31. Previously this was 97% (typo), which pushed the
+     baseline 2.1px BELOW the rule and made descenders collide with the next line. */
+  ascent-override: 87%;
   descent-override: 13%;
   line-gap-override: 0%;
   size-adjust: 100%;
@@ -400,54 +405,53 @@
 }
 
 /* ========================================
-   PAGE FONT OVERRIDE (Lined paper setting)
-   Pins font-size + line-height to the baseline grid (32px) so all 4 fonts
-   keep text on the printed lines. Hand uses the baseline-locked variant.
+   BASELINE GRID — applies to ALL papers that have a 32px line/cell rhythm
+   (Lined and Grid). Locks every TEXT block's textarea baselines onto the
+   printed grid by zeroing per-block padding/margin and pinning content-area
+   padding to a 32px multiple.
    ======================================== */
-[data-page-font="hand"] textarea,
-[data-page-font="hand"] input[type="text"]:not([data-heading]) {
-  font-family: var(--font-hand-baseline) !important;
-  font-size: 21px !important;
-  line-height: 32px !important;
+[data-paper-type="lined"],
+[data-paper-type="grid"] {
+  padding-top: 32px !important;
+  padding-bottom: 32px !important;
 }
 
-[data-page-font="sans"] textarea,
-[data-page-font="sans"] input[type="text"]:not([data-heading]) {
-  font-family: var(--font-sans) !important;
-  font-size: 21px !important;
-  line-height: 32px !important;
-}
-
-[data-page-font="serif"] textarea,
-[data-page-font="serif"] input[type="text"]:not([data-heading]) {
-  font-family: var(--font-serif) !important;
-  font-size: 21px !important;
-  line-height: 32px !important;
-}
-
-[data-page-font="mono"] textarea,
-[data-page-font="mono"] input[type="text"]:not([data-heading]) {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
-  font-size: 21px !important;
-  line-height: 32px !important;
-}
-
-/* Lined paper baseline grid: zero out per-block vertical offsets so the
-   textarea's first line-box starts at the content-area top edge, where the
-   .paper-lines background pattern also starts. Without this every TEXT block
-   adds 4-6px of drift and accumulates across multiple blocks. */
-[data-page-font] [data-block-type="TEXT"] {
+[data-paper-type="lined"] [data-block-type="TEXT"],
+[data-paper-type="grid"] [data-block-type="TEXT"] {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   margin-bottom: 0 !important;
 }
 
-/* Force content-area top/bottom padding to a 32px multiple so the FIRST
-   line-box top sits at exactly y=0 of the .paper-lines background tile.
-   Mobile py-4 (16px) breaks this; this rule normalizes both. */
-[data-page-font] {
-  padding-top: 32px !important;
-  padding-bottom: 32px !important;
+/* Lined and Grid both render body text in Patrick Hand baseline-locked.
+   Grid uses the same font for the typing experience but has its own
+   per-cell math input via the GridPaperCanvas (see NotebookView). */
+[data-paper-type="lined"] textarea,
+[data-paper-type="lined"] input[type="text"]:not([data-heading]),
+[data-paper-type="grid"] textarea,
+[data-paper-type="grid"] input[type="text"]:not([data-heading]) {
+  font-family: var(--font-hand-baseline) !important;
+  font-size: 21px !important;
+  line-height: 32px !important;
+}
+
+/* ========================================
+   PAGE FONT PICKER (Lined ONLY — overrides the default hand font above
+   when the user explicitly selects sans/serif/mono in paper settings)
+   ======================================== */
+[data-page-font="sans"] textarea,
+[data-page-font="sans"] input[type="text"]:not([data-heading]) {
+  font-family: var(--font-sans) !important;
+}
+
+[data-page-font="serif"] textarea,
+[data-page-font="serif"] input[type="text"]:not([data-heading]) {
+  font-family: var(--font-serif) !important;
+}
+
+[data-page-font="mono"] textarea,
+[data-page-font="mono"] input[type="text"]:not([data-heading]) {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important;
 }
 
 /* ========================================

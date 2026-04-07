@@ -22,6 +22,11 @@ export const LinedPaperSettingsSchema = z.object({
   fontFamily: z.enum(['hand', 'sans', 'serif', 'mono']).default('hand'),
 });
 
+// GridSheetData — sparse "row,col" → single-character map for Grid paper math
+export const GridSheetDataSchema = z.object({
+  cells: z.record(z.string(), z.string().max(1)),
+});
+
 // Theme colors used across the application
 export const ThemeColorSchema = z.enum([
   'rose', 'indigo', 'emerald', 'amber', 'slate', 'sky', 'gray', 'violet', 'pink',
@@ -277,6 +282,7 @@ export const NotebookPageSchema = z.object({
   showMathResults: z.boolean().optional(),
   hexMapData: HexMapDataSchema.optional(),
   isoFlowData: IsoFlowDataSchema.optional(),
+  gridSheetData: GridSheetDataSchema.optional(),
 });
 
 // Notebook - mirrors Notebook interface
