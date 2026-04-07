@@ -380,11 +380,47 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   }, [native, keyboardVisible]);
 
   // ── Keyboard toolbar handlers ─────────────────────────────
-  // No-op formatting actions for now — full rich-text wiring lands in
-  // a follow-up. Done button uses Capacitor.Keyboard.hide() which
-  // also blurs the active element in WKWebView.
+  // Real formatting actions: heading/checkbox/quote/divider INSERT a new
+  // block after the current one. Bold/italic toggle the current block's
+  // emphasis. Undo/redo are placeholders pending history store.
   const handleKeyboardToolbarAction = (actionId: string) => {
-    void actionId;
+    const el = document.activeElement;
+    const blockEl = el instanceof HTMLElement ? el.closest('[data-block-id]') : null;
+    const currentBlockId = blockEl?.getAttribute('data-block-id');
+    const currentBlock = currentBlockId ? page.blocks.find(b => b.id === currentBlockId) : null;
+    const activeSide: 'left' | 'right' = currentBlock?.side === 'right' ? 'right' : 'left';
+
+    switch (actionId) {
+      case 'heading':
+      case 'checkbox':
+      case 'quote':
+      case 'divider': {
+        const typeMap = {
+          heading: BlockType.HEADING,
+          checkbox: BlockType.CHECKBOX,
+          quote: BlockType.QUOTE,
+          divider: BlockType.DIVIDER,
+        } as const;
+        const type = typeMap[actionId as keyof typeof typeMap];
+        if (currentBlock) {
+          insertBlockAfter(currentBlock.id, type, activeSide);
+        } else {
+          addBlock(type, mobileSide);
+        }
+        return;
+      }
+      case 'bold':
+      case 'italic': {
+        if (currentBlock) {
+          const next = currentBlock.emphasis === actionId ? 'none' : (actionId as 'bold' | 'italic');
+          handleBlockChange(currentBlock.id, { emphasis: next });
+        }
+        return;
+      }
+      case 'undo':
+      case 'redo':
+        return;
+    }
   };
 
   const handleKeyboardDismiss = () => {
@@ -773,12 +809,14 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   // ── Render a Page Panel ───────────────────────────────────
   const renderPagePanel = (side: 'left' | 'right', blocks: Block[], isLeft: boolean) => (
     <div className={`flex-1 min-h-0 bg-paper ${
-      isLeft
-        ? 'rounded-t-lg md:rounded-l-lg md:rounded-tr-none border-b md:border-b-0 md:border-r border-black/20'
-        : 'rounded-b-lg md:rounded-r-lg md:rounded-bl-none border-t md:border-t-0 md:border-l border-white/50'
+      native
+        ? 'border-0 rounded-none'
+        : isLeft
+          ? 'rounded-t-lg md:rounded-l-lg md:rounded-tr-none border-b md:border-b-0 md:border-r border-black/20'
+          : 'rounded-b-lg md:rounded-r-lg md:rounded-bl-none border-t md:border-t-0 md:border-l border-white/50'
     } overflow-hidden relative flex flex-col`}>
-      {/* Fold Shadow */}
-      {isLeft ? (
+      {/* Fold Shadow — DESKTOP ONLY. On a phone there is no "book", just a page. */}
+      {!native && (isLeft ? (
         <>
           <div className="hidden md:block absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black/20 to-transparent pointer-events-none z-20" />
           <div className="md:hidden absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/20 to-transparent pointer-events-none z-20" />
@@ -788,71 +826,53 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           <div className="hidden md:block absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-black/20 to-transparent pointer-events-none z-20" />
           <div className="md:hidden absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black/20 to-transparent pointer-events-none z-20" />
         </>
-      )}
+      ))}
 
       {/* Header
-          Native: single 36px combo row on EVERY page panel (title + paper + bookmark + L/R switch)
-                  Both left AND right panels show their own header so the L/R toggle is
-                  always visible — fixes the bug where switching to "R" hid the toggle
-                  and stranded the user with no way back.
+          Native: clean 52pt header with title + paper pill + bookmark.
+                  L/R switch moved to a floating segmented control above the
+                  tab bar (thumb-zone, 44pt targets, no crushing).
           Web:    separate 48/64px headers per page (unchanged) */}
       {native ? (
-        (
-          <div className="h-9 border-b border-gray-200 flex items-center gap-2 px-3 bg-gradient-to-b from-white to-gray-50 shrink-0">
-            <input
-              className={`flex-1 min-w-0 text-base text-gray-800 bg-transparent outline-none placeholder-gray-300 truncate ${titleFontClass}`}
-              value={page.title}
-              onChange={(e) => onUpdatePage({...page, title: e.target.value})}
-              placeholder="Untitled"
-            />
-            {/* Paper type pill */}
-            <div className="relative">
-              <button
-                onClick={() => setShowPaperPicker(!showPaperPicker)}
-                className="flex items-center gap-0.5 px-2 h-6 rounded-full bg-gray-100 text-[10px] font-sans uppercase tracking-wider text-gray-600 active:scale-95 transition-transform"
-                aria-label="Change paper type"
-                aria-expanded={showPaperPicker}
-              >
-                <span>{PAPER_TYPES.find(p => p.value === (page.paperType || 'lined'))?.label || 'Lined'}</span>
-                <ChevronDown size={10} className={`transition-transform ${showPaperPicker ? 'rotate-180' : ''}`} />
-              </button>
-              {showPaperPicker && renderPaperPicker()}
-            </div>
-            {/* Bookmark toggle */}
-            {onToggleBookmark && (
-              <button
-                onClick={onToggleBookmark}
-                className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors active:scale-90 ${
-                  isBookmarked ? 'text-amber-500' : 'text-gray-300'
-                }`}
-                aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark page'}
-              >
-                <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
-              </button>
-            )}
-            {/* Side switch — micro segmented control */}
-            <div className="flex bg-gray-100 rounded-full p-0.5">
-              <button
-                onClick={() => setMobileSide('left')}
-                className={`w-7 h-5 rounded-full text-[9px] font-bold transition-all ${
-                  mobileSide === 'left' ? 'bg-indigo-600 text-white' : 'text-gray-400'
-                }`}
-                aria-label="Show left page"
-              >
-                L
-              </button>
-              <button
-                onClick={() => setMobileSide('right')}
-                className={`w-7 h-5 rounded-full text-[9px] font-bold transition-all ${
-                  mobileSide === 'right' ? 'bg-indigo-600 text-white' : 'text-gray-400'
-                }`}
-                aria-label="Show right page"
-              >
-                R
-              </button>
-            </div>
+        <div
+          className="border-b border-black/[0.06] flex items-center gap-3 px-4 bg-paper shrink-0"
+          style={{ height: '52px' }}
+        >
+          <input
+            className={`flex-1 min-w-0 text-[17px] font-semibold text-gray-900 bg-transparent outline-none placeholder-gray-300 truncate ${titleFontClass}`}
+            value={page.title}
+            onChange={(e) => onUpdatePage({...page, title: e.target.value})}
+            placeholder="Untitled"
+            style={{ touchAction: 'manipulation' }}
+          />
+          {/* Paper type pill — 44pt target */}
+          <div className="relative">
+            <button
+              onClick={() => setShowPaperPicker(!showPaperPicker)}
+              className="flex items-center justify-center gap-1 px-3 min-w-[44px] h-9 rounded-full bg-black/[0.06] text-[12px] font-sans font-medium text-gray-700 active:bg-black/[0.10] transition-colors"
+              aria-label="Change paper type"
+              aria-expanded={showPaperPicker}
+              style={{ touchAction: 'manipulation' }}
+            >
+              <span>{PAPER_TYPES.find(p => p.value === (page.paperType || 'lined'))?.label || 'Lined'}</span>
+              <ChevronDown size={12} className={`transition-transform ${showPaperPicker ? 'rotate-180' : ''}`} />
+            </button>
+            {showPaperPicker && renderPaperPicker()}
           </div>
-        )
+          {/* Bookmark — 44pt target */}
+          {onToggleBookmark && (
+            <button
+              onClick={onToggleBookmark}
+              className={`w-11 h-11 -mr-2 flex items-center justify-center rounded-full transition-colors active:bg-black/[0.06] ${
+                isBookmarked ? 'text-amber-500' : 'text-gray-400'
+              }`}
+              aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark page'}
+              style={{ touchAction: 'manipulation' }}
+            >
+              <Bookmark size={20} fill={isBookmarked ? 'currentColor' : 'none'} />
+            </button>
+          )}
+        </div>
       ) : (
         isLeft ? (
           <div className="h-12 md:h-16 border-b border-gray-200 flex items-end px-3 md:px-10 pb-2 bg-gradient-to-b from-white to-gray-50 shrink-0">
@@ -890,17 +910,31 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         )
       )}
 
-      {/* Content Area — bottom padding clears the FAB on mobile */}
+      {/* Content Area — bottom padding clears the FAB on mobile (only when idle).
+          When keyboard is up the FAB is unmounted, so we shrink to 16px and let
+          the cursor breathe. The scroll container itself shrinks via main's height
+          calc, so we don't need defensive `pb-20` reservations any more. */}
       <div
         data-scroll-container
-        className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 md:px-10 pt-3 md:pt-8 pb-20 md:pb-8 ${bgClass} relative cursor-text`}
+        className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 md:px-10 pt-3 md:pt-8 ${
+          native
+            ? (keyboardVisible ? 'pb-4' : 'pb-24')
+            : 'pb-20 md:pb-8'
+        } ${bgClass} relative cursor-text`}
         data-paper-type={page.paperType}
         data-page-font={page.paperType === 'lined' ? (page.linedSettings?.fontFamily ?? 'hand') : undefined}
+        data-margin-side={
+          page.paperType === 'lined' && (page.linedSettings?.showMargin || page.linedSettings?.legalPadMode)
+            ? (page.linedSettings?.showMargin && (page.linedSettings.marginSide === 'right' || (!page.linedSettings.marginSide && !isLeft))
+                ? 'right'
+                : 'left')
+            : undefined
+        }
         style={{
           WebkitOverflowScrolling: 'touch',
-          // When keyboard is up, extend scroll padding so `scrollIntoView`
-          // doesn't land the cursor behind the toolbar (44px) + breathing room (44px).
-          scrollPaddingBottom: keyboardVisible ? '88px' : '0px',
+          scrollPaddingBottom: keyboardVisible ? '96px' : '16px',
+          // touch-action: pan-y allows scroll, removes 300ms delay on nested buttons
+          touchAction: 'pan-y',
         }}
         onClick={(e) => handleEmptySpaceClick(e, side)}
       >
@@ -1091,7 +1125,11 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   return (
     <div
       data-native={native ? 'true' : undefined}
-      className={`flex-1 h-full min-h-0 overflow-hidden bg-[#e5e5e5] flex flex-col relative ${native ? 'p-0' : 'p-1 md:p-8 md:justify-center'}`}
+      className={`flex-1 h-full min-h-0 overflow-hidden flex flex-col relative ${
+        native
+          ? 'p-0 bg-paper'
+          : 'bg-[#e5e5e5] p-1 md:p-8 md:justify-center'
+      }`}
     >
       {/* Mobile Page Toggle — only shown on non-native mobile (web mobile Safari).
           Native replaces it with the compact L/R switch inside the header row. */}
@@ -1119,7 +1157,14 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       )}
 
       {/* Book — fills available space, no centering on mobile */}
-      <div data-export-target className={`w-full max-w-6xl flex-1 min-h-0 mx-auto bg-slate-800 ${native ? 'p-0 rounded-none' : 'p-0.5 md:p-2 rounded-lg md:rounded-xl'} shadow-2xl flex flex-col md:flex-row relative`}>
+      <div
+        data-export-target
+        className={`w-full max-w-6xl flex-1 min-h-0 mx-auto flex flex-col md:flex-row relative ${
+          native
+            ? 'bg-transparent'
+            : 'bg-slate-800 p-0.5 md:p-2 rounded-lg md:rounded-xl shadow-2xl'
+        }`}
+      >
         {/* Desktop: show both pages */}
         <div className="hidden md:contents">
           {renderPagePanel('left', leftBlocks, true)}
@@ -1138,6 +1183,44 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       {/* Native AI FAB — floats over entire notebook */}
       {renderAIFab()}
+
+      {/* Floating L/R segmented control — native, hidden while typing.
+          Lives in the thumb zone, doesn't fight the title row. */}
+      {native && !keyboardVisible && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 64px)' }}
+        >
+          <div
+            className="liquid-glass pointer-events-auto flex rounded-full p-1 shadow-lg"
+            role="tablist"
+            aria-label="Page side"
+          >
+            <button
+              onClick={() => { triggerHaptic.impact(ImpactStyle.Light); setMobileSide('left'); }}
+              className={`min-w-[56px] h-9 px-4 rounded-full text-[13px] font-semibold transition-colors ${
+                mobileSide === 'left' ? 'bg-white text-gray-900 shadow' : 'text-gray-500'
+              }`}
+              style={{ touchAction: 'manipulation' }}
+              role="tab"
+              aria-selected={mobileSide === 'left'}
+            >
+              Left
+            </button>
+            <button
+              onClick={() => { triggerHaptic.impact(ImpactStyle.Light); setMobileSide('right'); }}
+              className={`min-w-[56px] h-9 px-4 rounded-full text-[13px] font-semibold transition-colors ${
+                mobileSide === 'right' ? 'bg-white text-gray-900 shadow' : 'text-gray-500'
+              }`}
+              style={{ touchAction: 'manipulation' }}
+              role="tab"
+              aria-selected={mobileSide === 'right'}
+            >
+              Right
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* iOS Keyboard Toolbar — pinned to top of keyboard, native-only */}
       <KeyboardToolbar

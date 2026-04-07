@@ -104,6 +104,13 @@
     height: 100%;
   }
 
+  /* Default keyboard inset is 0 — useKeyboardHandler updates this var when
+     iOS keyboard appears. Lets any element pin to top of keyboard via
+     `bottom: var(--kb-bottom, 0px)`. */
+  :root {
+    --kb-bottom: 0px;
+  }
+
   /* iOS native scroll momentum on every overflow:auto/scroll element */
   .overflow-y-auto, .overflow-auto, .overflow-y-scroll {
     -webkit-overflow-scrolling: touch;
@@ -158,6 +165,81 @@
 
 @utility mobile-safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ========================================
+   IOS 26 LIQUID GLASS — 4-layer CSS approximation
+   See docs/strategy/2026-04-05-papera-ios-launch-master-plan.md and
+   the iOS 26 research report. Approximates Apple's Liquid Glass material
+   in WKWebView using backdrop-filter + specular highlight + edge glow.
+   90% fidelity, ~5x cheaper than Apple's native implementation.
+   ======================================== */
+.liquid-glass {
+  position: relative;
+  background: rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.35);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.05),
+    0 -8px 32px rgba(0, 0, 0, 0.08);
+  isolation: isolate;
+  /* Force compositor layer — eliminates repaint thrash on scroll */
+  transform: translateZ(0);
+}
+
+.liquid-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.10) 25%,
+    rgba(255, 255, 255, 0.00) 50%,
+    rgba(255, 255, 255, 0.10) 75%,
+    rgba(255, 255, 255, 0.30) 100%
+  );
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .liquid-glass {
+    background: rgba(28, 28, 30, 0.55);
+    border-top-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+      inset 0 -1px 0 0 rgba(0, 0, 0, 0.30),
+      0 -8px 32px rgba(0, 0, 0, 0.40);
+  }
+}
+
+/* Honor accessibility — drops transparency for users who request it */
+@media (prefers-reduced-transparency: reduce) {
+  .liquid-glass {
+    background: rgba(245, 245, 247, 0.96);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .liquid-glass::before {
+    display: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    .liquid-glass {
+      background: rgba(28, 28, 30, 0.98);
+    }
+  }
+}
+
+/* Honor reduced motion — disable backdrop blur which is GPU-heavy */
+@media (prefers-reduced-motion: reduce) {
+  .liquid-glass {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
 }
 
 /* ========================================
@@ -414,6 +496,17 @@
 [data-paper-type="grid"] {
   padding-top: 32px !important;
   padding-bottom: 32px !important;
+}
+
+/* When a margin line is enabled on Lined paper, text starts AFTER the line
+   (with ~12px breathing room). The margin column itself stays free for
+   future annotation features. Margin line is at 60px from the content-area
+   edge → text begins at 72px. The 'right' variant pads the right edge instead. */
+[data-paper-type="lined"][data-margin-side="left"] {
+  padding-left: 72px !important;
+}
+[data-paper-type="lined"][data-margin-side="right"] {
+  padding-right: 72px !important;
 }
 
 [data-paper-type="lined"] [data-block-type="TEXT"],
