@@ -24,6 +24,7 @@ import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
 import { TabBar, type TabId } from './ios/TabBar';
 import { BottomSheet } from './ios/BottomSheet';
 import { isNativeApp } from '../utils/platform';
+import { useKeyboardHandler } from '../hooks/useKeyboardHandler';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
 const BookCoverScene = lazy(() => import('./three/notebook/BookCoverScene'));
@@ -168,6 +169,7 @@ export const Dashboard: React.FC = () => {
   // iOS tab bar state
   const [activeTab, setActiveTab] = useState<TabId>('notebooks');
   const native = isNativeApp();
+  const { keyboardVisible } = useKeyboardHandler();
 
   // AI generation approval flow
   const [pendingPages, setPendingPages] = useState<NotebookPage[] | null>(null);
@@ -872,13 +874,23 @@ export const Dashboard: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content Area — on native, reserve space for top safe area + tab bar */}
+      {/* Main Content Area — on native, height SHRINKS with the keyboard via
+          --kb-bottom (set by useKeyboardHandler from visualViewport). This is
+          the linchpin: every downstream layout (scroll container, cursor pos,
+          chevrons, FAB) was built assuming `main` shrinks when keyboard appears
+          — it never did until now. */}
       <main
         className={`flex-1 relative flex flex-col items-center overflow-hidden ${native ? 'px-0 justify-start' : 'p-4 md:p-12 justify-center'}`}
         style={native ? {
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 56px)',
-          height: '100dvh',
+          // Keyboard down: reserve tab bar + home indicator (56pt + safe-area)
+          // Keyboard up:   reserve toolbar (44pt) above keyboard. Tab bar is hidden.
+          paddingBottom: keyboardVisible
+            ? '44px'
+            : 'calc(env(safe-area-inset-bottom, 0px) + 56px)',
+          // Lock to VISIBLE viewport (subtract keyboard) — frame-accurate.
+          height: 'calc(100dvh - var(--kb-bottom, 0px))',
+          transition: 'height 250ms cubic-bezier(0.32, 0.72, 0, 1), padding-bottom 250ms cubic-bezier(0.32, 0.72, 0, 1)',
         } : undefined}
       >
         {/* Top-left controls — desktop only (tab bar owns left side on native) */}
@@ -1028,28 +1040,29 @@ export const Dashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Left Navigation Arrow */}
-          {activePageIndex >= 0 && (
+          {/* Left Navigation Arrow — inside safe area on native, 44pt target */}
+          {activePageIndex >= 0 && !keyboardVisible && (
             <button
               onClick={handlePageBack}
-              className="absolute -left-2 md:-left-12 top-1/2 -translate-y-1/2 z-40 p-2 md:p-3 bg-white/90 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:-translate-x-1 hover:shadow-xl"
+              className="absolute left-2 md:-left-12 top-1/2 -translate-y-1/2 z-40 w-11 h-11 md:p-3 bg-white/80 backdrop-blur hover:bg-white rounded-full shadow-lg text-gray-700 transition-all duration-200 hover:-translate-x-1 hover:shadow-xl flex items-center justify-center"
               aria-label="Previous page"
+              style={{ touchAction: 'manipulation' }}
             >
-              <ChevronLeft size={20} className="md:hidden" />
-              <ChevronLeft size={24} className="hidden md:block" />
+              <ChevronLeft size={22} />
             </button>
           )}
 
           {/* The Book — animated wrapper */}
           <div
             key={`${activeNotebookId}-${activePageIndex}-${contentKey}`}
-            className={`w-full flex-1 min-h-0 max-h-[900px] relative ${getPageAnimClass()}`}
+            className={`w-full flex-1 min-h-0 ${native ? '' : 'max-h-[900px]'} relative ${getPageAnimClass()}`}
             onAnimationEnd={() => setPageDirection(null)}
           >
             {activePageIndex === -1 ? (
-              /* Cover View — 3D with flat CSS fallback */
+              /* Cover View — 3D with flat CSS fallback. On native: full-width
+                  fill (no max-w cap that would leave white space on either side). */
               <div
-                className="w-full max-w-2xl mx-auto h-full flex items-center justify-center transition-opacity duration-400"
+                className={`w-full ${native ? '' : 'max-w-2xl'} mx-auto h-full flex items-center justify-center transition-opacity duration-400`}
                 style={{ opacity: coverFading ? 0 : 1 }}
               >
                 <Suspense
@@ -1193,7 +1206,11 @@ export const Dashboard: React.FC = () => {
                   dragRustle: sfx.dragRustle,
                 }}
                 isBookmarked={(activeNotebook.bookmarks ?? []).includes(activePage.id)}
-                onToggleBookmark={toggleBookmark}
+                /* On web, the Dashboard renders its own floating bookmark ribbon (line ~935).
+                   On native iOS, that ribbon is hidden, so the NotebookView header shows the
+                   bookmark inline instead. Passing the callback only on native avoids the
+                   duplicate bookmark button on web. */
+                onToggleBookmark={native ? toggleBookmark : undefined}
                 onOpenAIGenerator={() => setIsGeneratorOpen(true)}
                 onAddPage={() => handleNewPage()}
               />
@@ -1212,15 +1229,15 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Right Navigation Arrow */}
-          {activePageIndex !== -1 && activePageIndex < activeNotebook.pages.length && (
+          {/* Right Navigation Arrow — inside safe area on native, 44pt target */}
+          {activePageIndex !== -1 && activePageIndex < activeNotebook.pages.length - 1 && !keyboardVisible && (
             <button
               onClick={handlePageForward}
-              className="absolute -right-2 md:-right-12 top-1/2 -translate-y-1/2 z-40 p-2 md:p-3 bg-white/90 hover:bg-white rounded-full shadow-lg text-gray-600 transition-all duration-200 hover:translate-x-1 hover:shadow-xl"
+              className="absolute right-2 md:-right-12 top-1/2 -translate-y-1/2 z-40 w-11 h-11 md:p-3 bg-white/80 backdrop-blur hover:bg-white rounded-full shadow-lg text-gray-700 transition-all duration-200 hover:translate-x-1 hover:shadow-xl flex items-center justify-center"
               aria-label="Next page"
+              style={{ touchAction: 'manipulation' }}
             >
-              <ChevronRight size={20} className="md:hidden" />
-              <ChevronRight size={24} className="hidden md:block" />
+              <ChevronRight size={22} />
             </button>
           )}
 
@@ -1228,7 +1245,7 @@ export const Dashboard: React.FC = () => {
               Native: ultra-compact "13/13" pill, no dots, no add button (lives in FAB)
               Web:    full dot strip + label + add button */}
           {native ? (
-            activePageIndex !== -1 && activeNotebook.pages.length > 0 ? (
+            activePageIndex !== -1 && activeNotebook.pages.length > 0 && !keyboardVisible ? (
               <div className="mt-0.5 flex items-center justify-center shrink-0 pointer-events-none">
                 <span className="px-2 py-0.5 rounded-full bg-black/30 backdrop-blur text-white text-[10px] font-sans tabular-nums tracking-wide">
                   {activePageIndex + 1}/{activeNotebook.pages.length}
@@ -1393,7 +1410,8 @@ export const Dashboard: React.FC = () => {
       />
 
       {/* iOS Tab Bar — only renders on native */}
-      <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
+      {/* iOS Tab Bar — only renders on native; hidden while keyboard is up */}
+      <TabBar activeTab={activeTab} onTabChange={handleTabChange} hidden={keyboardVisible} />
     </div>
   );
 };
