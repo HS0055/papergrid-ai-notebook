@@ -1520,6 +1520,60 @@ http.route({
   }),
 });
 
+// ── Admin: Plan Limits (live edit) ────────────────────────
+http.route({
+  path: "/api/admin/plan-limits",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const limits = await ctx.runQuery(api.planLimits.getAll, {});
+      return new Response(JSON.stringify({ limits }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to load plan limits");
+      return new Response(JSON.stringify({ error: message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/plan-limits",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const body = await request.json();
+      const planId = body?.planId as "free" | "starter" | "pro" | "founder" | "creator";
+      const patch = body?.patch ?? {};
+      if (!planId) {
+        return new Response(JSON.stringify({ error: "planId is required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const limits = await ctx.runMutation(api.planLimits.update, { sessionToken, planId, patch });
+      return new Response(JSON.stringify({ limits }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to update plan limits");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // ── iOS Launch Waitlist ───────────────────────────────────
 http.route({
   path: "/api/waitlist",
@@ -2034,6 +2088,7 @@ for (const path of [
   "/api/auth/forgot-password",
   "/api/auth/reset-password",
   "/api/waitlist",
+  "/api/admin/plan-limits",
   "/api/notebooks",
   "/api/notebooks/save",
   "/api/notebooks/delete",

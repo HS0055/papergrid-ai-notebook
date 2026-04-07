@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { PlanLimitsEditor } from './admin/PlanLimitsEditor';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const SESSION_KEY = 'papergrid_session';
@@ -475,6 +476,11 @@ export function AdminPanel() {
               <div className="text-xs text-gray-400">Ink / page</div>
             </div>
           </div>
+        </div>
+
+        {/* Plan limits editor — caps notebooks, ink, AI access, watermark, templates */}
+        <div className="mb-6">
+          <PlanLimitsEditor />
         </div>
 
         {/* Users table */}

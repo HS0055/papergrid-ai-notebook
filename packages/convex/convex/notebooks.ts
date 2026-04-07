@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
+import { getPlanLimitFor, type PlanId } from "./planLimits";
 
 // ── Auth helper ──────────────────────────────────────────
 async function requireAuthUser(ctx: QueryCtx | MutationCtx, sessionToken?: string) {
@@ -63,6 +64,24 @@ export const create = mutation({
   handler: async (ctx, { userId, title, coverColor, coverImageUrl, bookmarks, createdAt, sessionToken }) => {
     const user = await requireAuthUser(ctx, sessionToken);
     if (user._id !== userId) throw new Error("Forbidden");
+
+    // ── Plan limit enforcement ──────────────────────────────
+    // Free users get 1 notebook by default; admin can change this in
+    // AdminPanel via planLimits.update. Pro/Creator/Founder are unlimited.
+    const planId = (user.plan ?? "free") as PlanId;
+    const limits = await getPlanLimitFor(ctx, planId);
+    if (limits.maxNotebooks !== -1) {
+      const existing = await ctx.db
+        .query("notebooks")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      if (existing.length >= limits.maxNotebooks) {
+        throw new Error(
+          `Your ${planId} plan allows ${limits.maxNotebooks} notebook${limits.maxNotebooks === 1 ? "" : "s"}. Upgrade to create more.`,
+        );
+      }
+    }
+
     return await ctx.db.insert("notebooks", {
       userId,
       title,
