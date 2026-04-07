@@ -295,6 +295,19 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: 'localhost',
+      // Same-origin proxy for the Convex HTTP endpoint. Lets local-preview
+      // ports (e.g. 3001 via `npm run dev:prod`) hit the backend without
+      // needing the port in Convex's CORS allowlist. Only used when the
+      // client calls `/convex-proxy/*` — direct calls to the full Convex URL
+      // still work as before.
+      proxy: {
+        '/convex-proxy': {
+          target: 'https://veracious-pony-145.convex.site',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (p) => p.replace(/^\/convex-proxy/, ''),
+        },
+      },
     },
     plugins: [
       react(),

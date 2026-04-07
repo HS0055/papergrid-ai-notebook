@@ -374,6 +374,10 @@ const http = httpRouter();
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  // Production-mode local preview (npm run dev:prod) — same code, different port,
+  // so VITE_COMING_SOON_PAPERS env var can be tested side-by-side with dev.
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "capacitor://localhost",
