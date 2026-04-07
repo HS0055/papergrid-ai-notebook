@@ -1,5 +1,6 @@
 import React from 'react';
-import { Book, Github } from 'lucide-react';
+import { Github } from 'lucide-react';
+import { Logo } from './Logo';
 
 export const LandingFooter: React.FC = () => {
   return (
@@ -9,11 +10,8 @@ export const LandingFooter: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
           {/* Brand */}
           <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center">
-                <Book size={16} className="text-white" />
-              </div>
-              <span className="font-serif font-bold text-lg text-white">Papera</span>
+            <div className="mb-4">
+              <Logo variant="dark" size={36} />
             </div>
             <p className="text-sm leading-relaxed" style={{ color: '#475569' }}>
               The digital notebook that thinks with you.

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Book, ArrowRight } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { Logo } from './Logo';
 import { useScrollSpy } from '../../hooks/useScrollSpy';
 
 interface NavBarProps {
@@ -7,9 +8,10 @@ interface NavBarProps {
 }
 
 const NAV_LINKS = [
-  { id: 'paper-styles', label: 'Paper Styles' },
-  { id: 'ai-feature', label: 'AI Magic' },
   { id: 'how-it-works', label: 'How It Works' },
+  { id: 'paper-styles', label: 'Paper' },
+  { id: 'pricing', label: 'Pricing' },
+  { id: 'faq', label: 'FAQ' },
 ] as const;
 
 export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
@@ -32,13 +34,8 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-        {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-            <Book className="text-white" size={18} />
-          </div>
-          <span className="font-serif font-bold text-xl tracking-tight text-gray-900">Papera</span>
-        </div>
+        {/* Logo — adapts to scroll state for readability */}
+        <Logo variant={scrolled ? 'light' : 'dark'} size={36} />
 
         {/* Links */}
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-500">

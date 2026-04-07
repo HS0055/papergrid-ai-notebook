@@ -205,7 +205,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             }}
           >
             <Sparkles size={14} />
-            <span>Powered by Gemini 2.5 Flash</span>
+            <span>Powered by Advanced AI</span>
           </div>
 
           {/* Headline */}
@@ -278,7 +278,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
               }}
             >
               <Sparkles size={14} />
-              <span>10 Paper Textures · 12 Block Types</span>
+              <span>10 Paper Textures · 22+ Block Types</span>
             </div>
             <h2
               className="font-serif font-bold text-white mb-4"

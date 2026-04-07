@@ -6,10 +6,17 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { NavBar } from './landing/NavBar';
 import { HeroSection } from './landing/HeroSection';
 import { StatsStrip } from './landing/StatsStrip';
+import { HowItWorksSection } from './landing/HowItWorksSection';
 import { PaperStylesSection } from './landing/PaperStylesSection';
 import { AIFeatureSection } from './landing/AIFeatureSection';
+import { DemoVideoSection } from './landing/DemoVideoSection';
 import { BlockTypesBento } from './landing/BlockTypesBento';
 import { AestheticsSection } from './landing/AestheticsSection';
+import { PricingSection } from './landing/PricingSection';
+import { RoadmapSection } from './landing/RoadmapSection';
+import { ComparisonTable } from './landing/ComparisonTable';
+import { FAQSection } from './landing/FAQSection';
+import { IOSWaitlistSection } from './landing/IOSWaitlistSection';
 import { InlineTestimonials } from './landing/InlineTestimonials';
 import { FinalCTA } from './landing/FinalCTA';
 import { LandingFooter } from './landing/LandingFooter';
@@ -244,11 +251,18 @@ export const LandingPage: React.FC = () => {
 
         {/* Content sections (above 3D canvas) */}
         <div className="relative z-10">
-          <PaperStylesSection onLaunch={handleLaunch} />
+          <HowItWorksSection />
           <AIFeatureSection onLaunch={handleLaunch} />
-          <InlineTestimonials />
+          <DemoVideoSection />
           <BlockTypesBento onLaunch={handleLaunch} />
+          <PaperStylesSection onLaunch={handleLaunch} />
           <AestheticsSection onLaunch={handleLaunch} />
+          <PricingSection onLaunch={handleLaunch} />
+          <RoadmapSection />
+          <ComparisonTable />
+          <InlineTestimonials />
+          <FAQSection />
+          <IOSWaitlistSection />
         </div>
       </div>
 

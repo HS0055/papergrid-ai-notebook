@@ -114,7 +114,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
         {/* Header */}
         <div className="reveal text-center mb-16">
           <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--color-indigo-brand)' }}>
-            12 Block Types
+            22+ Block Types
           </p>
           <h2
             className="font-serif font-bold mb-4"
@@ -329,6 +329,236 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
               <div className="text-[9px] text-rose-500 font-sans" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Priority levels</div>
             </div>
           </div>
+
+          {/* Kanban Board — 2-col wide */}
+          <div
+            ref={(el) => { cardRefs.current[6] = el; }}
+            onMouseEnter={() => handleMouseEnter(6)}
+            onMouseLeave={() => handleMouseLeave(6)}
+            className="reveal-scale col-span-2 rounded-3xl p-5 border border-violet-100 shadow-sm transition-shadow relative"
+            style={{ background: '#faf5ff', transitionDelay: '480ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-violet-500 mb-3 font-sans">Kanban Board</div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'To Do', color: 'bg-gray-100 border-gray-200 text-gray-600', items: ['Research', 'Wireframes'] },
+                { label: 'Doing', color: 'bg-amber-100 border-amber-200 text-amber-700', items: ['UI polish'] },
+                { label: 'Done', color: 'bg-emerald-100 border-emerald-200 text-emerald-700', items: ['API', 'Auth'] },
+              ].map((col, i) => (
+                <div key={i} className={`${col.color} border rounded-lg p-2`}>
+                  <div className="text-[8px] font-bold uppercase tracking-wider mb-1.5">{col.label}</div>
+                  {col.items.map((item, j) => (
+                    <div key={j} className="bg-white/70 rounded text-[9px] font-hand text-gray-700 px-1.5 py-1 mb-1 last:mb-0">{item}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Calendar */}
+          <div
+            ref={(el) => { cardRefs.current[7] = el; }}
+            onMouseEnter={() => handleMouseEnter(7)}
+            onMouseLeave={() => handleMouseLeave(7)}
+            className="reveal-scale rounded-3xl p-5 border border-sky-100 shadow-sm transition-shadow relative"
+            style={{ background: '#f0f9ff', transitionDelay: '560ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-sky-500 mb-3 font-sans">Calendar</div>
+            <div className="text-center mb-2">
+              <div className="font-serif text-sm font-bold text-sky-700">March 2026</div>
+            </div>
+            <div className="grid grid-cols-7 gap-0.5">
+              {['M','T','W','T','F','S','S'].map((d, i) => (
+                <div key={i} className="text-center text-[8px] font-bold text-sky-400">{d}</div>
+              ))}
+              {Array.from({ length: 14 }).map((_, i) => {
+                const hasEvent = [3, 7, 10].includes(i);
+                return (
+                  <div
+                    key={i}
+                    className={`text-center text-[8px] aspect-square flex items-center justify-center rounded ${
+                      hasEvent ? 'bg-sky-500 text-white font-bold' : 'text-gray-500'
+                    }`}
+                  >
+                    {i + 1}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Habit Tracker */}
+          <div
+            ref={(el) => { cardRefs.current[8] = el; }}
+            onMouseEnter={() => handleMouseEnter(8)}
+            onMouseLeave={() => handleMouseLeave(8)}
+            className="reveal-scale rounded-3xl p-5 border border-emerald-100 shadow-sm transition-shadow relative"
+            style={{ background: '#f0fdf4', transitionDelay: '640ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 mb-3 font-sans">Habit Tracker</div>
+            <div className="space-y-2">
+              {[
+                { habit: 'Meditate', days: [1, 1, 0, 1, 1, 1, 0] },
+                { habit: 'Read', days: [1, 0, 1, 1, 0, 1, 1] },
+                { habit: 'Workout', days: [1, 1, 1, 0, 1, 0, 1] },
+              ].map((h, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="font-hand text-[10px] text-emerald-700 w-14">{h.habit}</span>
+                  <div className="flex gap-0.5 flex-1">
+                    {h.days.map((d, j) => (
+                      <div
+                        key={j}
+                        className="flex-1 aspect-square rounded-sm"
+                        style={{ background: d ? '#10b981' : 'rgba(16,185,129,0.15)' }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Weekly View — 2-col wide */}
+          <div
+            ref={(el) => { cardRefs.current[9] = el; }}
+            onMouseEnter={() => handleMouseEnter(9)}
+            onMouseLeave={() => handleMouseLeave(9)}
+            className="reveal-scale col-span-2 rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
+            style={{ background: '#eef2ff', transitionDelay: '720ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-500 mb-3 font-sans">Weekly View</div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day, i) => (
+                <div
+                  key={i}
+                  className="rounded-lg p-2 min-h-[60px]"
+                  style={{
+                    background: i < 5 ? 'rgba(255,255,255,0.8)' : 'rgba(79,70,229,0.05)',
+                    border: '1px solid rgba(79,70,229,0.1)',
+                  }}
+                >
+                  <div className="text-[8px] font-bold text-indigo-400 uppercase tracking-wider mb-1">{day}</div>
+                  <div className="w-full h-1 rounded-full bg-indigo-200/40 mb-0.5" />
+                  <div className="w-3/4 h-1 rounded-full bg-indigo-200/40" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Music Staff */}
+          <div
+            ref={(el) => { cardRefs.current[10] = el; }}
+            onMouseEnter={() => handleMouseEnter(10)}
+            onMouseLeave={() => handleMouseLeave(10)}
+            className="reveal-scale rounded-3xl p-5 border border-slate-200 shadow-sm transition-shadow relative"
+            style={{ background: '#fdfbf7', transitionDelay: '800ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-3 font-sans">Music Staff</div>
+            <svg viewBox="0 0 200 60" className="w-full h-16">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <line key={i} x1="0" y1={10 + i * 10} x2="200" y2={10 + i * 10} stroke="#1e293b" strokeWidth="0.8" />
+              ))}
+              <text x="4" y="38" fontSize="32" fill="#1e293b" fontFamily="serif">𝄞</text>
+              {[
+                { x: 50, y: 30 },
+                { x: 75, y: 20 },
+                { x: 100, y: 25 },
+                { x: 125, y: 15 },
+                { x: 150, y: 30 },
+              ].map((n, i) => (
+                <ellipse key={i} cx={n.x} cy={n.y} rx="4" ry="3" fill="#1e293b" />
+              ))}
+            </svg>
+          </div>
+
+          {/* Time Block */}
+          <div
+            ref={(el) => { cardRefs.current[11] = el; }}
+            onMouseEnter={() => handleMouseEnter(11)}
+            onMouseLeave={() => handleMouseLeave(11)}
+            className="reveal-scale rounded-3xl p-5 border border-amber-100 shadow-sm transition-shadow relative"
+            style={{ background: '#fffbeb', transitionDelay: '880ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-amber-500 mb-3 font-sans">Time Blocks</div>
+            <div className="space-y-1">
+              {[
+                { time: '9:00', block: 'Deep work', color: 'bg-indigo-200' },
+                { time: '11:00', block: 'Meetings', color: 'bg-amber-200' },
+                { time: '14:00', block: 'Writing', color: 'bg-emerald-200' },
+                { time: '16:00', block: 'Email', color: 'bg-slate-200' },
+              ].map((b, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="font-mono text-[9px] text-amber-700 w-8">{b.time}</span>
+                  <div className={`flex-1 h-4 rounded ${b.color} flex items-center px-2`}>
+                    <span className="font-hand text-[9px] text-gray-700">{b.block}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Water Tracker */}
+          <div
+            ref={(el) => { cardRefs.current[12] = el; }}
+            onMouseEnter={() => handleMouseEnter(12)}
+            onMouseLeave={() => handleMouseLeave(12)}
+            className="reveal-scale rounded-3xl p-5 border border-cyan-100 shadow-sm transition-shadow relative"
+            style={{ background: '#ecfeff', transitionDelay: '960ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-cyan-500 mb-3 font-sans">Water Tracker</div>
+            <div className="flex justify-between items-end">
+              {[1, 1, 1, 1, 1, 0, 0, 0].map((filled, i) => (
+                <div key={i} className="flex flex-col items-center gap-1">
+                  <div
+                    className="w-4 h-6 rounded-sm border-2"
+                    style={{
+                      borderColor: '#06b6d4',
+                      background: filled ? 'linear-gradient(to top, #06b6d4 60%, #67e8f9 100%)' : 'transparent',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="text-[10px] text-cyan-700 font-hand mt-2 text-center">5 of 8 glasses</div>
+          </div>
+
+          {/* Goal Section */}
+          <div
+            ref={(el) => { cardRefs.current[13] = el; }}
+            onMouseEnter={() => handleMouseEnter(13)}
+            onMouseLeave={() => handleMouseLeave(13)}
+            className="reveal-scale rounded-3xl p-5 border border-pink-100 shadow-sm transition-shadow relative"
+            style={{ background: '#fdf2f8', transitionDelay: '1040ms' }}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-widest text-pink-500 mb-3 font-sans">Goals</div>
+            <div className="space-y-2">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-hand text-xs text-pink-800 font-bold">Read 20 books</span>
+                  <span className="text-[9px] text-pink-600">12/20</span>
+                </div>
+                <div className="h-1.5 bg-pink-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-pink-500 rounded-full" style={{ width: '60%' }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-hand text-xs text-pink-800 font-bold">Run 500 miles</span>
+                  <span className="text-[9px] text-pink-600">340/500</span>
+                </div>
+                <div className="h-1.5 bg-pink-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-pink-500 rounded-full" style={{ width: '68%' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* More blocks note */}
+        <div className="text-center mt-8 mb-4">
+          <p className="text-sm" style={{ color: '#94a3b8' }}>
+            + 8 more block types: Cornell Notes, Index, Rating, Progress Bar, Divider, Section Nav, Daily Sections, and more
+          </p>
         </div>
 
         {/* CTA */}

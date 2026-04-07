@@ -14,7 +14,7 @@ interface StatDef {
 const stats: StatDef[] = [
   { target: 10, display: '10', suffix: '+', label: 'Paper Styles' },
   { target: null, display: '\u221E', suffix: '', label: 'Notebooks' },
-  { target: 12, display: '12', suffix: '', label: 'Block Types' },
+  { target: 22, display: '22', suffix: '+', label: 'Block Types' },
   { target: 4, display: '4', suffix: '', label: 'Journal Modes' },
 ];
 

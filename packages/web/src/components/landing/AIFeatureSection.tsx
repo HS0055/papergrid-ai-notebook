@@ -14,7 +14,7 @@ const steps = [
   {
     num: '02',
     title: 'AI designs the layout',
-    desc: 'Gemini 2.5 Flash generates a full notebook spread — headings, grids, matrices, callouts, and more.',
+    desc: 'Our AI generates a full notebook spread — headings, grids, matrices, callouts, and more.',
   },
   {
     num: '03',
@@ -176,7 +176,7 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
             style={{ background: 'rgba(79,70,229,0.08)', borderColor: 'rgba(79,70,229,0.2)', color: '#4f46e5' }}
           >
             <Sparkles size={13} />
-            Gemini 2.5 Flash
+            AI Powered
           </div>
           <h2 className="font-serif font-bold" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', lineHeight: 1.1, color: 'var(--color-ink)' }}>
             Describe it.{' '}<span className="italic" style={{ color: '#4f46e5' }}>Get a layout</span>{' '}instantly.
