@@ -224,6 +224,10 @@ export interface Block {
   waterTrackerData?: WaterTrackerData;
   sectionNavData?: SectionNavData;
   kanbanData?: KanbanData;
+  /** @deprecated MathBlock-as-block-widget approach was rejected. Field kept
+   *  optional so existing references in mathEngine.ts compile while we transition
+   *  to the page-level GridPaperCanvas. Will be removed in a future cleanup. */
+  mathBlockData?: { rows: number; cols: number; cells: string[] };
 
   // Visual styling (Etsy-quality planner design)
   containerStyle?: 'card' | 'banner' | 'accent-left' | 'none';
