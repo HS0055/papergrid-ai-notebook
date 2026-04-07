@@ -224,14 +224,16 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   }, [focusedBlockId]);
 
   // ── Auto-scroll focused input above the iOS keyboard ──────
-  // Manual scrollTop on the nearest [data-scroll-container] — scrollIntoView
-  // is unreliable on WKWebView with nested scroll containers. Runs on every
-  // focusin (not gated on keyboardVisible) so switching between blocks while
-  // the keyboard stays up also scrolls the cursor into view.
+  // Three triggers:
+  //   1. focusin       — user taps a different input
+  //   2. window resize — keyboard appears/disappears (with resize:body)
+  //   3. selectionchange / input — cursor moves while typing (textarea grows)
+  // Strategy: keep cursor at ~40% from the top of the visible viewport so
+  // there's always typing room below before it's hidden by the keyboard.
   useEffect(() => {
     if (!native) return;
 
-    const scrollFocusedIntoView = () => {
+    const scrollCursorIntoView = (smooth: boolean) => {
       const el = document.activeElement;
       if (
         !(el instanceof HTMLElement) ||
@@ -239,24 +241,50 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       ) {
         return;
       }
-      requestAnimationFrame(() => {
-        const container = el.closest<HTMLElement>('[data-scroll-container]');
-        if (!container) return;
-        const elRect = el.getBoundingClientRect();
-        const cRect = container.getBoundingClientRect();
-        const elTop = elRect.top - cRect.top + container.scrollTop;
-        const targetTop = elTop - cRect.height / 2 + elRect.height / 2;
-        container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+      const container = el.closest<HTMLElement>('[data-scroll-container]');
+      if (!container) return;
+
+      const elRect = el.getBoundingClientRect();
+      const cRect = container.getBoundingClientRect();
+
+      // For textareas, account for the cursor's position WITHIN the textarea —
+      // not just the textarea's bounding box. This way as the textarea grows
+      // downward we keep scrolling so the cursor (bottom edge) stays visible.
+      const cursorOffsetWithinEl = (() => {
+        if (el instanceof HTMLTextAreaElement) {
+          // Approximate: cursor is at the bottom of the current text content
+          return el.scrollHeight;
+        }
+        return el.offsetHeight;
+      })();
+      const cursorAbsTop = elRect.top - cRect.top + container.scrollTop + cursorOffsetWithinEl;
+
+      // Target: cursor should sit at 40% from the top of the visible area
+      const targetTop = cursorAbsTop - cRect.height * 0.4;
+
+      // Only scroll if needed (avoid pointless scrolling that fights the user)
+      const currentScroll = container.scrollTop;
+      const delta = targetTop - currentScroll;
+      if (Math.abs(delta) < 8) return;
+
+      container.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: smooth ? 'smooth' : 'auto',
       });
     };
 
-    document.addEventListener('focusin', scrollFocusedIntoView);
-    // Re-scroll on viewport resize (keyboard show/hide with resize:body)
-    const onResize = () => scrollFocusedIntoView();
+    const onFocusIn = () => requestAnimationFrame(() => scrollCursorIntoView(true));
+    const onResize = () => requestAnimationFrame(() => scrollCursorIntoView(true));
+    // 'input' fires on every keystroke — use 'auto' (instant) to avoid lag
+    const onInput = () => requestAnimationFrame(() => scrollCursorIntoView(false));
+
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('input', onInput);
     window.addEventListener('resize', onResize);
 
     return () => {
-      document.removeEventListener('focusin', scrollFocusedIntoView);
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('input', onInput);
       window.removeEventListener('resize', onResize);
     };
   }, [native]);
@@ -685,11 +713,13 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       )}
 
       {/* Header
-          Native: single 36px combo row on left panel only (title + paper + bookmark + L/R switch)
-                  right panel header is hidden — controls live in the left header
+          Native: single 36px combo row on EVERY page panel (title + paper + bookmark + L/R switch)
+                  Both left AND right panels show their own header so the L/R toggle is
+                  always visible — fixes the bug where switching to "R" hid the toggle
+                  and stranded the user with no way back.
           Web:    separate 48/64px headers per page (unchanged) */}
       {native ? (
-        isLeft && (
+        (
           <div className="h-9 border-b border-gray-200 flex items-center gap-2 px-3 bg-gradient-to-b from-white to-gray-50 shrink-0">
             <input
               className={`flex-1 min-w-0 text-base text-gray-800 bg-transparent outline-none placeholder-gray-300 truncate ${titleFontClass}`}
@@ -818,23 +848,52 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           <GridPaperCanvas data={page.gridSheetData} onChange={handleGridSheetChange} />
         )}
         <div className={`relative z-10 min-h-full ${(page.paperType === 'hex' || page.paperType === 'isometric' || page.paperType === 'grid') ? 'pointer-events-none [&_[data-block-id]]:pointer-events-auto' : ''}`}>
-          {blocks.length === 0 && page.paperType !== 'hex' && page.paperType !== 'isometric' && page.paperType !== 'grid' && (
-            <div className="text-gray-400 font-hand text-xl md:text-2xl text-center mt-16 md:mt-20 opacity-50 select-none pointer-events-none">
-              Tap anywhere to start writing
-            </div>
-          )}
-          {blocks.length === 0 && (page.paperType === 'hex' || page.paperType === 'isometric') && isLeft && (
-            <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
-              {page.paperType === 'hex'
-                ? 'Tap anywhere to place a hex · Shift-click a hex to connect'
-                : 'Tap anywhere to place a step · Shift-click a step to connect'}
-            </div>
-          )}
-          {blocks.length === 0 && page.paperType === 'grid' && isLeft && (
-            <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
-              Tap any cell to write · arrow keys move · backspace deletes
-            </div>
-          )}
+        {(() => {
+          // Per-paper-type "is empty" check. The hint text only shows when this
+          // paper has zero of its OWN native content. Each paper has a different
+          // notion of "content":
+          //   lined / dotted / blank — text blocks
+          //   hex — placed hex nodes
+          //   isometric — placed flow steps
+          //   grid — filled grid cells
+          //   music — placed melody notes (TBD when music ships)
+          const hexEmpty = !page.hexMapData?.nodes?.length;
+          const isoEmpty = !page.isoFlowData?.steps?.length;
+          const gridEmpty = !page.gridSheetData?.cells || Object.keys(page.gridSheetData.cells).length === 0;
+          const blocksEmpty = blocks.length === 0;
+          const isCanvasPaper = page.paperType === 'hex' || page.paperType === 'isometric' || page.paperType === 'grid';
+          const isPaperEmpty =
+            (page.paperType === 'hex' && hexEmpty)
+            || (page.paperType === 'isometric' && isoEmpty)
+            || (page.paperType === 'grid' && gridEmpty)
+            || (!isCanvasPaper && blocksEmpty);
+          // On canvas-primary papers (grid/hex/iso) the block list is hidden so
+          // text content from a previous paper-type doesn't visually leak through.
+          const renderBlocks = !isCanvasPaper;
+          return (
+            <>
+              {isPaperEmpty && !isCanvasPaper && (
+                <div className="text-gray-400 font-hand text-xl md:text-2xl text-center mt-16 md:mt-20 opacity-50 select-none pointer-events-none">
+                  Tap anywhere to start writing
+                </div>
+              )}
+              {isPaperEmpty && (page.paperType === 'hex' || page.paperType === 'isometric') && isLeft && (
+                <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
+                  {page.paperType === 'hex'
+                    ? 'Tap anywhere to place a hex · Shift-click a hex to connect'
+                    : 'Tap anywhere to place a step · Shift-click a step to connect'}
+                </div>
+              )}
+              {isPaperEmpty && page.paperType === 'grid' && isLeft && (
+                <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
+                  Tap any cell to write · arrow keys move · backspace deletes
+                </div>
+              )}
+              {!renderBlocks && null}
+            </>
+          );
+        })()}
+          {(page.paperType !== 'hex' && page.paperType !== 'isometric' && page.paperType !== 'grid') && (
           <DndContext
             collisionDetection={closestCenter}
             modifiers={[restrictToVerticalAxis]}
@@ -909,6 +968,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               )}
             </SortableContext>
           </DndContext>
+          )}
         </div>
       </div>
 
