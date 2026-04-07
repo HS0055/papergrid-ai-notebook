@@ -106,11 +106,22 @@ export const generateLayout = async (
       throw new Error('AI generated an empty response. Please try again.');
     }
 
+    // Coming-soon paper types — AI may emit them, but we don't want production
+    // users landing on a coming-soon placeholder. Coerce them to 'lined' on the way out.
+    const COMING_SOON_RAW = ((import.meta.env.VITE_COMING_SOON_PAPERS as string | undefined) ?? '');
+    const COMING_SOON: ReadonlySet<string> = new Set(
+      COMING_SOON_RAW.split(',').map((s) => s.trim()).filter(Boolean),
+    );
+    const safePaperType = (raw: string | undefined): GeneratedPage['paperType'] => {
+      const t = (raw || 'lined') as GeneratedPage['paperType'];
+      return COMING_SOON.has(t) ? 'lined' : t;
+    };
+
     // Filter out pages with no real blocks
     const validPages = rawPages
       .map((page) => ({
         title: page.title || 'Untitled',
-        paperType: page.paperType || 'lined',
+        paperType: safePaperType(page.paperType),
         themeColor: page.themeColor || 'slate',
         blocks: ((page.blocks || []) as Block[]).filter(
           (b) => {

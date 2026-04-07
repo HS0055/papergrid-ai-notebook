@@ -6,6 +6,7 @@ import { PianoKeyboard } from './PianoKeyboard';
 import { HexPaperCanvas } from './planner/HexPaperCanvas';
 import { IsoPaperCanvas } from './planner/IsoPaperCanvas';
 import { GridPaperCanvas } from './planner/GridPaperCanvas';
+import { isPaperTypeComingSoon } from '../config/featureFlags';
 import { Plus, Info, Quote, Minus, Smile, LayoutGrid, List, X, Sparkles, ChevronDown, Music, Calendar, CalendarDays, CheckSquare, Target, Clock, Sun, AlertTriangle, Bookmark } from 'lucide-react';
 import { isNativeApp } from '../utils/platform';
 import { triggerHaptic } from '../utils/haptics';
@@ -224,14 +225,18 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   }, [focusedBlockId]);
 
   // ── Auto-scroll focused input above the iOS keyboard ──────
-  // Three triggers:
-  //   1. focusin       — user taps a different input
-  //   2. window resize — keyboard appears/disappears (with resize:body)
-  //   3. selectionchange / input — cursor moves while typing (textarea grows)
-  // Strategy: keep cursor at ~40% from the top of the visible viewport so
-  // there's always typing room below before it's hidden by the keyboard.
+  // Apple Notes.app pattern: keep the cursor within the visible viewport
+  // (visualViewport, which excludes the keyboard area) with a safety margin
+  // above the keyboard. Triggers on:
+  //   - focusin                — user tapped a new input
+  //   - input                  — user typed a character (textarea may grow)
+  //   - selectionchange        — user moved the cursor with arrow keys / gesture
+  //   - visualViewport.resize  — keyboard appeared/disappeared
   useEffect(() => {
     if (!native) return;
+
+    const SAFE_MARGIN = 80;          // px above the keyboard / toolbar to stay clear of
+    const ANCHOR_FROM_TOP = 0.40;    // cursor anchor: 40% from top of visible area
 
     const scrollCursorIntoView = (smooth: boolean) => {
       const el = document.activeElement;
@@ -244,50 +249,109 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       const container = el.closest<HTMLElement>('[data-scroll-container]');
       if (!container) return;
 
-      const elRect = el.getBoundingClientRect();
-      const cRect = container.getBoundingClientRect();
-
-      // For textareas, account for the cursor's position WITHIN the textarea —
-      // not just the textarea's bounding box. This way as the textarea grows
-      // downward we keep scrolling so the cursor (bottom edge) stays visible.
-      const cursorOffsetWithinEl = (() => {
-        if (el instanceof HTMLTextAreaElement) {
-          // Approximate: cursor is at the bottom of the current text content
-          return el.scrollHeight;
+      // Compute the actual cursor Y in viewport coordinates.
+      // For textareas: approximate as element.bottom (cursor is usually at the tail).
+      // For inputs:    element center is good enough (single-line).
+      // For contenteditable with selection: use the Range's bounding rect for exact pos.
+      let cursorClientY: number;
+      if (el instanceof HTMLTextAreaElement) {
+        cursorClientY = el.getBoundingClientRect().bottom;
+      } else if (el.isContentEditable) {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0).cloneRange();
+          range.collapse(true);
+          const r = range.getBoundingClientRect();
+          // Empty range can return all-zeros; fall back to el bottom
+          cursorClientY = (r.top === 0 && r.height === 0) ? el.getBoundingClientRect().bottom : r.bottom;
+        } else {
+          cursorClientY = el.getBoundingClientRect().bottom;
         }
-        return el.offsetHeight;
-      })();
-      const cursorAbsTop = elRect.top - cRect.top + container.scrollTop + cursorOffsetWithinEl;
+      } else {
+        const r = el.getBoundingClientRect();
+        cursorClientY = r.top + r.height / 2;
+      }
 
-      // Target: cursor should sit at 40% from the top of the visible area
-      const targetTop = cursorAbsTop - cRect.height * 0.4;
+      // Visible area = visualViewport (which excludes the iOS keyboard)
+      const vv = window.visualViewport;
+      const visibleTop = vv ? vv.offsetTop : 0;
+      const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+      const visibleHeight = visibleBottom - visibleTop;
+      const safeBottom = visibleBottom - SAFE_MARGIN;
+      const safeTop = visibleTop + 20;
 
-      // Only scroll if needed (avoid pointless scrolling that fights the user)
-      const currentScroll = container.scrollTop;
-      const delta = targetTop - currentScroll;
+      // If cursor is already comfortably visible, don't scroll
+      if (cursorClientY >= safeTop && cursorClientY <= safeBottom) return;
+
+      // Compute scroll delta to move cursor to anchor point (40% from top of visible)
+      const targetClientY = visibleTop + visibleHeight * ANCHOR_FROM_TOP;
+      const delta = cursorClientY - targetClientY;
       if (Math.abs(delta) < 8) return;
 
-      container.scrollTo({
-        top: Math.max(0, targetTop),
+      container.scrollBy({
+        top: delta,
         behavior: smooth ? 'smooth' : 'auto',
       });
     };
 
     const onFocusIn = () => requestAnimationFrame(() => scrollCursorIntoView(true));
-    const onResize = () => requestAnimationFrame(() => scrollCursorIntoView(true));
-    // 'input' fires on every keystroke — use 'auto' (instant) to avoid lag
     const onInput = () => requestAnimationFrame(() => scrollCursorIntoView(false));
+    const onSelectionChange = () => requestAnimationFrame(() => scrollCursorIntoView(false));
+    const onVVResize = () => requestAnimationFrame(() => scrollCursorIntoView(true));
 
     document.addEventListener('focusin', onFocusIn);
     document.addEventListener('input', onInput);
-    window.addEventListener('resize', onResize);
+    document.addEventListener('selectionchange', onSelectionChange);
+    window.visualViewport?.addEventListener('resize', onVVResize);
 
     return () => {
       document.removeEventListener('focusin', onFocusIn);
       document.removeEventListener('input', onInput);
-      window.removeEventListener('resize', onResize);
+      document.removeEventListener('selectionchange', onSelectionChange);
+      window.visualViewport?.removeEventListener('resize', onVVResize);
     };
   }, [native]);
+
+  // ── Swipe-down on scroll container to dismiss keyboard ──────
+  // Apple Notes muscle memory: drag the page content downward when
+  // already scrolled to the bottom → keyboard slides away. This is the
+  // closest we can get to UIScrollView.keyboardDismissMode = .interactive
+  // without a native plugin (Capacitor issue #6064).
+  useEffect(() => {
+    if (!native || !keyboardVisible) return;
+
+    let touchStartY = 0;
+    let touchStartScrollTop = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      const container = target?.closest<HTMLElement>('[data-scroll-container]');
+      if (!container) return;
+      touchStartY = e.touches[0].clientY;
+      touchStartScrollTop = container.scrollTop;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      const container = target?.closest<HTMLElement>('[data-scroll-container]');
+      if (!container) return;
+      const dy = e.touches[0].clientY - touchStartY;
+      // Downward drag of >50px while scroll position hasn't moved (or moved up)
+      // means user is gesturing past the top — dismiss keyboard.
+      if (dy > 50 && container.scrollTop <= touchStartScrollTop) {
+        import('@capacitor/keyboard').then(({ Keyboard }) => {
+          Keyboard.hide().catch(() => {});
+        });
+      }
+    };
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [native, keyboardVisible]);
 
   // ── Tap-outside-to-dismiss keyboard ───────────────────────
   // Mirrors iOS Notes.app: tapping any non-input region collapses
@@ -590,25 +654,39 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     <div ref={paperPickerRef} className="absolute top-full left-0 mt-1 z-50 anim-popover">
       <div className="bg-white/95 backdrop-blur-md shadow-2xl rounded-xl p-3 border border-gray-200 w-[280px]">
         <div className="grid grid-cols-5 gap-2">
-          {PAPER_TYPES.map(pt => (
-            <button
-              key={pt.value}
-              onClick={() => {
-                onUpdatePage({...page, paperType: pt.value});
-                setShowPaperPicker(false);
-              }}
-              className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all ${
-                page.paperType === pt.value
-                  ? 'bg-indigo-100 ring-2 ring-indigo-400 scale-105'
-                  : 'hover:bg-gray-100'
-              }`}
-            >
-              <div className={`w-10 h-10 rounded-md border border-gray-300 overflow-hidden ${PAPER_BG_MAP[pt.value]}`}
-                style={{ backgroundSize: pt.value === 'lined' ? '100% 8px' : pt.value === 'grid' ? '8px 8px' : pt.value === 'dotted' ? '8px 8px' : undefined }}
-              />
-              <span className="text-[9px] font-medium text-gray-500 leading-tight">{pt.label}</span>
-            </button>
-          ))}
+          {PAPER_TYPES.map(pt => {
+            const comingSoon = isPaperTypeComingSoon(pt.value);
+            return (
+              <button
+                key={pt.value}
+                disabled={comingSoon}
+                onClick={() => {
+                  if (comingSoon) return;
+                  onUpdatePage({...page, paperType: pt.value});
+                  setShowPaperPicker(false);
+                }}
+                className={`relative flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all ${
+                  comingSoon
+                    ? 'opacity-40 cursor-not-allowed'
+                    : page.paperType === pt.value
+                      ? 'bg-indigo-100 ring-2 ring-indigo-400 scale-105'
+                      : 'hover:bg-gray-100'
+                }`}
+                aria-label={comingSoon ? `${pt.label} — coming soon` : pt.label}
+                title={comingSoon ? 'Coming soon' : pt.label}
+              >
+                <div className={`w-10 h-10 rounded-md border border-gray-300 overflow-hidden ${PAPER_BG_MAP[pt.value]}`}
+                  style={{ backgroundSize: pt.value === 'lined' ? '100% 8px' : pt.value === 'grid' ? '8px 8px' : pt.value === 'dotted' ? '8px 8px' : undefined }}
+                />
+                <span className="text-[9px] font-medium text-gray-500 leading-tight">{pt.label}</span>
+                {comingSoon && (
+                  <span className="absolute -top-1 -right-1 bg-amber-400 text-white text-[7px] font-bold uppercase tracking-wider px-1 py-0.5 rounded-sm shadow-sm">
+                    Soon
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Lined-specific settings appear only when Lined is the active paper */}
@@ -838,14 +916,37 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         {page.paperType !== 'blank' && page.paperType !== 'lined' && page.paperType !== 'hex' && page.paperType !== 'isometric' && (
           <div className={`absolute top-0 bottom-0 left-12 md:left-16 w-px ${marginColorClass} pointer-events-none z-0`} />
         )}
-        {page.paperType === 'hex' && isLeft && (
+        {page.paperType === 'hex' && isLeft && !isPaperTypeComingSoon('hex') && (
           <HexPaperCanvas data={page.hexMapData} onChange={handleHexMapChange} />
         )}
-        {page.paperType === 'isometric' && isLeft && (
+        {page.paperType === 'isometric' && isLeft && !isPaperTypeComingSoon('isometric') && (
           <IsoPaperCanvas data={page.isoFlowData} onChange={handleIsoFlowChange} />
         )}
-        {page.paperType === 'grid' && isLeft && (
+        {page.paperType === 'grid' && isLeft && !isPaperTypeComingSoon('grid') && (
           <GridPaperCanvas data={page.gridSheetData} onChange={handleGridSheetChange} />
+        )}
+        {/* Coming-soon placeholder when a page's paper type is feature-flagged off */}
+        {isLeft && isPaperTypeComingSoon(page.paperType) && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center px-6 pointer-events-none">
+            <div className="bg-white/90 backdrop-blur-md border border-amber-200 rounded-2xl shadow-lg px-6 py-5 max-w-sm text-center pointer-events-auto">
+              <div className="inline-block bg-amber-400 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-sm shadow-sm mb-3">
+                Coming Soon
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-1.5 capitalize">
+                {page.paperType === 'isometric' ? 'Iso Flow' : page.paperType} paper
+              </h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                {page.paperType === 'music'
+                  ? 'Melody sketching with lyrics — drop your first songs here soon.'
+                  : page.paperType === 'hex'
+                    ? 'Hex network maps for systems thinking — landing in the next release.'
+                    : 'Process flow diagrams in isometric perspective — landing in the next release.'}
+              </p>
+              <p className="text-[10px] text-gray-400 mt-3">
+                Switch to Lined, Grid, Dotted, or Blank to keep working.
+              </p>
+            </div>
+          </div>
         )}
         <div className={`relative z-10 min-h-full ${(page.paperType === 'hex' || page.paperType === 'isometric' || page.paperType === 'grid') ? 'pointer-events-none [&_[data-block-id]]:pointer-events-auto' : ''}`}>
         {(() => {
