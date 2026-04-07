@@ -1,7 +1,7 @@
 {
-    "buildCommand": "cd ../.. && npx turbo build --filter=@papergrid/web",
+    "buildCommand": "cd ../.. && npm --workspace @papergrid/core run build && npm --workspace @papergrid/web run build",
     "outputDirectory": "dist",
-    "installCommand": "cd ../.. && npm install",
+    "installCommand": "cd ../.. && npm install --include=optional",
     "framework": "vite",
     "rewrites": [
         {
