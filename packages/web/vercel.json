@@ -1,7 +1,7 @@
 {
     "buildCommand": "cd ../.. && npm --workspace @papergrid/core run build && npm --workspace @papergrid/web run build",
     "outputDirectory": "dist",
-    "installCommand": "cd ../.. && npm install --include=optional",
+    "installCommand": "cd ../.. && npm install --include=dev --include=optional",
     "framework": "vite",
     "rewrites": [
         {
