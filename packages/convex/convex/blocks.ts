@@ -1,23 +1,54 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { requirePageOwner, requireBlockOwner } from "./authHelpers";
+
+// Safety cap: one page should never realistically hold more than a few
+// hundred blocks. This is a guard rail against pathological pages or
+// malicious payloads DoSing the query via a single .collect()-style read.
+const MAX_BLOCKS_PER_PAGE = 500;
 
 // --- Queries ---
 
 export const listByPage = query({
-  args: { pageId: v.id("pages") },
-  handler: async (ctx, { pageId }) => {
-    const blocks = await ctx.db
+  args: {
+    pageId: v.id("pages"),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { pageId, sessionToken }) => {
+    await requirePageOwner(ctx, pageId, sessionToken);
+    // Compound index ("pageId", "sortOrder") returns rows already
+    // ordered by sortOrder ascending — no in-memory sort required.
+    return await ctx.db
       .query("blocks")
       .withIndex("by_page", (q) => q.eq("pageId", pageId))
-      .collect();
-    return blocks.sort((a, b) => a.sortOrder - b.sortOrder);
+      .take(MAX_BLOCKS_PER_PAGE);
   },
 });
 
+// O(1) max sortOrder via descending compound index + take(1). Replaces
+// the previous pattern that loaded every sibling block on each create —
+// a full O(n) read on every write.
+async function nextBlockSortOrder(
+  ctx: { db: { query: (name: "blocks") => any } },
+  pageId: Id<"pages">,
+): Promise<number> {
+  const top = await ctx.db
+    .query("blocks")
+    .withIndex("by_page", (q: any) => q.eq("pageId", pageId))
+    .order("desc")
+    .take(1);
+  return top.length === 0 ? 0 : (top[0] as { sortOrder: number }).sortOrder + 1;
+}
+
 export const get = query({
-  args: { id: v.id("blocks") },
-  handler: async (ctx, { id }) => {
-    return await ctx.db.get(id);
+  args: {
+    id: v.id("blocks"),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, sessionToken }) => {
+    const { block } = await requireBlockOwner(ctx, id, sessionToken);
+    return block;
   },
 });
 
@@ -43,21 +74,14 @@ export const create = mutation({
     goalSectionData: v.optional(v.any()),
     timeBlockData: v.optional(v.any()),
     dailySectionData: v.optional(v.any()),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { pageId, ...fields }) => {
-    // Determine next sortOrder
-    const existingBlocks = await ctx.db
-      .query("blocks")
-      .withIndex("by_page", (q) => q.eq("pageId", pageId))
-      .collect();
-    const maxSort = existingBlocks.reduce(
-      (max, b) => Math.max(max, b.sortOrder),
-      -1
-    );
-
+  handler: async (ctx, { pageId, sessionToken, ...fields }) => {
+    await requirePageOwner(ctx, pageId, sessionToken);
+    const sortOrder = await nextBlockSortOrder(ctx, pageId);
     return await ctx.db.insert("blocks", {
       pageId,
-      sortOrder: maxSort + 1,
+      sortOrder,
       ...fields,
     });
   },
@@ -83,10 +107,10 @@ export const update = mutation({
     goalSectionData: v.optional(v.any()),
     timeBlockData: v.optional(v.any()),
     dailySectionData: v.optional(v.any()),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { id, ...fields }) => {
-    const existing = await ctx.db.get(id);
-    if (!existing) throw new Error("Block not found");
+  handler: async (ctx, { id, sessionToken, ...fields }) => {
+    await requireBlockOwner(ctx, id, sessionToken);
 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(fields)) {
@@ -100,11 +124,21 @@ export const update = mutation({
 export const reorder = mutation({
   args: {
     blockIds: v.array(v.id("blocks")),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { blockIds }) => {
-    for (let i = 0; i < blockIds.length; i++) {
-      await ctx.db.patch(blockIds[i], { sortOrder: i });
+  handler: async (ctx, { blockIds, sessionToken }) => {
+    if (blockIds.length === 0) return;
+    // First block pins the owning page; every subsequent block must
+    // live on the same page (clients can't reorder across pages here).
+    const { page } = await requireBlockOwner(ctx, blockIds[0], sessionToken);
+    for (let i = 1; i < blockIds.length; i++) {
+      const b = await ctx.db.get(blockIds[i]);
+      if (!b) throw new Error("Block not found");
+      if (b.pageId !== page._id) throw new Error("Forbidden: cross-page reorder");
     }
+    await Promise.all(
+      blockIds.map((bid, i) => ctx.db.patch(bid, { sortOrder: i })),
+    );
   },
 });
 
@@ -113,10 +147,12 @@ export const moveBetweenPages = mutation({
     blockId: v.id("blocks"),
     targetPageId: v.id("pages"),
     sortOrder: v.number(),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { blockId, targetPageId, sortOrder }) => {
-    const block = await ctx.db.get(blockId);
-    if (!block) throw new Error("Block not found");
+  handler: async (ctx, { blockId, targetPageId, sortOrder, sessionToken }) => {
+    // Caller must own BOTH the source block and the target page.
+    await requireBlockOwner(ctx, blockId, sessionToken);
+    await requirePageOwner(ctx, targetPageId, sessionToken);
 
     await ctx.db.patch(blockId, {
       pageId: targetPageId,
@@ -126,8 +162,12 @@ export const moveBetweenPages = mutation({
 });
 
 export const remove = mutation({
-  args: { id: v.id("blocks") },
-  handler: async (ctx, { id }) => {
+  args: {
+    id: v.id("blocks"),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, sessionToken }) => {
+    await requireBlockOwner(ctx, id, sessionToken);
     await ctx.db.delete(id);
   },
 });
@@ -158,16 +198,13 @@ export const createBatch = mutation({
         dailySectionData: v.optional(v.any()),
       })
     ),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { pageId, blocks }) => {
-    const existingBlocks = await ctx.db
-      .query("blocks")
-      .withIndex("by_page", (q) => q.eq("pageId", pageId))
-      .collect();
-    let nextSort = existingBlocks.reduce(
-      (max, b) => Math.max(max, b.sortOrder),
-      -1
-    ) + 1;
+  handler: async (ctx, { pageId, blocks, sessionToken }) => {
+    await requirePageOwner(ctx, pageId, sessionToken);
+
+    // O(1) next-sortOrder via the same helper as `create`.
+    let nextSort = await nextBlockSortOrder(ctx, pageId);
 
     const insertedIds = [];
     for (const block of blocks) {

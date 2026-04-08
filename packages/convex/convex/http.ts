@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { detectDomain, getDomainRules, getDesignPrinciples } from "./domainDetection";
 import type { CompactBlock, CompactReference } from "./referenceLayouts";
 
@@ -430,6 +430,19 @@ function getSessionTokenFromRequest(request: Request): string | null {
   return request.headers.get("X-Session-Token");
 }
 
+// Best-effort client IP extraction. Cloudflare → cf-connecting-ip; most
+// proxies → x-forwarded-for (first entry). Clamped to 64 chars so a
+// pathological header can't blow up rate-limit keys.
+function getClientIp(request: Request): string | null {
+  const cf = request.headers.get("cf-connecting-ip");
+  if (cf) return cf.trim().slice(0, 64);
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0]?.trim().slice(0, 64) ?? null;
+  const real = request.headers.get("x-real-ip");
+  if (real) return real.trim().slice(0, 64);
+  return null;
+}
+
 http.route({
   path: "/api/generate-layout",
   method: "POST",
@@ -443,31 +456,69 @@ http.route({
     }
 
     try {
-      // --- Ink pre-check (verify user has at least 1 Ink before generating) ---
-      let sessionToken: string | undefined;
-      let inkBalance = 0;
-      try {
-        sessionToken = getSessionTokenFromRequest(request) ?? undefined;
-        if (sessionToken) {
-          const preview = await ctx.runQuery(api.users.previewInkCost, {
-            sessionToken,
-            action: "layout",
-          });
-          inkBalance = preview.balance;
-          if (inkBalance < 1) {
-            return new Response(
-              JSON.stringify({
-                error: "Not enough Ink. You need at least 1 Ink to generate.",
-                inkRequired: 1,
-                inkBalance,
-              }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
+      // --- Auth is REQUIRED. No more silent fallback on failure. ---
+      // Previously this route wrapped the auth/Ink check in try/catch and
+      // on failure continued to the expensive Gemini call anyway. That was
+      // an unauthenticated cost-drain vector. Now: no session → 401; any
+      // error in the auth/Ink path → 401 (fail closed).
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      if (!sessionToken) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const me = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
+      if (!me) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const userId = (me as any)._id as string;
+
+      // Rate limit: 20 layout generations / user / hour. Admin can loosen
+      // via the RATE_LIMIT_RULES constants in rateLimit.ts.
+      const rlUser = await ctx.runMutation(api.rateLimit.consume, {
+        scope: "user", subject: userId,
+        action: "ai.generate_layout", limit: 20, windowMs: 60 * 60 * 1000,
+      });
+      if (!rlUser.allowed) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded for AI generation.", retryAfterSec: rlUser.retryAfterSec }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlUser.retryAfterSec) } }
+        );
+      }
+      // IP floor: 60/hr catches credential sharing across many accounts.
+      const clientIp = getClientIp(request);
+      if (clientIp) {
+        const rlIp = await ctx.runMutation(api.rateLimit.consume, {
+          scope: "ip", subject: clientIp,
+          action: "ai.generate_layout_ip", limit: 60, windowMs: 60 * 60 * 1000,
+        });
+        if (!rlIp.allowed) {
+          return new Response(
+            JSON.stringify({ error: "Rate limit exceeded from this network." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlIp.retryAfterSec) } }
+          );
         }
-      } catch (e) {
-        // If auth fails, allow generation but don't track
-        console.warn("Ink pre-check skipped:", e);
+      }
+
+      // Ink pre-check. Fails closed: if the user has <1 Ink OR the check
+      // errors, we 402 — we do NOT continue to Gemini.
+      const preview = await ctx.runQuery(api.users.previewInkCost, {
+        sessionToken, action: "layout",
+      });
+      const inkBalance = preview.balance;
+      if (inkBalance < 1) {
+        return new Response(
+          JSON.stringify({
+            error: "Not enough Ink. You need at least 1 Ink to generate.",
+            inkRequired: 1,
+            inkBalance,
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const body = await request.json();
@@ -1229,17 +1280,76 @@ http.route({
     }
 
     try {
+      // REQUIRE auth. Previously this route had NO auth, NO rate limit,
+      // and NO Ink charge — anyone could hit it to generate unlimited
+      // Gemini images on our API key.
+      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
+      if (!sessionToken) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const me = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
+      if (!me) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const userId = (me as any)._id as string;
+
+      // Rate limit: 20 covers / user / hour.
+      const rlUser = await ctx.runMutation(api.rateLimit.consume, {
+        scope: "user", subject: userId,
+        action: "ai.generate_cover", limit: 20, windowMs: 60 * 60 * 1000,
+      });
+      if (!rlUser.allowed) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded.", retryAfterSec: rlUser.retryAfterSec }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlUser.retryAfterSec) } }
+        );
+      }
+
       const body = await request.json();
       const { prompt, aesthetic } = body as {
         prompt: string;
         aesthetic?: string;
       };
 
+      if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+        return new Response(
+          JSON.stringify({ error: "prompt is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (prompt.length > 2000) {
+        return new Response(
+          JSON.stringify({ error: "prompt exceeds 2000 character limit" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         return new Response(
           JSON.stringify({ error: "AI service is not configured" }),
           { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Atomic Ink spend BEFORE the Gemini call.
+      const spend = (await ctx.runMutation(api.users.spendInk, {
+        sessionToken, action: "cover",
+      })) as { allowed: boolean; balance?: number; cost?: number };
+      if (!spend.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: "Not enough Ink to generate a cover.",
+            inkBalance: spend.balance,
+            inkRequired: spend.cost,
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -1332,6 +1442,32 @@ http.route({
         });
       }
 
+      // Rate limit: 5 login attempts per email per minute + 30 per IP per
+      // minute (credential-stuffing protection). Runs BEFORE the password
+      // comparison so we don't amplify a timing oracle.
+      const emailLower = email.trim().toLowerCase();
+      const rlEmail = await ctx.runMutation(api.rateLimit.consume, {
+        scope: "email", subject: emailLower,
+        action: "auth.login", limit: 5, windowMs: 60_000,
+      });
+      if (!rlEmail.allowed) {
+        return new Response(JSON.stringify({ error: "Too many login attempts. Please wait a minute and try again." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlEmail.retryAfterSec) },
+        });
+      }
+      const clientIp = getClientIp(request);
+      if (clientIp) {
+        const rlIp = await ctx.runMutation(api.rateLimit.consume, {
+          scope: "ip", subject: clientIp,
+          action: "auth.login_ip", limit: 30, windowMs: 60_000,
+        });
+        if (!rlIp.allowed) {
+          return new Response(JSON.stringify({ error: "Too many login attempts from this network." }), {
+            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlIp.retryAfterSec) },
+          });
+        }
+      }
+
       const result = await ctx.runMutation(api.users.loginWithEmailPassword, {
         email,
         password,
@@ -1373,6 +1509,30 @@ http.route({
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      // Rate limit: 3 signups per email per minute + 10 per IP per minute
+      // (signup spam + throwaway-account abuse protection).
+      const rlEmail = await ctx.runMutation(api.rateLimit.consume, {
+        scope: "email", subject: email.trim().toLowerCase(),
+        action: "auth.signup", limit: 3, windowMs: 60_000,
+      });
+      if (!rlEmail.allowed) {
+        return new Response(JSON.stringify({ error: "Too many signups. Please wait a minute." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlEmail.retryAfterSec) },
+        });
+      }
+      const clientIp = getClientIp(request);
+      if (clientIp) {
+        const rlIp = await ctx.runMutation(api.rateLimit.consume, {
+          scope: "ip", subject: clientIp,
+          action: "auth.signup_ip", limit: 10, windowMs: 60_000,
+        });
+        if (!rlIp.allowed) {
+          return new Response(JSON.stringify({ error: "Too many signups from this network." }), {
+            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rlIp.retryAfterSec) },
+          });
+        }
       }
 
       const result = await ctx.runMutation(api.users.signupWithEmailPassword, {
@@ -1478,8 +1638,47 @@ http.route({
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const result = await ctx.runMutation(api.users.requestPasswordReset, { email });
-      return new Response(JSON.stringify(result), {
+
+      // Rate limit: 3 resets per email per minute AND a per-IP floor of
+      // 10/min. Both checks run before any DB lookup.
+      const clientIp = getClientIp(request);
+      const rl1 = await ctx.runMutation(api.rateLimit.consume, {
+        scope: "email", subject: email.trim().toLowerCase(),
+        action: "auth.password_reset_req", limit: 3, windowMs: 60_000,
+      });
+      if (!rl1.allowed) {
+        return new Response(JSON.stringify({ error: "Too many requests" }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl1.retryAfterSec) },
+        });
+      }
+      if (clientIp) {
+        const rl2 = await ctx.runMutation(api.rateLimit.consume, {
+          scope: "ip", subject: clientIp,
+          action: "auth.password_reset_req_ip", limit: 10, windowMs: 60_000,
+        });
+        if (!rl2.allowed) {
+          return new Response(JSON.stringify({ error: "Too many requests" }), {
+            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl2.retryAfterSec) },
+          });
+        }
+      }
+
+      // This mutation now returns ONLY { success: true } — never the code.
+      await ctx.runMutation(api.users.requestPasswordReset, { email });
+
+      // Pick the code up out of the DB via an internal query (never crosses
+      // a public boundary) and send it via email. If the user didn't exist
+      // the internal query returns null and we silently succeed (prevents
+      // email enumeration).
+      const pending = await ctx.runQuery(internal.users.getPendingResetCodeInternal, { email });
+      if (pending) {
+        // TODO: wire up real transactional email (Resend / Postmark /
+        // SendGrid). For now we log the code on the server only — the
+        // client never sees it.
+        console.log(`[password-reset] ${email.trim()}: code=${pending.code} expires=${pending.expiresAt}`);
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (error: any) {
@@ -1507,6 +1706,19 @@ http.route({
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Rate limit: 10 confirm attempts per email per minute. This defeats
+      // brute-forcing the 6-digit code within the 15-minute TTL.
+      const rl = await ctx.runMutation(api.rateLimit.consume, {
+        scope: "email", subject: email.trim().toLowerCase(),
+        action: "auth.password_reset_conf", limit: 10, windowMs: 60_000,
+      });
+      if (!rl.allowed) {
+        return new Response(JSON.stringify({ error: "Too many attempts. Please wait and try again." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rl.retryAfterSec) },
+        });
+      }
+
       const result = await ctx.runMutation(api.users.confirmPasswordReset, { email, code, newPassword });
       return new Response(JSON.stringify(result), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1725,10 +1937,10 @@ http.route({
 
       const full = [];
       for (const nb of notebooks) {
-        const pages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nb._id });
+        const pages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nb._id, sessionToken });
         const pagesWithBlocks = [];
         for (const page of pages) {
-          const blocks = await ctx.runQuery(api.blocks.listByPage, { pageId: page._id });
+          const blocks = await ctx.runQuery(api.blocks.listByPage, { pageId: page._id, sessionToken });
           pagesWithBlocks.push({
             id: page._id,
             title: page.title,
@@ -1810,7 +2022,7 @@ http.route({
       let isUpdate = false;
       if (notebook.id) {
         try {
-          const existing = await ctx.runQuery(api.notebooks.get, { id: notebook.id });
+          const existing = await ctx.runQuery(api.notebooks.get, { id: notebook.id, sessionToken });
           if (existing && existing.userId === (user._id as any)) {
             nbId = existing._id;
             isUpdate = true;
@@ -1831,10 +2043,10 @@ http.route({
           sessionToken,
         });
 
-        // Delete existing pages + blocks, then recreate
-        const oldPages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nbId });
+        // Delete existing pages + blocks, then recreate.
+        const oldPages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nbId, sessionToken });
         for (const oldPage of oldPages) {
-          await ctx.runMutation(api.pages.remove, { id: oldPage._id });
+          await ctx.runMutation(api.pages.remove, { id: oldPage._id, sessionToken });
         }
       } else {
         // Create new notebook
@@ -1860,6 +2072,7 @@ http.route({
           themeColor: page.themeColor,
           aiGenerated: page.aiGenerated,
           createdAt: page.createdAt,
+          sessionToken,
         });
         if (page.id) pageIdMap[page.id] = pageId;
 
@@ -1883,7 +2096,7 @@ http.route({
             timeBlockData: b.timeBlockData,
             dailySectionData: b.dailySectionData,
           }));
-          await ctx.runMutation(api.blocks.createBatch, { pageId, blocks: blockData });
+          await ctx.runMutation(api.blocks.createBatch, { pageId, blocks: blockData, sessionToken });
         }
       }
 
@@ -1957,15 +2170,59 @@ http.route({
 
 // ── Admin endpoints ──────────────────────────────────────
 
-// Bootstrap first admin (one-time, only works when no admin exists)
+// Bootstrap first admin (one-time, only works when no admin exists).
+//
+// Gate: the request MUST carry an `X-Bootstrap-Token` header whose value
+// matches `process.env.ADMIN_BOOTSTRAP_TOKEN`. Without this header, the
+// mutation cannot be triggered — previously anyone could race to claim
+// admin on a fresh deploy.
 http.route({
   path: "/api/admin/bootstrap",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const corsHeaders = makeCorsHeaders(request);
     try {
+      const expectedToken = process.env.ADMIN_BOOTSTRAP_TOKEN;
+      if (!expectedToken) {
+        return new Response(
+          JSON.stringify({ error: "Admin bootstrap is disabled (ADMIN_BOOTSTRAP_TOKEN unset)" }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const providedToken = request.headers.get("x-bootstrap-token") ?? "";
+      // Constant-time comparison to prevent timing oracles.
+      if (providedToken.length !== expectedToken.length) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      let diff = 0;
+      for (let i = 0; i < providedToken.length; i++) {
+        diff |= providedToken.charCodeAt(i) ^ expectedToken.charCodeAt(i);
+      }
+      if (diff !== 0) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Identify the calling user via session token, then promote them
+      // through the internal mutation.
       const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
-      const result = await ctx.runMutation(api.users.bootstrapAdmin, { sessionToken });
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const me = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
+      if (!me) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const result = await ctx.runMutation(internal.users.bootstrapAdminInternal, {
+        userId: (me as any)._id,
+      });
       return new Response(JSON.stringify(result), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

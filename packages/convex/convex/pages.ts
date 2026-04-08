@@ -1,23 +1,37 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireNotebookOwner, requirePageOwner } from "./authHelpers";
+
+// Safety cap on how many pages a single notebook query will return.
+// Prevents a 1000-page notebook from doing an unbounded scan per load.
+const MAX_PAGES_PER_NOTEBOOK = 500;
 
 // --- Queries ---
 
 export const listByNotebook = query({
-  args: { notebookId: v.id("notebooks") },
-  handler: async (ctx, { notebookId }) => {
-    const pages = await ctx.db
+  args: {
+    notebookId: v.id("notebooks"),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { notebookId, sessionToken }) => {
+    // Ownership check: caller must own the notebook.
+    await requireNotebookOwner(ctx, notebookId, sessionToken);
+    // Compound index (notebookId, sortOrder) returns already-ordered rows.
+    return await ctx.db
       .query("pages")
       .withIndex("by_notebook", (q) => q.eq("notebookId", notebookId))
-      .collect();
-    return pages.sort((a, b) => a.sortOrder - b.sortOrder);
+      .take(MAX_PAGES_PER_NOTEBOOK);
   },
 });
 
 export const get = query({
-  args: { id: v.id("pages") },
-  handler: async (ctx, { id }) => {
-    return await ctx.db.get(id);
+  args: {
+    id: v.id("pages"),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, sessionToken }) => {
+    const { page } = await requirePageOwner(ctx, id, sessionToken);
+    return page;
   },
 });
 
@@ -32,17 +46,22 @@ export const create = mutation({
     themeColor: v.optional(v.string()),
     aiGenerated: v.optional(v.boolean()),
     createdAt: v.optional(v.string()),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { notebookId, title, paperType, aesthetic, themeColor, aiGenerated, createdAt }) => {
-    // Determine next sortOrder
-    const existingPages = await ctx.db
+  handler: async (
+    ctx,
+    { notebookId, title, paperType, aesthetic, themeColor, aiGenerated, createdAt, sessionToken },
+  ) => {
+    await requireNotebookOwner(ctx, notebookId, sessionToken);
+
+    // O(1) next-sortOrder via descending compound index + take(1).
+    // Previously this did a full .collect() of every sibling page.
+    const top = await ctx.db
       .query("pages")
       .withIndex("by_notebook", (q) => q.eq("notebookId", notebookId))
-      .collect();
-    const maxSort = existingPages.reduce(
-      (max, p) => Math.max(max, p.sortOrder),
-      -1
-    );
+      .order("desc")
+      .take(1);
+    const sortOrder = top.length === 0 ? 0 : top[0].sortOrder + 1;
 
     return await ctx.db.insert("pages", {
       notebookId,
@@ -52,7 +71,7 @@ export const create = mutation({
       themeColor,
       aiGenerated,
       createdAt,
-      sortOrder: maxSort + 1,
+      sortOrder,
     });
   },
 });
@@ -64,10 +83,10 @@ export const update = mutation({
     paperType: v.optional(v.string()),
     aesthetic: v.optional(v.string()),
     themeColor: v.optional(v.string()),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { id, ...fields }) => {
-    const existing = await ctx.db.get(id);
-    if (!existing) throw new Error("Page not found");
+  handler: async (ctx, { id, sessionToken, ...fields }) => {
+    await requirePageOwner(ctx, id, sessionToken);
 
     const updates: Record<string, unknown> = {};
     if (fields.title !== undefined) updates.title = fields.title;
@@ -82,35 +101,49 @@ export const update = mutation({
 export const reorder = mutation({
   args: {
     pageIds: v.array(v.id("pages")),
+    sessionToken: v.optional(v.string()),
   },
-  handler: async (ctx, { pageIds }) => {
-    for (let i = 0; i < pageIds.length; i++) {
-      await ctx.db.patch(pageIds[i], { sortOrder: i });
+  handler: async (ctx, { pageIds, sessionToken }) => {
+    if (pageIds.length === 0) return;
+    // Verify every page being reordered belongs to the same owner.
+    // We check the first page, capture its notebook, and assert that
+    // every other page resolves to a page owned by the same user via
+    // the same notebook.
+    const { user, notebook } = await requirePageOwner(ctx, pageIds[0], sessionToken);
+    for (let i = 1; i < pageIds.length; i++) {
+      const p = await ctx.db.get(pageIds[i]);
+      if (!p) throw new Error("Page not found");
+      if (p.notebookId !== notebook._id) throw new Error("Forbidden: cross-notebook reorder");
     }
+    void user; // used via the ownership check above
+    // Parallelize patches — Convex runs them in parallel within one mutation.
+    await Promise.all(
+      pageIds.map((pid, i) => ctx.db.patch(pid, { sortOrder: i })),
+    );
   },
 });
 
 export const remove = mutation({
-  args: { id: v.id("pages") },
-  handler: async (ctx, { id }) => {
-    // Cascade delete: remove all blocks on this page
+  args: {
+    id: v.id("pages"),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, sessionToken }) => {
+    const { notebook } = await requirePageOwner(ctx, id, sessionToken);
+
+    // Cascade delete: remove all blocks on this page.
+    // Parallelized for speed — Convex handles transactional atomicity.
     const blocks = await ctx.db
       .query("blocks")
       .withIndex("by_page", (q) => q.eq("pageId", id))
       .collect();
-    for (const block of blocks) {
-      await ctx.db.delete(block._id);
-    }
+    await Promise.all(blocks.map((b) => ctx.db.delete(b._id)));
 
-    // Remove page from any notebook bookmark lists
-    const page = await ctx.db.get(id);
-    if (page) {
-      const notebook = await ctx.db.get(page.notebookId);
-      if (notebook && notebook.bookmarks.includes(id)) {
-        await ctx.db.patch(notebook._id, {
-          bookmarks: notebook.bookmarks.filter((b) => b !== id),
-        });
-      }
+    // Remove page from notebook bookmark list if present.
+    if (notebook.bookmarks.includes(id)) {
+      await ctx.db.patch(notebook._id, {
+        bookmarks: notebook.bookmarks.filter((b) => b !== id),
+      });
     }
 
     await ctx.db.delete(id);

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery, QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { getPlanLimitFor, type PlanId } from "./planLimits";
 
@@ -44,7 +44,10 @@ export const DEFAULT_INK_CONFIG = {
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_HASH_VERSION = "pbkdf2_sha256";
-const PASSWORD_HASH_ITERATIONS = 120_000;
+// OWASP 2025 guidance: PBKDF2-SHA256 ≥ 600,000 iterations. Old hashes with
+// the previous 120k count are still verifiable because we store the iteration
+// count inside the hash string itself; new hashes use the current constant.
+const PASSWORD_HASH_ITERATIONS = 600_000;
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -172,8 +175,13 @@ export const getCurrentUser = query({
   },
 });
 
-// Auto-provision user on first login (called from auth callback or app init)
-export const getOrCreate = mutation({
+// Auto-provision user on first login (called from auth callback or app init).
+//
+// Locked down: previously a public mutation, meaning a misconfigured JWT
+// auth setup could let arbitrary callers provision accounts and skip the
+// initial-ink grant. Now internal; call via `ctx.runMutation(internal.users.getOrCreate)`
+// from a trusted HTTP action after verifying the identity.
+export const getOrCreate = internalMutation({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -186,7 +194,12 @@ export const getOrCreate = mutation({
       .first();
     if (existing) return existing._id;
 
-    // Create new user from identity
+    // Mirror the initial-ink grant from signupWithEmailPassword so
+    // social-auth users aren't created without an Ink balance.
+    const freePlanLimit = await getPlanLimitFor(ctx, "free");
+    const initialInk = freePlanLimit.monthlyInk;
+    const nowIso = new Date().toISOString();
+
     return await ctx.db.insert("users", {
       tokenIdentifier: identity.tokenIdentifier,
       name: identity.name ?? identity.email ?? "User",
@@ -194,6 +207,10 @@ export const getOrCreate = mutation({
       avatarUrl: identity.pictureUrl,
       plan: "free",
       aiGenerationsUsed: 0,
+      inkSubscription: initialInk,
+      inkPurchased: 0,
+      inkResetAt: nowIso,
+      inkLastActivity: nowIso,
       preferences: {
         defaultAesthetic: "modern-planner",
         defaultPaperType: "lined",
@@ -449,8 +466,10 @@ export const get = query({
   },
 });
 
-// Get user by email
-export const getByEmail = query({
+// Internal: lookup by email (used by the Stripe webhook + signup flow).
+// Previously this was a public query, which allowed account enumeration and
+// defeated the anti-enumeration branch in requestPasswordReset.
+export const getByEmailInternal = internalQuery({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
     const normalizedEmail = normalizeEmail(email);
@@ -478,27 +497,45 @@ export const updatePreferences = mutation({
   },
 });
 
-// Update user plan (called from Stripe webhook)
-export const updatePlan = mutation({
+// Update user plan — CALLED ONLY FROM THE STRIPE WEBHOOK.
+//
+// Previously this was a public mutation where the "forbidden" branch only
+// fired if targetUserId !== actingUser._id, meaning any authenticated user
+// could upgrade THEMSELVES to Creator by calling api.users.updatePlan({
+// plan: "creator" }) without paying. Now internal — the only caller is the
+// Stripe webhook after it has verified the signature and looked up the user
+// by stripeCustomerId.
+export const updatePlanInternal = internalMutation({
   args: {
-    userId: v.optional(v.id("users")),
-    sessionToken: v.optional(v.string()),
-    plan: v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("founder")),
+    userId: v.id("users"),
+    plan: v.union(
+      v.literal("free"),
+      v.literal("starter"),
+      v.literal("pro"),
+      v.literal("founder"),
+      v.literal("creator"),
+    ),
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
   },
-  handler: async (ctx, { userId, sessionToken, plan, stripeCustomerId, stripeSubscriptionId }) => {
-    const actingUser = (await getUserFromIdentity(ctx)) ?? (await getUserFromSessionToken(ctx, sessionToken));
-    if (!actingUser) throw new Error("Not authenticated");
-    const targetUserId = userId ?? actingUser._id;
-    if (targetUserId !== actingUser._id) {
-      throw new Error("Forbidden");
-    }
-
+  handler: async (ctx, { userId, plan, stripeCustomerId, stripeSubscriptionId }) => {
+    const target = await ctx.db.get(userId);
+    if (!target) throw new Error("User not found");
     const patch: Record<string, unknown> = { plan };
     if (stripeCustomerId) patch.stripeCustomerId = stripeCustomerId;
     if (stripeSubscriptionId) patch.stripeSubscriptionId = stripeSubscriptionId;
-    await ctx.db.patch(targetUserId, patch);
+    await ctx.db.patch(userId, patch);
+  },
+});
+
+// Internal: find the user row for a given Stripe customer id (webhook lookup).
+export const getByStripeCustomerInternal = internalQuery({
+  args: { stripeCustomerId: v.string() },
+  handler: async (ctx, { stripeCustomerId }) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_stripe_customer", (q) => q.eq("stripeCustomerId", stripeCustomerId))
+      .first();
   },
 });
 
@@ -544,12 +581,21 @@ async function requireAdmin(ctx: MutationCtx | QueryCtx, sessionToken?: string) 
   return user;
 }
 
-// Admin: list all users with usage stats
+// Admin: list users with usage stats.
+//
+// Scale: previously this ran `.collect()` which full-scans the users table
+// on every admin panel load. At 5K+ users the response blows past both
+// the admin panel's render budget and Convex's per-function time limits.
+// Now bounded to `limit` (default 100, max 500).
 export const adminListUsers = query({
-  args: { sessionToken: v.optional(v.string()) },
-  handler: async (ctx, { sessionToken }) => {
+  args: {
+    sessionToken: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { sessionToken, limit }) => {
     await requireAdmin(ctx, sessionToken);
-    const users = await ctx.db.query("users").collect();
+    const pageSize = Math.min(Math.max(limit ?? 100, 1), 500);
+    const users = await ctx.db.query("users").order("desc").take(pageSize);
     return users.map((u) => {
       const { passwordHash, ...safe } = u as Record<string, unknown>;
       return safe;
@@ -585,12 +631,19 @@ export const adminSetRole = mutation({
   },
 });
 
-// Bootstrap: promote the first admin when no admins exist yet
-// This is a one-time operation — once an admin exists, it becomes a no-op
-export const bootstrapAdmin = mutation({
-  args: { sessionToken: v.optional(v.string()) },
-  handler: async (ctx, { sessionToken }) => {
-    // Check if any admin already exists
+// Bootstrap: promote the first admin when no admins exist yet.
+//
+// Two layers of protection:
+//   1. Gate the HTTP route with the `ADMIN_BOOTSTRAP_TOKEN` env var — the
+//      HTTP action checks a header before calling this mutation.
+//   2. Refuse if any admin already exists.
+//
+// Previously this was a public mutation that anyone could hit the moment the
+// first user signed up, racing the real founder to admin.
+export const bootstrapAdminInternal = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    // Double check: an admin must not already exist.
     const existingAdmin = await ctx.db
       .query("users")
       .filter((q) => q.eq(q.field("role"), "admin"))
@@ -598,20 +651,20 @@ export const bootstrapAdmin = mutation({
     if (existingAdmin) {
       throw new Error("Forbidden: an admin already exists. Use adminSetRole instead.");
     }
-    // Authenticate the caller
-    const user =
-      (await getUserFromIdentity(ctx as AuthCtx)) ??
-      (await getUserFromSessionToken(ctx as AuthCtx, sessionToken));
-    if (!user) throw new Error("Not authenticated");
-    // Promote caller to admin
-    await ctx.db.patch(user._id, { role: "admin" as const });
-    return { success: true, userId: user._id };
+    const target = await ctx.db.get(userId);
+    if (!target) throw new Error("User not found");
+    await ctx.db.patch(userId, { role: "admin" as const });
+    return { success: true, userId };
   },
 });
 
-// CLI-only: promote all user records with a given email to admin
-// Run via: npx convex run users:promoteByEmail '{"email":"you@example.com"}'
-export const promoteByEmail = mutation({
+// CLI-only: promote all user records with a given email to admin.
+//
+// Previously this was a PUBLIC mutation, meaning anyone could call
+// api.users.promoteByEmail({ email }) and become admin in one line. Now it's
+// an internal mutation — only invokable via `npx convex run users:promoteByEmailInternal`
+// or via a trusted HTTP action.
+export const promoteByEmailInternal = internalMutation({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
     const normalizedEmail = normalizeEmail(email);
@@ -629,8 +682,12 @@ export const promoteByEmail = mutation({
   },
 });
 
-// CLI-only: debug session — show which user a session resolves to
-export const debugSession = query({
+// CLI-only: debug session — show which user a session resolves to.
+//
+// Previously a PUBLIC query that leaked email/role/userId/tokenIdentifier for
+// any known session token. A stolen/leaked session string was enough to
+// unmask the victim. Now internal.
+export const debugSessionInternal = internalQuery({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     const session = await ctx.db
@@ -667,8 +724,10 @@ export const adminResetUsage = mutation({
   },
 });
 
-// Dev helper: reset AI usage for all users (no auth required)
-export const devResetAllAiUsage = mutation({
+// Dev helper: reset AI usage for all users. Previously a public mutation
+// that any user could call to nuke the quota system for every account.
+// Now internal.
+export const devResetAllAiUsageInternal = internalMutation({
   args: {},
   handler: async (ctx) => {
     const users = await ctx.db.query("users").collect();
@@ -843,30 +902,46 @@ export const refillSubscriptionInk = mutation({
   },
 });
 
-// Purchase Ink (after Stripe payment confirmation)
-export const purchaseInk = mutation({
+// Purchase Ink — ONLY CALLED FROM THE STRIPE WEBHOOK after payment is
+// confirmed. Previously this was a public mutation where the caller supplied
+// `inkAmount`, so any logged-in user could grant themselves arbitrary Ink by
+// calling api.users.purchaseInk({ inkAmount: 999999 }). Now internal.
+export const purchaseInkInternal = internalMutation({
   args: {
-    sessionToken: v.optional(v.string()),
+    userId: v.id("users"),
     packId: v.string(),
     inkAmount: v.number(),
+    stripePaymentIntentId: v.optional(v.string()),
   },
-  handler: async (ctx, { sessionToken, packId, inkAmount }) => {
-    const user = (await getUserFromIdentity(ctx)) ?? (await getUserFromSessionToken(ctx, sessionToken));
-    if (!user) throw new Error("Not authenticated");
+  handler: async (ctx, { userId, packId, inkAmount, stripePaymentIntentId }) => {
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+
+    // Idempotency guard: skip if we've already processed this payment intent.
+    if (stripePaymentIntentId) {
+      const existing = await ctx.db
+        .query("inkTransactions")
+        .withIndex("by_idempotency", (q) => q.eq("idempotencyKey", stripePaymentIntentId))
+        .first();
+      if (existing) {
+        return { balance: existing.balance, duplicate: true };
+      }
+    }
 
     const newPurchased = (user.inkPurchased ?? 0) + inkAmount;
     const newBalance = (user.inkSubscription ?? 0) + newPurchased;
 
-    await ctx.db.patch(user._id, {
+    await ctx.db.patch(userId, {
       inkPurchased: newPurchased,
       inkLastActivity: new Date().toISOString(),
     });
 
     await ctx.db.insert("inkTransactions", {
-      userId: user._id,
+      userId,
       type: "purchase",
       amount: inkAmount,
       balance: newBalance,
+      idempotencyKey: stripePaymentIntentId,
       description: `Purchased ${packId} (${inkAmount} Ink)`,
       createdAt: new Date().toISOString(),
     });
@@ -979,8 +1054,11 @@ export const adminDeductInk = mutation({
   },
 });
 
-// Migration: convert old generation system to Ink
-export const migrateToInkSystem = mutation({
+// Migration: convert old generation system to Ink.
+// Internal-only — at 5K+ users this mutation will exceed Convex per-txn
+// limits if invoked in one go. Callers should use the backfillInitialInk
+// variant below which is paginated + admin-only.
+export const migrateToInkSystemInternal = internalMutation({
   args: {},
   handler: async (ctx) => {
     const users = await ctx.db.query("users").collect();
@@ -1076,6 +1154,19 @@ export const seedInkConfig = mutation({
 
 const RESET_CODE_TTL_MS = 1000 * 60 * 15; // 15 minutes
 
+// Request a password reset code.
+//
+// Security notes:
+//   1. We NEVER include the code in the return value — previously the code
+//      was returned in the mutation result AND relayed to the client through
+//      the HTTP layer, which meant anyone could trigger forgot-password for
+//      any email and get the reset code back in the response. Full account
+//      takeover.
+//   2. The code is drawn from crypto.getRandomValues (CSPRNG), not
+//      Math.random, so it's not predictable.
+//   3. The HTTP action layer calls `internal.users.getPendingResetCodeInternal`
+//      after this mutation to pick the code up out of the DB and send it via
+//      email — the code never crosses a public boundary.
 export const requestPasswordReset = mutation({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
@@ -1086,10 +1177,10 @@ export const requestPasswordReset = mutation({
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
       .first();
-    // Always return success to avoid email enumeration
+    // Always return success to avoid email enumeration.
     if (!user || !user.passwordHash) return { success: true };
 
-    // Invalidate any existing codes for this email
+    // Invalidate any existing codes for this email.
     const existing = await ctx.db
       .query("passwordResetTokens")
       .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
@@ -1098,8 +1189,9 @@ export const requestPasswordReset = mutation({
       await ctx.db.delete(token._id);
     }
 
-    // Generate a 6-digit code
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // CSPRNG 6-digit code.
+    const randomArray = crypto.getRandomValues(new Uint32Array(1));
+    const code = String(100000 + (randomArray[0] % 900000));
     const expiresAt = new Date(Date.now() + RESET_CODE_TTL_MS).toISOString();
 
     await ctx.db.insert("passwordResetTokens", {
@@ -1109,8 +1201,28 @@ export const requestPasswordReset = mutation({
       used: false,
     });
 
-    // Code is sent via email in the HTTP action layer
-    return { success: true, code };
+    // Do NOT return the code. The HTTP layer picks it up via the internal
+    // query below, sends it via email, and returns only { success: true } to
+    // the client.
+    return { success: true };
+  },
+});
+
+// Internal: used by the HTTP action layer to fetch the most-recent unsent
+// reset code for a given email so it can be emailed out. NEVER exposed as a
+// public query.
+export const getPendingResetCodeInternal = internalQuery({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const normalizedEmail = normalizeEmail(email);
+    const token = await ctx.db
+      .query("passwordResetTokens")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .first();
+    if (!token) return null;
+    if (token.used) return null;
+    if (new Date(token.expiresAt).getTime() <= Date.now()) return null;
+    return { code: token.code, expiresAt: token.expiresAt };
   },
 });
 
@@ -1129,7 +1241,8 @@ export const confirmPasswordReset = mutation({
       .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
       .first();
 
-    if (!token || token.code !== code || token.used) {
+    // Constant-time comparison on the code to avoid timing oracles.
+    if (!token || token.used || !constantTimeEquals(token.code, code)) {
       throw new Error("Invalid or expired reset code");
     }
     if (new Date(token.expiresAt).getTime() <= Date.now()) {
@@ -1147,7 +1260,17 @@ export const confirmPasswordReset = mutation({
     await ctx.db.patch(user._id, { passwordHash });
     await ctx.db.patch(token._id, { used: true });
 
-    // Create a session so user is logged in after reset
+    // Invalidate ALL existing sessions for this user — a stolen session
+    // token should not survive a password reset. Previously the old
+    // sessions were untouched, meaning attackers could keep using a
+    // stolen token after the victim reset their password.
+    const oldSessions = await ctx.db
+      .query("authSessions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    await Promise.all(oldSessions.map((s) => ctx.db.delete(s._id)));
+
+    // Create a fresh session so user is logged in after reset.
     const sessionToken = await createSession(ctx, user._id);
     return { sessionToken, user: sanitizeUser(user) };
   },

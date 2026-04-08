@@ -46,6 +46,20 @@ export const join = mutation({
       createdAt: new Date().toISOString(),
     });
 
+    // Increment the denormalized counter so `count` is O(1) instead of a
+    // full table scan. The `counters` table (see schema.ts) exists exactly
+    // for this kind of aggregate.
+    const counter = await ctx.db
+      .query("counters")
+      .withIndex("by_key", (q) => q.eq("key", "waitlist_total"))
+      .first();
+    const nowIso = new Date().toISOString();
+    if (counter) {
+      await ctx.db.patch(counter._id, { value: counter.value + 1, updatedAt: nowIso });
+    } else {
+      await ctx.db.insert("counters", { key: "waitlist_total", value: 1, updatedAt: nowIso });
+    }
+
     return { success: true, isNew: true };
   },
 });
@@ -79,14 +93,18 @@ export const list = query({
 
 /**
  * Admin-only: count of waitlist entries (for dashboard stats).
+ *
+ * Reads the denormalized counter maintained by `join`. Previously this did a
+ * full .collect() of the entire waitlist table on every admin dashboard
+ * render — at 10k emails that's a guaranteed O(n) scan.
  */
 export const count = query({
   args: {},
   handler: async (ctx) => {
-    // Convex doesn't have a fast count(*); for the launch waitlist this is
-    // expected to be small (<10k) so a full scan is fine. Revisit if it
-    // grows beyond that.
-    const all = await ctx.db.query("waitlist").collect();
-    return { total: all.length };
+    const counter = await ctx.db
+      .query("counters")
+      .withIndex("by_key", (q) => q.eq("key", "waitlist_total"))
+      .first();
+    return { total: counter?.value ?? 0 };
   },
 });
