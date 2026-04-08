@@ -19,8 +19,10 @@
 // TYPES
 // ============================================================================
 
+export type PricingPlanId = 'free' | 'starter' | 'pro' | 'creator' | 'founder';
+
 export interface PricingPlan {
-  readonly id: 'free' | 'pro' | 'creator';
+  readonly id: PricingPlanId;
   readonly name: string;
   readonly tagline: string;
   readonly monthlyPrice: number;
@@ -51,6 +53,10 @@ export interface PricingPlan {
   readonly badge: string | null;
   readonly ctaLabel: string;
   readonly featured: boolean;
+  /** When true, the plan is hidden from the public landing page but still
+   *  edited in the admin panel and assignable to users. Used for legacy
+   *  lifetime plans (founder) and soft-rollout experiments (starter). */
+  readonly hiddenFromLanding?: boolean;
 }
 
 export interface InkPack {
@@ -73,7 +79,7 @@ export interface InkCost {
 // PRICING PLANS
 // ============================================================================
 
-export const PRICING_PLANS: Readonly<Record<'free' | 'pro' | 'creator', PricingPlan>> = {
+export const PRICING_PLANS: Readonly<Record<PricingPlanId, PricingPlan>> = {
   free: {
     id: 'free',
     name: 'Free',
@@ -174,6 +180,77 @@ export const PRICING_PLANS: Readonly<Record<'free' | 'pro' | 'creator', PricingP
     badge: null,
     ctaLabel: 'Go Creator',
     featured: false,
+  },
+
+  // ── Legacy + soft-launch plans (hidden from public landing, editable in /admin) ──
+  starter: {
+    id: 'starter',
+    name: 'Starter',
+    tagline: 'Halfway house between Free and Pro',
+    monthlyPrice: 4.99,
+    annualPrice: 44,
+    annualEquivMonthly: 3.67,
+    annualSavingsFraming: 'Get 2 months free',
+    ink: {
+      monthly: 50,
+      rollover: 25,
+    },
+    limits: {
+      notebooks: 5,
+      paperTypes: 10,
+      blockTypes: 22,
+    },
+    features: {
+      allPaperTypes: true,
+      allBlockTypes: true,
+      cleanExport: true,
+      brandedExport: false,
+      priorityAI: false,
+      publishTemplates: false,
+      marketplaceRevShare: 0,
+      bookmarks: true,
+      inkRollover: true,
+      support: 'email',
+    },
+    badge: null,
+    ctaLabel: 'Choose Starter',
+    featured: false,
+    hiddenFromLanding: true,
+  },
+
+  founder: {
+    id: 'founder',
+    name: 'Founder',
+    tagline: 'Legacy lifetime plan — rewarded to early supporters',
+    monthlyPrice: 0,
+    annualPrice: null,
+    annualEquivMonthly: null,
+    annualSavingsFraming: 'Lifetime — paid once, forever',
+    ink: {
+      monthly: 100,
+      rollover: 50,
+    },
+    limits: {
+      notebooks: -1,
+      paperTypes: 10,
+      blockTypes: 22,
+    },
+    features: {
+      allPaperTypes: true,
+      allBlockTypes: true,
+      cleanExport: true,
+      brandedExport: false,
+      priorityAI: false,
+      publishTemplates: false,
+      marketplaceRevShare: 0,
+      bookmarks: true,
+      inkRollover: true,
+      support: 'email',
+    },
+    badge: 'LIFETIME',
+    ctaLabel: 'Founder',
+    featured: false,
+    hiddenFromLanding: true,
   },
 } as const;
 

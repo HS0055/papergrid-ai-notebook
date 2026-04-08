@@ -56,7 +56,9 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
   );
   const plansRecord = config.plans;
   const packsList = config.packs;
-  const plans = [plansRecord.free, plansRecord.pro, plansRecord.creator];
+  // Only render plans that aren't hidden (hides legacy starter/founder etc).
+  const plans = [plansRecord.free, plansRecord.pro, plansRecord.creator]
+    .filter((p): p is PricingPlan => p !== undefined && !p.hiddenFromLanding);
 
   useEffect(() => {
     if (!sectionRef.current) return;

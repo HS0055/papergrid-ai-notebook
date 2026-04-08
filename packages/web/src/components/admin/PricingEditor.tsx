@@ -4,6 +4,7 @@ import {
   PRICING_PLANS as DEFAULT_PRICING_PLANS,
   INK_PACKS as DEFAULT_INK_PACKS,
   type PricingPlan,
+  type PricingPlanId,
   type InkPack,
 } from '@papergrid/core';
 import { useServerConfig } from '../../hooks/useServerConfig';
@@ -27,14 +28,14 @@ export const PricingEditor: React.FC = () => {
   const resetPlans = resetConfig;
   const resetPacks = resetConfig;
 
-  const updatePlan = (id: 'free' | 'pro' | 'creator', patch: Partial<PricingPlan>) => {
+  const updatePlan = (id: PricingPlanId, patch: Partial<PricingPlan>) => {
     setPlans({
       ...plans,
       [id]: { ...plans[id], ...patch },
     });
   };
 
-  const updatePlanInk = (id: 'free' | 'pro' | 'creator', patch: Partial<{ monthly: number; rollover: number }>) => {
+  const updatePlanInk = (id: PricingPlanId, patch: Partial<{ monthly: number; rollover: number }>) => {
     setPlans({
       ...plans,
       [id]: {
@@ -109,7 +110,9 @@ export const PricingEditor: React.FC = () => {
       <section>
         <h3 className="text-lg font-bold text-gray-900 mb-4">Subscription Plans</h3>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {(['free', 'pro', 'creator'] as const).map((planId) => {
+          {(['free', 'starter', 'pro', 'creator', 'founder'] as const).map((planId) => {
+            // Skip plans that don't exist in the current config.
+            if (!plans[planId]) return null;
             const plan = plans[planId];
             return (
               <div
