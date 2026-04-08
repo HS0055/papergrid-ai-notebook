@@ -38,56 +38,255 @@ const COVER_COLORS = [
   'bg-red-900', 'bg-teal-900', 'bg-fuchsia-900', 'bg-zinc-900',
 ];
 
+// Rich, designer-grade starter templates. Each one is a fully-composed
+// 2-page spread that should feel like opening a premium printed planner —
+// not an empty doc with one heading. Every template uses specialised
+// planner blocks (TIME_BLOCK, HABIT_TRACKER, DAILY_SECTION, GOAL_SECTION,
+// PROGRESS_BAR, KANBAN, etc) so users see real structure on page 1 instead
+// of having to assemble it themselves.
 const STARTER_TEMPLATES = [
-  { id: 'blank', title: 'Blank Page', desc: 'Start from scratch', icon: FileText, blocks: [] },
   {
-    id: 'planner', title: 'Daily Planner', desc: 'Organize your day', icon: Calendar, blocks: [
-      { id: 't1', type: BlockType.HEADING, content: 'Daily Plan', side: 'left' as const },
-      { id: 't2', type: BlockType.CHECKBOX, content: 'Morning routine', checked: false, side: 'left' as const },
-      { id: 't3', type: BlockType.CHECKBOX, content: 'Top priority task', checked: false, side: 'left' as const },
-      { id: 't4', type: BlockType.CHECKBOX, content: 'Exercise', checked: false, side: 'left' as const },
-      { id: 't5', type: BlockType.DIVIDER, content: '', side: 'right' as const },
-      { id: 't6', type: BlockType.TEXT, content: 'Notes for today...', side: 'right' as const },
-    ]
+    id: 'blank',
+    title: 'Blank Page',
+    desc: 'Start from scratch',
+    icon: FileText,
+    blocks: [] as Block[],
   },
   {
-    id: 'meeting', title: 'Meeting Notes', desc: 'Capture key points', icon: PenLine, blocks: [
-      { id: 'm1', type: BlockType.HEADING, content: 'Meeting Notes', side: 'left' as const },
-      { id: 'm2', type: BlockType.TEXT, content: 'Attendees: ', side: 'left' as const },
-      { id: 'm3', type: BlockType.CALLOUT, content: 'Key decisions', side: 'left' as const },
-      { id: 'm4', type: BlockType.HEADING, content: 'Action Items', side: 'right' as const },
-      { id: 'm5', type: BlockType.CHECKBOX, content: '', checked: false, side: 'right' as const },
-    ]
-  },
-  {
-    id: 'tracker', title: 'Project Tracker', desc: 'Track tasks & progress', icon: ListChecks, blocks: [
-      { id: 'p1', type: BlockType.HEADING, content: 'Project Tracker', side: 'left' as const },
+    id: 'planner',
+    title: 'Daily Planner',
+    desc: 'Hour-by-hour schedule + priorities',
+    icon: Calendar,
+    blocks: [
+      { id: 'dp-h1', type: BlockType.HEADING, content: "Today's Plan", side: 'left' as const, emphasis: 'bold' as const, color: 'indigo' },
       {
-        id: 'p2', type: BlockType.GRID, content: 'Tasks', side: 'left' as const, gridData: {
-          columns: ['Task', 'Status', 'Due'],
-          rows: [[{ id: '1', content: '' }, { id: '2', content: '' }, { id: '3', content: '' }]]
-        }
+        id: 'dp-daily',
+        type: BlockType.DAILY_SECTION,
+        content: '',
+        side: 'left' as const,
+        color: 'indigo',
+        dailySectionData: {
+          dayLabel: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+          date: new Date().toISOString().slice(0, 10),
+          sections: [
+            { label: 'Morning', content: '' },
+            { label: 'Afternoon', content: '' },
+            { label: 'Evening', content: '' },
+          ],
+        },
       },
-      { id: 'p3', type: BlockType.CALLOUT, content: 'Blockers & risks', side: 'right' as const },
-    ]
+      { id: 'dp-h2', type: BlockType.HEADING, content: 'Top 3 Priorities', side: 'left' as const, color: 'rose' },
+      { id: 'dp-c1', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'dp-c2', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'dp-c3', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'dp-h3', type: BlockType.HEADING, content: 'Schedule', side: 'right' as const, color: 'indigo' },
+      {
+        id: 'dp-time',
+        type: BlockType.TIME_BLOCK,
+        content: '',
+        side: 'right' as const,
+        color: 'indigo',
+        timeBlockData: {
+          startHour: 7,
+          endHour: 21,
+          interval: 60,
+          entries: [],
+        },
+      },
+      { id: 'dp-h4', type: BlockType.HEADING, content: 'Notes', side: 'right' as const, color: 'slate' },
+      { id: 'dp-t1', type: BlockType.TEXT, content: '', side: 'right' as const },
+    ] as Block[],
   },
   {
-    id: 'bujo', title: 'Bullet Journal', desc: 'Rapid logging system', icon: BookOpen, blocks: [
-      { id: 'j1', type: BlockType.HEADING, content: 'Bullet Journal', side: 'left' as const },
-      { id: 'j2', type: BlockType.CHECKBOX, content: 'Task one', checked: false, side: 'left' as const },
-      { id: 'j3', type: BlockType.TEXT, content: '- Note about something', side: 'left' as const },
-      { id: 'j4', type: BlockType.MOOD_TRACKER, content: '', side: 'right' as const, moodValue: 3 },
-      { id: 'j5', type: BlockType.QUOTE, content: 'Inspiration for the day', side: 'right' as const },
-    ]
+    id: 'meeting',
+    title: 'Meeting Notes',
+    desc: 'Agenda, decisions, action items',
+    icon: PenLine,
+    blocks: [
+      { id: 'mn-h1', type: BlockType.HEADING, content: 'Meeting Notes', side: 'left' as const, emphasis: 'bold' as const, color: 'slate' },
+      {
+        id: 'mn-meta',
+        type: BlockType.GRID,
+        content: '',
+        side: 'left' as const,
+        color: 'slate',
+        gridData: {
+          columns: ['Date', 'Time', 'Location'],
+          rows: [[
+            { id: 'm1a', content: new Date().toLocaleDateString() },
+            { id: 'm1b', content: '' },
+            { id: 'm1c', content: '' },
+          ]],
+        },
+      },
+      { id: 'mn-h2', type: BlockType.HEADING, content: 'Attendees', side: 'left' as const, color: 'indigo' },
+      { id: 'mn-t1', type: BlockType.TEXT, content: '', side: 'left' as const },
+      { id: 'mn-h3', type: BlockType.HEADING, content: 'Agenda', side: 'left' as const, color: 'indigo' },
+      { id: 'mn-a1', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'mn-a2', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'mn-a3', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'mn-call', type: BlockType.CALLOUT, content: 'Key decisions made this meeting...', side: 'right' as const, color: 'amber' },
+      { id: 'mn-h4', type: BlockType.HEADING, content: 'Discussion Notes', side: 'right' as const, color: 'slate' },
+      { id: 'mn-t2', type: BlockType.TEXT, content: '', side: 'right' as const },
+      { id: 'mn-h5', type: BlockType.HEADING, content: 'Action Items', side: 'right' as const, color: 'rose' },
+      {
+        id: 'mn-actions',
+        type: BlockType.GRID,
+        content: '',
+        side: 'right' as const,
+        color: 'rose',
+        gridData: {
+          columns: ['Owner', 'Task', 'Due'],
+          rows: [
+            [{ id: 'r1a', content: '' }, { id: 'r1b', content: '' }, { id: 'r1c', content: '' }],
+            [{ id: 'r2a', content: '' }, { id: 'r2b', content: '' }, { id: 'r2c', content: '' }],
+            [{ id: 'r3a', content: '' }, { id: 'r3b', content: '' }, { id: 'r3c', content: '' }],
+          ],
+        },
+      },
+    ] as Block[],
   },
   {
-    id: 'weekly', title: 'Weekly Review', desc: 'Reflect & plan ahead', icon: LayoutDashboard, blocks: [
-      { id: 'w1', type: BlockType.HEADING, content: 'Weekly Review', side: 'left' as const },
-      { id: 'w2', type: BlockType.TEXT, content: 'Wins this week:', side: 'left' as const },
-      { id: 'w3', type: BlockType.TEXT, content: 'Challenges:', side: 'left' as const },
-      { id: 'w4', type: BlockType.HEADING, content: 'Next Week', side: 'right' as const },
-      { id: 'w5', type: BlockType.PRIORITY_MATRIX, content: '', side: 'right' as const, matrixData: { q1: '', q2: '', q3: '', q4: '' } },
-    ]
+    id: 'tracker',
+    title: 'Project Tracker',
+    desc: 'Kanban board + milestones',
+    icon: ListChecks,
+    blocks: [
+      { id: 'pt-h1', type: BlockType.HEADING, content: 'Project Tracker', side: 'left' as const, emphasis: 'bold' as const, color: 'indigo' },
+      {
+        id: 'pt-goal',
+        type: BlockType.GOAL_SECTION,
+        content: '',
+        side: 'left' as const,
+        color: 'indigo',
+        goalSectionData: {
+          goals: [
+            { text: 'Project goal', subItems: [{ text: '', checked: false }, { text: '', checked: false }], progress: 0 },
+          ],
+        },
+      },
+      {
+        id: 'pt-prog',
+        type: BlockType.PROGRESS_BAR,
+        content: '',
+        side: 'left' as const,
+        color: 'emerald',
+        progressBarData: { label: 'Overall progress', current: 0, target: '100%', color: 'emerald' },
+      },
+      { id: 'pt-h2', type: BlockType.HEADING, content: 'Blockers & Risks', side: 'left' as const, color: 'rose' },
+      { id: 'pt-call', type: BlockType.CALLOUT, content: 'What could derail this project?', side: 'left' as const, color: 'rose' },
+      { id: 'pt-h3', type: BlockType.HEADING, content: 'Tasks', side: 'right' as const, color: 'indigo' },
+      {
+        id: 'pt-kanban',
+        type: BlockType.KANBAN,
+        content: '',
+        side: 'right' as const,
+        color: 'indigo',
+        kanbanData: {
+          columns: [
+            { title: 'Backlog', color: 'slate', cards: [] },
+            { title: 'In Progress', color: 'amber', cards: [] },
+            { title: 'Done', color: 'emerald', cards: [] },
+          ],
+        },
+      },
+    ] as Block[],
+  },
+  {
+    id: 'bujo',
+    title: 'Bullet Journal',
+    desc: 'Rapid log + mood + habits',
+    icon: BookOpen,
+    blocks: [
+      { id: 'bj-h1', type: BlockType.HEADING, content: 'Bullet Journal', side: 'left' as const, emphasis: 'bold' as const, color: 'amber' },
+      { id: 'bj-t1', type: BlockType.TEXT, content: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), side: 'left' as const, alignment: 'center' as const, emphasis: 'italic' as const },
+      { id: 'bj-q1', type: BlockType.QUOTE, content: 'The secret of getting ahead is getting started.', side: 'left' as const, color: 'amber' },
+      { id: 'bj-h2', type: BlockType.HEADING, content: 'Rapid Log', side: 'left' as const, color: 'indigo' },
+      { id: 'bj-c1', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'bj-c2', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'bj-c3', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'bj-c4', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'bj-c5', type: BlockType.CHECKBOX, content: '', checked: false, side: 'left' as const },
+      { id: 'bj-h3', type: BlockType.HEADING, content: 'Mood', side: 'right' as const, color: 'rose' },
+      { id: 'bj-mood', type: BlockType.MOOD_TRACKER, content: '', side: 'right' as const, moodValue: 3, color: 'rose' },
+      { id: 'bj-h4', type: BlockType.HEADING, content: 'Habits', side: 'right' as const, color: 'emerald' },
+      {
+        id: 'bj-habits',
+        type: BlockType.HABIT_TRACKER,
+        content: '',
+        side: 'right' as const,
+        color: 'emerald',
+        habitTrackerData: {
+          habits: ['Water', 'Walk', 'Read'],
+          days: 7,
+          checked: [
+            [false, false, false, false, false, false, false],
+            [false, false, false, false, false, false, false],
+            [false, false, false, false, false, false, false],
+          ],
+        },
+      },
+      {
+        id: 'bj-water',
+        type: BlockType.WATER_TRACKER,
+        content: 'Water Intake',
+        side: 'right' as const,
+        color: 'sky',
+        waterTrackerData: { goal: 8, filled: 0 },
+      },
+    ] as Block[],
+  },
+  {
+    id: 'weekly',
+    title: 'Weekly Review',
+    desc: 'Reflection + next-week plan',
+    icon: LayoutDashboard,
+    blocks: [
+      { id: 'wr-h1', type: BlockType.HEADING, content: 'Weekly Review', side: 'left' as const, emphasis: 'bold' as const, color: 'indigo' },
+      { id: 'wr-q', type: BlockType.QUOTE, content: 'What worked? What didn\'t? What\'s next?', side: 'left' as const, color: 'indigo' },
+      { id: 'wr-h2', type: BlockType.HEADING, content: 'Wins This Week', side: 'left' as const, color: 'emerald' },
+      { id: 'wr-w1', type: BlockType.CHECKBOX, content: '', checked: true, side: 'left' as const },
+      { id: 'wr-w2', type: BlockType.CHECKBOX, content: '', checked: true, side: 'left' as const },
+      { id: 'wr-w3', type: BlockType.CHECKBOX, content: '', checked: true, side: 'left' as const },
+      { id: 'wr-h3', type: BlockType.HEADING, content: 'Challenges & Lessons', side: 'left' as const, color: 'rose' },
+      { id: 'wr-call', type: BlockType.CALLOUT, content: 'What would I do differently?', side: 'left' as const, color: 'rose' },
+      {
+        id: 'wr-rating',
+        type: BlockType.RATING,
+        content: '',
+        side: 'left' as const,
+        color: 'amber',
+        ratingData: { label: 'How was your week?', max: 5, value: 0, style: 'star' },
+      },
+      { id: 'wr-h4', type: BlockType.HEADING, content: 'Next Week — Priorities', side: 'right' as const, emphasis: 'bold' as const, color: 'indigo' },
+      {
+        id: 'wr-mx',
+        type: BlockType.PRIORITY_MATRIX,
+        content: '',
+        side: 'right' as const,
+        color: 'indigo',
+        matrixData: { q1: '', q2: '', q3: '', q4: '' },
+      },
+      { id: 'wr-h5', type: BlockType.HEADING, content: 'Weekly Schedule', side: 'right' as const, color: 'slate' },
+      {
+        id: 'wr-week',
+        type: BlockType.WEEKLY_VIEW,
+        content: '',
+        side: 'right' as const,
+        color: 'slate',
+        weeklyViewData: {
+          days: [
+            { label: 'Mon', content: '' },
+            { label: 'Tue', content: '' },
+            { label: 'Wed', content: '' },
+            { label: 'Thu', content: '' },
+            { label: 'Fri', content: '' },
+            { label: 'Sat', content: '' },
+            { label: 'Sun', content: '' },
+          ],
+        },
+      },
+    ] as Block[],
   },
 ];
 
@@ -1390,19 +1589,40 @@ export const Dashboard: React.FC = () => {
                           </button>
                         )
                       ) : (
-                        /* Onboarding Templates */
-                        <div className="pointer-events-auto mt-4 w-full max-w-lg">
-                          <div className="text-white/50 text-xs font-sans uppercase tracking-widest mb-2">Get Started</div>
-                          <div className="grid grid-cols-3 gap-1.5">
+                        /* Onboarding Templates — premium glass tiles */
+                        <div className="pointer-events-auto mt-5 w-full max-w-2xl">
+                          <div className="flex items-center justify-center gap-2 mb-3">
+                            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/20 to-white/20" />
+                            <div className="text-white/60 text-[10px] font-sans uppercase tracking-[0.2em] font-semibold">
+                              Get Started
+                            </div>
+                            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-white/20 to-white/20" />
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
                             {STARTER_TEMPLATES.map(tpl => (
                               <button
                                 key={tpl.id}
                                 onClick={() => handleNewPage(tpl.blocks as Block[])}
-                                className="p-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 transition-all text-left group/tpl"
+                                className="relative p-4 bg-white/[0.08] hover:bg-white/[0.16] backdrop-blur-xl rounded-2xl border border-white/15 hover:border-white/40 transition-all text-left group/tpl overflow-hidden shadow-lg shadow-black/20 hover:shadow-xl hover:shadow-indigo-500/20 hover:-translate-y-0.5"
                               >
-                                <tpl.icon size={16} className="text-white/60 group-hover/tpl:text-white/90 transition-colors mb-1" />
-                                <div className="text-white/90 text-[11px] font-semibold">{tpl.title}</div>
-                                <div className="text-white/40 text-[9px] mt-0.5">{tpl.desc}</div>
+                                {/* Subtle gradient glow on hover */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/0 via-violet-400/0 to-fuchsia-400/0 group-hover/tpl:from-indigo-400/15 group-hover/tpl:via-violet-400/10 group-hover/tpl:to-fuchsia-400/15 transition-all pointer-events-none" />
+                                {/* Top row: icon chip */}
+                                <div className="relative flex items-center justify-between mb-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-white/10 group-hover/tpl:bg-white/20 border border-white/15 group-hover/tpl:border-white/30 flex items-center justify-center transition-all">
+                                    <tpl.icon size={15} className="text-white/75 group-hover/tpl:text-white transition-colors" />
+                                  </div>
+                                  <ChevronRight size={14} className="text-white/20 group-hover/tpl:text-white/70 group-hover/tpl:translate-x-0.5 transition-all" />
+                                </div>
+                                {/* Title + description */}
+                                <div className="relative">
+                                  <div className="text-white text-[13px] font-serif font-semibold tracking-tight leading-tight">
+                                    {tpl.title}
+                                  </div>
+                                  <div className="text-white/55 text-[11px] font-sans mt-0.5 leading-snug">
+                                    {tpl.desc}
+                                  </div>
+                                </div>
                               </button>
                             ))}
                           </div>

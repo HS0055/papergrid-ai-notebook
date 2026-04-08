@@ -39,32 +39,28 @@ export const WaterTrackerBlock: React.FC<WaterTrackerBlockProps> = ({ block, onC
     }
   };
 
+  const title = block.content?.trim() || 'Water Intake';
+
   return (
     <div className="w-full" style={{ marginBottom: '32px' }}>
       <div className="bg-white/60 backdrop-blur-sm rounded-xl border border-gray-200 shadow-sm overflow-hidden p-4">
-        {/* Header with counter */}
-        <div className="flex items-center justify-between mb-3">
-          {block.content ? (
-            <span
-              className={`text-sm font-sans font-bold ${colorClasses.text}`}
-              style={{ lineHeight: '32px', height: '32px', display: 'inline-block' }}
-            >
-              {block.content}
-            </span>
-          ) : (
-            <span
-              className={`text-sm font-sans font-bold ${colorClasses.text}`}
-              style={{ lineHeight: '32px', height: '32px', display: 'inline-block' }}
-            >
-              Water Intake
-            </span>
-          )}
-          <span className="text-xs font-sans text-gray-500">
+        {/* Header with counter — flex-wrap so long titles like
+            "Daily Hydration" don't collide with the counter, and no
+            hard-coded height that pushes text INTO the droplet row. */}
+        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+          <h3
+            className={`text-sm font-sans font-bold leading-snug ${colorClasses.text} min-w-0 flex-1`}
+            style={{ wordBreak: 'break-word' }}
+          >
+            {title}
+          </h3>
+          <span className="text-xs font-sans text-gray-500 whitespace-nowrap shrink-0 mt-0.5">
             {data.filled}/{data.goal} glasses
           </span>
         </div>
 
-        {/* Droplet row */}
+        {/* Droplet row — guaranteed clear separation from the header by
+            the mb-3 above. */}
         <div className="flex items-center gap-2 flex-wrap">
           {Array.from({ length: data.goal }, (_, i) => {
             const glassNumber = i + 1;
@@ -73,7 +69,7 @@ export const WaterTrackerBlock: React.FC<WaterTrackerBlockProps> = ({ block, onC
               <button
                 key={i}
                 onClick={() => handleDropletClick(glassNumber)}
-                className="transition-transform duration-150 hover:scale-110 cursor-pointer"
+                className="transition-transform duration-150 hover:scale-110 cursor-pointer shrink-0"
                 aria-label={`Glass ${glassNumber} ${isFilled ? 'filled' : 'empty'}`}
               >
                 <svg viewBox="0 0 24 24" className="w-8 h-8">

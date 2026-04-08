@@ -97,6 +97,14 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
     const tasks = day.tasks || [];
     const isAdding = addingTaskDay === globalIndex;
 
+    // Split the AI-provided label into day name + date if it contains a
+    // comma (e.g. "Monday, Apr 13"). Stacking them on two lines gives the
+    // header room to breathe and stops the single-line overflow we had
+    // before, where long labels collided with the Notes textarea below.
+    const parts = day.label.split(/,\s*/);
+    const dayName = parts[0] ?? day.label;
+    const dateSuffix = parts.slice(1).join(', ');
+
     return (
       <div
         key={globalIndex}
@@ -104,22 +112,30 @@ export const WeeklyViewBlock: React.FC<WeeklyViewBlockProps> = ({ block, onChang
           weekend ? 'bg-amber-50/50 border-amber-200' : `${colorClasses.bg} ${colorClasses.border}`
         }`}
       >
-        {/* Day header pill */}
+        {/* Day header — two-line stack when a date suffix is present. */}
         <div
-          className={`text-center text-[11px] font-sans font-bold uppercase tracking-wider ${
+          className={`px-2 py-1.5 text-center ${
             weekend ? 'bg-amber-100 text-amber-700' : `${colorClasses.highlight} ${colorClasses.text}`
           }`}
-          style={{ height: '32px', lineHeight: '32px' }}
         >
-          {day.label}
+          <div className="text-[11px] font-sans font-bold uppercase tracking-wider leading-tight truncate">
+            {dayName}
+          </div>
+          {dateSuffix && (
+            <div className="text-[10px] font-sans font-semibold uppercase tracking-wider leading-tight opacity-75 truncate">
+              {dateSuffix}
+            </div>
+          )}
         </div>
 
-        {/* Notes area */}
+        {/* Notes area — normal line height now that the header has its
+            own padding. The old lineHeight: 32px inherited from the
+            header constraint and pushed the placeholder off-centre. */}
         <textarea
-          className={`w-full resize-none bg-transparent font-hand text-sm text-gray-700 placeholder-gray-300 focus:outline-none p-2 border-none ${
+          className={`w-full resize-none bg-transparent font-hand text-sm text-gray-700 placeholder-gray-300 focus:outline-none p-2 border-none leading-snug ${
             weekend ? 'focus:bg-amber-50' : colorClasses.focusBg
           }`}
-          style={{ minHeight: '48px', lineHeight: '32px' }}
+          style={{ minHeight: '56px' }}
           value={day.content}
           onChange={(e) => handleDayContentChange(globalIndex, e.target.value)}
           placeholder="Notes..."
