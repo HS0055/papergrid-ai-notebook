@@ -79,7 +79,103 @@ const buildFeatureLabels = (
 
 export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('annual');
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
+
+  // Start a Stripe checkout session for a paid plan. Falls back to onLaunch
+  // (which pops the signup modal) if the user isn't authenticated yet, or
+  // if Stripe isn't configured on the server — landing visitors without an
+  // account should be able to see pricing and still sign up.
+  const startCheckout = async (planId: string) => {
+    if (planId === 'free') {
+      onLaunch();
+      return;
+    }
+    setCheckoutError(null);
+    setCheckoutLoading(planId);
+    try {
+      // If the user isn't signed in yet, pop the signup modal first;
+      // after auth the user can click the same button and get into
+      // checkout.
+      const token =
+        (typeof localStorage !== 'undefined' && localStorage.getItem('papergrid_session')) || null;
+      if (!token) {
+        onLaunch();
+        return;
+      }
+      const res = await fetch(`${API_BASE}/api/billing/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          target: planId,
+          interval: billingPeriod === 'annual' ? 'year' : 'month',
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        if (res.status === 503) {
+          // Billing not configured yet on the backend — fall through to
+          // the signup/join-waitlist flow so visitors aren't blocked.
+          onLaunch();
+          return;
+        }
+        throw new Error(detail?.error || `Checkout failed (${res.status})`);
+      }
+      const data = (await res.json()) as { checkoutUrl?: string };
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+      throw new Error('No checkout URL returned');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to start checkout';
+      setCheckoutError(msg);
+      setCheckoutLoading(null);
+    }
+  };
+
+  const startInkCheckout = async (packId: string) => {
+    setCheckoutError(null);
+    setCheckoutLoading(packId);
+    try {
+      const token =
+        (typeof localStorage !== 'undefined' && localStorage.getItem('papergrid_session')) || null;
+      if (!token) {
+        onLaunch();
+        return;
+      }
+      const res = await fetch(`${API_BASE}/api/billing/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ target: `ink_${packId}` }),
+      });
+      if (!res.ok) {
+        if (res.status === 503) {
+          onLaunch();
+          return;
+        }
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail?.error || `Checkout failed (${res.status})`);
+      }
+      const data = (await res.json()) as { checkoutUrl?: string };
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+      throw new Error('No checkout URL returned');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to start checkout';
+      setCheckoutError(msg);
+      setCheckoutLoading(null);
+    }
+  };
 
   // Live-edited plans + Ink packs from Convex (admin edits in /admin tab
   // propagate here after a ~500ms debounce). Falls back to hardcoded
@@ -209,6 +305,17 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
           </p>
         </div>
 
+        {/* Checkout error banner */}
+        {checkoutError && (
+          <div
+            className="max-w-xl mx-auto mb-8 px-4 py-3 rounded-xl text-sm text-center"
+            style={{ background: 'rgba(239,68,68,0.1)', color: '#b91c1c', border: '1px solid rgba(239,68,68,0.3)' }}
+            role="alert"
+          >
+            {checkoutError}
+          </div>
+        )}
+
         {/* Billing toggle */}
         <div className="flex justify-center mb-12">
           <div className="inline-flex items-center gap-1 p-1 rounded-full border" style={{ background: '#fff', borderColor: 'rgba(0,0,0,0.08)' }}>
@@ -335,8 +442,9 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
 
                 {/* CTA */}
                 <button
-                  onClick={onLaunch}
-                  className="w-full py-3.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] mb-6"
+                  onClick={() => startCheckout(plan.id)}
+                  disabled={checkoutLoading !== null}
+                  className="w-full py-3.5 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] mb-6 disabled:opacity-60 disabled:cursor-wait"
                   style={{
                     background: plan.featured
                       ? 'linear-gradient(135deg, #4f46e5, #7c3aed)'
@@ -348,8 +456,8 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
                     boxShadow: plan.featured ? '0 10px 30px rgba(79,70,229,0.3)' : 'none',
                   }}
                 >
-                  {plan.ctaLabel}
-                  {plan.id !== 'free' && billingPeriod === 'monthly' && ` — $${plan.monthlyPrice.toFixed(2)}/mo`}
+                  {checkoutLoading === plan.id ? 'Redirecting…' : plan.ctaLabel}
+                  {plan.id !== 'free' && billingPeriod === 'monthly' && checkoutLoading !== plan.id && ` — $${plan.monthlyPrice.toFixed(2)}/mo`}
                 </button>
 
                 {/* Features */}
@@ -406,9 +514,13 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
 
           <div className="ink-packs-grid grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl mx-auto">
             {packsList.map((pack) => (
-              <div
+              <button
                 key={pack.id}
-                className={`ink-pack-card relative rounded-2xl p-6 border transition-all hover:scale-[1.03] hover:shadow-lg text-center ${
+                type="button"
+                onClick={() => startInkCheckout(String(pack.ink))}
+                disabled={checkoutLoading !== null}
+                aria-label={`Buy ${pack.ink} Ink pack for ${formatPrice(pack.price)}`}
+                className={`ink-pack-card relative rounded-2xl p-6 border transition-all hover:scale-[1.03] hover:shadow-lg text-center focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/30 disabled:opacity-60 disabled:cursor-wait ${
                   pack.badge ? 'ring-2 ring-indigo-500/40' : ''
                 }`}
                 style={{
@@ -451,7 +563,12 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
                 <p className="text-[11px]" style={{ color: '#94a3b8' }}>
                   ${pack.perInkCost.toFixed(3)}/Ink
                 </p>
-              </div>
+                {checkoutLoading === String(pack.ink) && (
+                  <p className="text-[11px] mt-2 font-semibold" style={{ color: 'var(--color-indigo-brand)' }}>
+                    Redirecting…
+                  </p>
+                )}
+              </button>
             ))}
           </div>
 

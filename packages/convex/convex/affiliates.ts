@@ -580,6 +580,34 @@ export const recordConversion = internalMutation({
   },
 });
 
+// Called from the Stripe charge.refunded webhook. Voids every conversion
+// attached to a refunded payment intent so the affiliate doesn't keep
+// commission on money that went back to the customer.
+//
+// Note: at launch scale this does a global scan filtered by the payment
+// intent. Flagged in the scale audit to be replaced by a dedicated
+// `by_stripe_payment_intent` index in a follow-up commit.
+export const voidConversionsByPaymentIntent = internalMutation({
+  args: { stripePaymentIntentId: v.string() },
+  handler: async (ctx, { stripePaymentIntentId }) => {
+    const all = await ctx.db.query("affiliateConversions").collect();
+    const matches = all.filter((c) => c.stripePaymentIntentId === stripePaymentIntentId);
+    for (const conv of matches) {
+      if (conv.status === "voided") continue;
+      await ctx.db.patch(conv._id, { status: "voided" });
+      // Roll back the affiliate's denormalized totals.
+      const aff = await ctx.db.get(conv.affiliateId);
+      if (aff) {
+        await ctx.db.patch(aff._id, {
+          totalEarnedCents: Math.max(0, aff.totalEarnedCents - conv.commissionCents),
+          totalConversions: Math.max(0, aff.totalConversions - 1),
+        });
+      }
+    }
+    return { voided: matches.length };
+  },
+});
+
 // ─────────────────────────────────────────────────────────────
 // ADMIN
 // ─────────────────────────────────────────────────────────────

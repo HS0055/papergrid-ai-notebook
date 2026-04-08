@@ -4,6 +4,7 @@ import { api, internal } from "./_generated/api";
 import { detectDomain, getDomainRules, getDesignPrinciples } from "./domainDetection";
 import type { CompactBlock, CompactReference } from "./referenceLayouts";
 import { registerAffiliateRoutes } from "./affiliateHttp";
+import { registerStripeRoutes } from "./stripeWebhook";
 
 // Generate a procedural premium SVG data URL as fallback cover
 function buildFallbackCover(prompt: string): string {
@@ -2567,6 +2568,11 @@ for (const path of [
 // Previously this was defined in affiliateHttp.ts but the registration
 // call was never made — every affiliate route was dead.
 registerAffiliateRoutes(http);
+
+// Register Stripe checkout + webhook routes. Both require the STRIPE_*
+// env vars to be set — the routes return 503 if not configured so the
+// landing page can render a graceful fallback.
+registerStripeRoutes(http);
 
 
 export default http;
