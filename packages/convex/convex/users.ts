@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { getPlanLimitFor, type PlanId } from "./planLimits";
+
+// Waitlist bonus (promised on the iOS launch landing page —
+// "Join the waitlist to get early access, a bonus 25 Ink on launch day…").
+const WAITLIST_BONUS_INK = 25;
 
 // Legacy plan limits (kept for backward compatibility during migration)
 export const PLAN_LIMITS = {
@@ -226,6 +231,13 @@ export const signupWithEmailPassword = mutation({
 
     const passwordHash = await hashPassword(password);
 
+    // Grant initial Ink from the current plan-limits setting. Previously
+    // this field was left undefined → getInkBalance returned 0 → new
+    // users looked broken until they manually called /api/ink/refill.
+    const freePlanLimit = await getPlanLimitFor(ctx, "free");
+    const initialInk = freePlanLimit.monthlyInk;
+    const nowIso = new Date().toISOString();
+
     if (!user) {
       const userId = await ctx.db.insert("users", {
         tokenIdentifier: `local:${normalizedEmail}`,
@@ -234,13 +246,27 @@ export const signupWithEmailPassword = mutation({
         passwordHash,
         plan: "free",
         aiGenerationsUsed: 0,
-        aiGenerationsResetAt: new Date().toISOString(),
+        aiGenerationsResetAt: nowIso,
+        inkSubscription: initialInk,
+        inkPurchased: 0,
+        inkResetAt: nowIso,
+        inkLastActivity: nowIso,
         preferences: {
           defaultAesthetic: "modern-planner",
           defaultPaperType: "lined",
         },
       });
       user = await ctx.db.get(userId);
+      if (user) {
+        await ctx.db.insert("inkTransactions", {
+          userId: user._id,
+          type: "subscription_refill",
+          amount: initialInk,
+          balance: initialInk,
+          description: "Welcome grant (free plan)",
+          createdAt: nowIso,
+        });
+      }
     } else {
       const nextName = name?.trim();
       const patch: Record<string, unknown> = {
@@ -253,12 +279,59 @@ export const signupWithEmailPassword = mutation({
       if (!user.tokenIdentifier) {
         patch.tokenIdentifier = `local:${normalizedEmail}`;
       }
+      // Backfill ink on an upgrade-from-stub user (e.g. email existed but
+      // had no passwordHash yet).
+      if (user.inkSubscription === undefined || user.inkSubscription === null) {
+        patch.inkSubscription = initialInk;
+        patch.inkPurchased = user.inkPurchased ?? 0;
+        patch.inkResetAt = nowIso;
+        patch.inkLastActivity = nowIso;
+      }
       await ctx.db.patch(user._id, patch);
       user = await ctx.db.get(user._id);
     }
 
     if (!user) throw new Error("Failed to resolve user");
 
+    // ── Waitlist bonus match ──────────────────────────────
+    // If this email was on the iOS launch waitlist, honor the promised
+    // 25 Ink bonus (stored under `inkPurchased` so it survives monthly
+    // refills) and mark the row as redeemed so we don't double-grant.
+    try {
+      const waitlistRow = await ctx.db
+        .query("waitlist")
+        .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+        .first();
+      if (waitlistRow && !waitlistRow.redeemedAt) {
+        const bonus = WAITLIST_BONUS_INK;
+        await ctx.db.patch(user._id, {
+          inkPurchased: (user.inkPurchased ?? 0) + bonus,
+          inkLastActivity: nowIso,
+        });
+        await ctx.db.patch(waitlistRow._id, {
+          redeemedAt: nowIso,
+          convertedUserId: user._id,
+        });
+        await ctx.db.insert("inkTransactions", {
+          userId: user._id,
+          type: "reward",
+          amount: bonus,
+          balance: (user.inkSubscription ?? 0) + (user.inkPurchased ?? 0) + bonus,
+          description: "Waitlist launch bonus",
+          createdAt: nowIso,
+        });
+        user = await ctx.db.get(user._id);
+        if (!user) throw new Error("Failed to resolve user after bonus grant");
+      }
+    } catch (e) {
+      // Non-fatal: if the waitlist lookup / patch fails, we still let the
+      // user in with their base grant. The admin can manually backfill.
+      console.error("Waitlist bonus grant failed:", e);
+    }
+
+    // Re-narrow: the try/catch block may have reassigned `user` through
+    // ctx.db.get which returns `| null`.
+    if (!user) throw new Error("Failed to resolve user after signup");
     const sessionToken = await createSession(ctx, user._id);
 
     return { sessionToken, user: sanitizeUser(user) };
@@ -308,6 +381,42 @@ export const loginWithEmailPassword = mutation({
     if (user.email !== normalizedEmail) {
       await ctx.db.patch(user._id, { email: normalizedEmail });
       user = { ...user, email: normalizedEmail };
+    }
+
+    // Auto-refill subscription ink on login. This handles two cases at once:
+    //   1. Legacy users created before the initial-grant fix — their
+    //      inkSubscription is undefined, so they'd otherwise see 0 ink.
+    //   2. Returning users crossing a calendar month — they get their
+    //      monthly grant without having to hit a separate endpoint.
+    // Both cases go through the same `refillSubscriptionInk` mutation's
+    // idempotent check, so logging in repeatedly in the same month is free.
+    try {
+      const planLimit = await getPlanLimitFor(ctx, (user.plan ?? "free") as PlanId);
+      const resetAt = user.inkResetAt ? new Date(user.inkResetAt) : null;
+      const now = new Date();
+      const isFreshMonth = !resetAt || resetAt.getMonth() !== now.getMonth() || resetAt.getFullYear() !== now.getFullYear();
+      if (isFreshMonth) {
+        const currentSub = user.inkSubscription ?? 0;
+        const rollover = Math.min(currentSub, planLimit.inkRolloverCap);
+        const newSub = planLimit.monthlyInk + rollover;
+        await ctx.db.patch(user._id, {
+          inkSubscription: newSub,
+          inkPurchased: user.inkPurchased ?? 0,
+          inkResetAt: now.toISOString(),
+          inkLastActivity: now.toISOString(),
+        });
+        await ctx.db.insert("inkTransactions", {
+          userId: user._id,
+          type: "subscription_refill",
+          amount: planLimit.monthlyInk,
+          balance: newSub + (user.inkPurchased ?? 0),
+          description: `Monthly refill (${user.plan} plan)${rollover > 0 ? ` + ${rollover} rollover` : ""}`,
+          createdAt: now.toISOString(),
+        });
+        user = (await ctx.db.get(user._id))!;
+      }
+    } catch (e) {
+      console.error("Login ink refill failed:", e);
     }
 
     const sessionToken = await createSession(ctx, user._id);
@@ -682,7 +791,13 @@ export const spendInk = mutation({
   },
 });
 
-// Refill subscription Ink (called on login or monthly reset)
+// Refill subscription Ink (called on login or monthly reset).
+//
+// SOURCE OF TRUTH: this reads from `plan-limits` (the appSettings key the
+// admin edits via /admin → Plans tab). The legacy `inkConfig` key is only
+// used for per-action Ink *costs* now (InkCostsEditor). Keeping two
+// sources of truth was the root cause of "admin set free=10 ink but
+// users still see 0".
 export const refillSubscriptionInk = mutation({
   args: { sessionToken: v.optional(v.string()) },
   handler: async (ctx, { sessionToken }) => {
@@ -692,22 +807,21 @@ export const refillSubscriptionInk = mutation({
     const now = new Date();
     const resetAt = user.inkResetAt ? new Date(user.inkResetAt) : null;
 
-    // Only refill if month has changed
+    // Only refill if the month has changed AND we've already initialized
+    // at least once. First-time users (resetAt === null) always refill.
     if (resetAt && resetAt.getMonth() === now.getMonth() && resetAt.getFullYear() === now.getFullYear()) {
       return { refilled: false, balance: (user.inkSubscription ?? 0) + (user.inkPurchased ?? 0) };
     }
 
-    const setting = await ctx.db
-      .query("appSettings")
-      .withIndex("by_key", (q) => q.eq("key", "inkConfig"))
-      .first();
-    const config = (setting?.value ?? DEFAULT_INK_CONFIG) as typeof DEFAULT_INK_CONFIG;
-    const planConfig = config.plans[user.plan as keyof typeof config.plans] ?? config.plans.free;
+    const planLimit = await getPlanLimitFor(ctx, (user.plan ?? "free") as PlanId);
+    const monthlyInk = planLimit.monthlyInk;
+    const rolloverCap = planLimit.inkRolloverCap;
 
-    // Calculate rollover
+    // Calculate rollover — unused subscription ink carries forward up to
+    // the plan's cap. First-time users have nothing to roll over.
     const currentSub = user.inkSubscription ?? 0;
-    const rollover = Math.min(currentSub, planConfig.rolloverMax);
-    const newSub = planConfig.inkPerMonth + rollover;
+    const rollover = Math.min(currentSub, rolloverCap);
+    const newSub = monthlyInk + rollover;
     const purchased = user.inkPurchased ?? 0;
 
     await ctx.db.patch(user._id, {
@@ -719,7 +833,7 @@ export const refillSubscriptionInk = mutation({
     await ctx.db.insert("inkTransactions", {
       userId: user._id,
       type: "subscription_refill",
-      amount: planConfig.inkPerMonth,
+      amount: monthlyInk,
       balance: newSub + purchased,
       description: `Monthly refill (${user.plan} plan)${rollover > 0 ? ` + ${rollover} rollover` : ""}`,
       createdAt: now.toISOString(),
@@ -893,6 +1007,48 @@ export const migrateToInkSystem = mutation({
       migrated++;
     }
     return { migrated, total: users.length };
+  },
+});
+
+// Admin: backfill Ink balances for legacy users whose inkSubscription was
+// never initialized (created before the signup fix). Idempotent —
+// skips users who already have a defined balance.
+export const backfillInitialInk = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const session = await ctx.db
+      .query("authSessions")
+      .withIndex("by_token", (q) => q.eq("token", sessionToken))
+      .first();
+    if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
+      throw new Error("Not authenticated");
+    }
+    const admin = await ctx.db.get(session.userId);
+    if (!admin || admin.role !== "admin") throw new Error("Admin only");
+
+    const users = await ctx.db.query("users").collect();
+    const nowIso = new Date().toISOString();
+    let updated = 0;
+    for (const u of users) {
+      if (u.inkSubscription !== undefined && u.inkSubscription !== null) continue;
+      const planLimit = await getPlanLimitFor(ctx, (u.plan ?? "free") as PlanId);
+      await ctx.db.patch(u._id, {
+        inkSubscription: planLimit.monthlyInk,
+        inkPurchased: u.inkPurchased ?? 0,
+        inkResetAt: nowIso,
+        inkLastActivity: nowIso,
+      });
+      await ctx.db.insert("inkTransactions", {
+        userId: u._id,
+        type: "subscription_refill",
+        amount: planLimit.monthlyInk,
+        balance: planLimit.monthlyInk + (u.inkPurchased ?? 0),
+        description: `Backfill (${u.plan} plan)`,
+        createdAt: nowIso,
+      });
+      updated++;
+    }
+    return { updated, total: users.length };
   },
 });
 

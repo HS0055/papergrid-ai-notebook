@@ -5,6 +5,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
   PRICING_PLANS as DEFAULT_PRICING_PLANS,
   INK_PACKS as DEFAULT_INK_PACKS,
+  PLAN_DISPLAY_ORDER,
   formatPrice,
   type PricingPlan,
   type InkPack,
@@ -16,6 +17,17 @@ interface PricingConfigShape {
   packs: readonly InkPack[];
 }
 
+/** Subset of the live `/api/admin/plan-limits` shape we actually consume here. */
+type PlanLimitId = 'free' | 'starter' | 'pro' | 'founder' | 'creator';
+interface LivePlanLimit {
+  maxNotebooks: number;
+  monthlyInk: number;
+  inkRolloverCap: number;
+}
+type LivePlanLimitsMap = Record<PlanLimitId, LivePlanLimit>;
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 gsap.registerPlugin(ScrollTrigger);
 
 interface PricingSectionProps {
@@ -26,22 +38,44 @@ type BillingPeriod = 'monthly' | 'annual';
 
 const PLAN_ICONS: Record<string, React.ReactNode> = {
   free: <Sparkles size={20} />,
+  starter: <Zap size={20} />,
   pro: <Zap size={20} />,
   creator: <Crown size={20} />,
+  founder: <Crown size={20} />,
 };
 
-const FEATURE_LABELS: Record<string, (plan: PricingPlan) => string | null> = {
-  notebooks: (p) => (p.limits.notebooks === -1 ? 'Unlimited notebooks' : `${p.limits.notebooks} notebook`),
+/**
+ * Feature row builders.
+ *
+ * The notebook count comes from the LIVE plan-limits override (set in
+ * /admin → Plans tab) when present, falling back to the static
+ * pricing-config value. This is the single source of truth that the
+ * server enforces — keeping the landing in sync with reality.
+ */
+const buildFeatureLabels = (
+  liveLimit: LivePlanLimit | undefined,
+): Record<string, (plan: PricingPlan) => string | null> => ({
+  notebooks: (p) => {
+    const cap = liveLimit?.maxNotebooks ?? p.limits.notebooks;
+    if (cap === -1) return 'Unlimited notebooks';
+    return `${cap} notebook${cap === 1 ? '' : 's'}`;
+  },
   papers: (p) => p.features.allPaperTypes ? 'All 10 paper types' : `${p.limits.paperTypes} basic paper types`,
   blocks: (p) => p.features.allBlockTypes ? 'All 22+ block types' : `${p.limits.blockTypes} basic block types`,
-  ink: (p) => `${p.ink.monthly} Ink / month`,
-  rollover: (p) => p.ink.rollover > 0 ? `${p.ink.rollover} Ink rollover` : null,
+  ink: (p) => {
+    const monthly = liveLimit?.monthlyInk ?? p.ink.monthly;
+    return `${monthly} Ink / month`;
+  },
+  rollover: (p) => {
+    const rollover = liveLimit?.inkRolloverCap ?? p.ink.rollover;
+    return rollover > 0 ? `${rollover} Ink rollover` : null;
+  },
   export: (p) => p.features.brandedExport ? 'Branded PDF export (coming soon)' : p.features.cleanExport ? 'Clean PDF export' : 'Watermarked export',
   bookmarks: (p) => p.features.bookmarks ? 'Bookmarks & favorites' : null,
   priority: (p) => p.features.priorityAI ? 'Priority AI queue (coming soon)' : null,
   publish: (p) => p.features.publishTemplates ? 'Publish templates (coming soon)' : null,
   support: (p) => p.features.support === 'priority' ? 'Priority support' : p.features.support === 'email' ? 'Email support' : 'Community support',
-};
+});
 
 export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('annual');
@@ -56,9 +90,34 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
   );
   const plansRecord = config.plans;
   const packsList = config.packs;
-  // Only render plans that aren't hidden (hides legacy starter/founder etc).
-  const plans = [plansRecord.free, plansRecord.pro, plansRecord.creator]
+  // Iterate every plan in the canonical display order (free, starter, pro,
+  // creator, founder) and drop the ones flagged hiddenFromLanding. This
+  // lets the admin toggle visibility without editing component code, and
+  // keeps landing parity with /admin → Plans tab.
+  const plans = PLAN_DISPLAY_ORDER
+    .map((id) => plansRecord[id])
     .filter((p): p is PricingPlan => p !== undefined && !p.hiddenFromLanding);
+
+  // Live plan-limit overrides (the same source the server enforces against
+  // when a user tries to create a notebook). When the admin lowers
+  // free → 1 notebook, this is what the landing must show.
+  const [liveLimits, setLiveLimits] = useState<LivePlanLimitsMap | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/plan-limits`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data?.limits) setLiveLimits(data.limits as LivePlanLimitsMap);
+      } catch {
+        // Silent fall-through to static pricing-config values.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!sectionRef.current) return;
@@ -182,12 +241,15 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
           </div>
         </div>
 
-        {/* Plan cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
+        {/* Plan cards — 4 columns on desktop (free/starter/pro/creator).
+             Grows to 5 if an admin un-hides founder. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
           {plans.map((plan) => {
             const price = getPriceDisplay(plan);
-            const features = Object.keys(FEATURE_LABELS)
-              .map((key) => FEATURE_LABELS[key](plan))
+            const liveLimit = liveLimits?.[plan.id as PlanLimitId];
+            const featureLabels = buildFeatureLabels(liveLimit);
+            const features = Object.keys(featureLabels)
+              .map((key) => featureLabels[key](plan))
               .filter((x): x is string => x !== null);
 
             return (

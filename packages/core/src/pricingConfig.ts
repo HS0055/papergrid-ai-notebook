@@ -182,7 +182,7 @@ export const PRICING_PLANS: Readonly<Record<PricingPlanId, PricingPlan>> = {
     featured: false,
   },
 
-  // ── Legacy + soft-launch plans (hidden from public landing, editable in /admin) ──
+  // ── Public soft-launch tier — sits between Free and Pro. ──
   starter: {
     id: 'starter',
     name: 'Starter',
@@ -215,7 +215,6 @@ export const PRICING_PLANS: Readonly<Record<PricingPlanId, PricingPlan>> = {
     badge: null,
     ctaLabel: 'Choose Starter',
     featured: false,
-    hiddenFromLanding: true,
   },
 
   founder: {
@@ -458,12 +457,31 @@ export const COMPETITORS = [
 // HELPER FUNCTIONS
 // ============================================================================
 
-export function getPlanById(id: 'free' | 'pro' | 'creator'): PricingPlan {
+export function getPlanById(id: PricingPlanId): PricingPlan {
   return PRICING_PLANS[id];
 }
 
+/** Canonical display order for pricing pages and the admin panel. */
+export const PLAN_DISPLAY_ORDER: readonly PricingPlanId[] = [
+  'free',
+  'starter',
+  'pro',
+  'creator',
+  'founder',
+] as const;
+
+/** All plans in display order, excluding those marked hiddenFromLanding. */
+export function getLandingPlans(): readonly PricingPlan[] {
+  return PLAN_DISPLAY_ORDER
+    .map((id) => PRICING_PLANS[id])
+    .filter((p): p is PricingPlan => !!p && !p.hiddenFromLanding);
+}
+
+/** Every plan, including hidden ones — used by the admin panel. */
 export function getAllPlans(): readonly PricingPlan[] {
-  return [PRICING_PLANS.free, PRICING_PLANS.pro, PRICING_PLANS.creator];
+  return PLAN_DISPLAY_ORDER
+    .map((id) => PRICING_PLANS[id])
+    .filter((p): p is PricingPlan => !!p);
 }
 
 export function getInkPackById(id: InkPack['id']): InkPack | undefined {

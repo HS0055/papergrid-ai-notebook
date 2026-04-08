@@ -94,9 +94,9 @@ const TIERS: PricingTier[] = [
         icon: <BookOpen size={24} />,
         gradient: 'from-gray-600 to-gray-700',
         cta: 'Get Started',
-        inkAmount: '12 Ink/mo',
+        inkAmount: '10 Ink/mo',
         features: [
-            { text: '12 Ink / month', included: true, highlight: true },
+            { text: '10 Ink / month', included: true, highlight: true },
             { text: '1 notebook', included: true },
             { text: 'Standard paper types', included: true },
             { text: 'Watermark on exports', included: true },
@@ -104,6 +104,28 @@ const TIERS: PricingTier[] = [
             { text: 'Unlimited notebooks', included: false },
             { text: 'Full export (no watermark)', included: false },
             { text: 'Ink rollover', included: false },
+        ],
+    },
+    {
+        id: 'starter',
+        name: 'Starter',
+        price: '$4.99',
+        period: '/ month',
+        description: 'Halfway house between Free and Pro',
+        icon: <Star size={24} />,
+        gradient: 'from-sky-500 to-indigo-500',
+        cta: 'Choose Starter',
+        inkAmount: '50 Ink/mo',
+        mode: 'subscription',
+        features: [
+            { text: '50 Ink / month', included: true, highlight: true },
+            { text: '5 notebooks', included: true },
+            { text: 'All paper types', included: true },
+            { text: 'Full export (no watermark)', included: true },
+            { text: 'Rollover up to 25 unused Ink', included: true },
+            { text: 'Email support', included: true },
+            { text: 'Marketplace publishing', included: false },
+            { text: 'Priority AI queue', included: false },
         ],
     },
     {
@@ -282,7 +304,7 @@ export const PricingPage: React.FC = () => {
 
             {/* Pricing Grid */}
             <div className="max-w-6xl mx-auto px-4 pb-12">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {TIERS.map((tier) => (
                         <div
                             key={tier.id}

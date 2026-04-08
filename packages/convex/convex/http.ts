@@ -1887,13 +1887,41 @@ http.route({
         }
       }
 
-      return new Response(JSON.stringify({ id: nbId, success: true }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } catch (error) {
+      // ── Remap bookmarks from old local page IDs to new Convex IDs.
+      //
+      // The save flow deletes all old pages and recreates them, which mints
+      // fresh IDs. If we left notebook.bookmarks pointing at the old IDs,
+      // the next load would find no matches and the bookmarks row in the
+      // sidebar would appear empty — exactly the bug the user reported.
+      //
+      // pageIdMap was built above (old.id → new._id), so translate and
+      // patch the notebook a second time. Entries that can't be mapped
+      // (stale bookmark for a deleted page) are dropped.
+      const incomingBookmarks: string[] = Array.isArray(notebook.bookmarks) ? notebook.bookmarks : [];
+      const remappedBookmarks = incomingBookmarks
+        .map((b) => pageIdMap[b] ?? b) // fall through for already-Convex IDs
+        .filter((b) => typeof b === "string" && b.length > 0);
+      if (remappedBookmarks.length > 0 || incomingBookmarks.length > 0) {
+        await ctx.runMutation(api.notebooks.update, {
+          id: nbId,
+          bookmarks: remappedBookmarks,
+          sessionToken,
+        });
+      }
+
+      return new Response(
+        JSON.stringify({ id: nbId, success: true, pageIdMap, bookmarks: remappedBookmarks }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    } catch (error: any) {
       console.error("Notebook save error:", error);
-      return new Response(JSON.stringify({ error: "Failed to save notebook" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      const message = extractErrorMessage(error, "Failed to save notebook");
+      // Plan-limit rejections should surface as 403 Forbidden with the
+      // real message so the client can show 'Your free plan allows 1
+      // notebook. Upgrade to create more.' verbatim.
+      const isPlanLimit = /plan allows|upgrade to/i.test(message);
+      return new Response(JSON.stringify({ error: message, code: isPlanLimit ? "plan_limit" : undefined }), {
+        status: isPlanLimit ? 403 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
   }),
@@ -2145,6 +2173,75 @@ http.route({
   }),
 });
 
+// POST /api/admin/backfill-ink — backfill Ink for legacy users with
+// undefined inkSubscription (one-shot, idempotent).
+http.route({
+  path: "/api/admin/backfill-ink",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const result = await ctx.runMutation(api.users.backfillInitialInk, { sessionToken });
+      return new Response(JSON.stringify(result), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to backfill ink");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+// GET /api/admin/waitlist — list waitlist entries for the admin UI
+http.route({
+  path: "/api/admin/waitlist",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Admin check: we require the caller to be an admin. The query itself
+      // is open, but we gate access at the HTTP layer by verifying the
+      // session → user role before returning rows.
+      const me = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
+      if (!me || (me as any).role !== "admin") {
+        return new Response(JSON.stringify({ error: "Admin only" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const url = new URL(request.url);
+      const limit = Number(url.searchParams.get("limit") ?? 200) || 200;
+      const source = url.searchParams.get("source") ?? undefined;
+      const listRes = await ctx.runQuery(api.waitlist.list, { limit, source: source ?? undefined });
+      const countRes = await ctx.runQuery(api.waitlist.count, {});
+      return new Response(JSON.stringify({ ...listRes, count: countRes.total }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to load waitlist");
+      return new Response(JSON.stringify({ error: message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // POST /api/admin/grant-ink — admin grant Ink to user
 http.route({
   path: "/api/admin/grant-ink",
@@ -2195,6 +2292,8 @@ for (const path of [
   "/api/ink/refill",
   "/api/admin/ink-config",
   "/api/admin/grant-ink",
+  "/api/admin/backfill-ink",
+  "/api/admin/waitlist",
 ]) {
   http.route({
     path,

@@ -306,14 +306,26 @@ export const Dashboard: React.FC = () => {
     if (!auth.isAuthenticated || notebooks.length === 0 || !initialLoadDone.current) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     syncTimerRef.current = setTimeout(async () => {
-      const idMap = await convex.syncAllNotebooks(notebooks);
-      // Remap any local IDs to Convex IDs so future syncs are updates, not creates
-      if (idMap.size > 0) {
+      const results = await convex.syncAllNotebooks(notebooks);
+      // Reconcile local state against the server's authoritative snapshot:
+      //   - notebook.id  → may have changed (new notebook just created)
+      //   - bookmarks    → page IDs were remapped server-side because we
+      //                    delete/recreate pages on each save (see http.ts
+      //                    /api/notebooks/save). Without this, bookmarks
+      //                    disappear on the next reload.
+      if (results.size > 0) {
         setNotebooks(prev => prev.map(nb => {
-          const newId = idMap.get(nb.id);
-          return newId ? { ...nb, id: newId } : nb;
+          const result = results.get(nb.id);
+          if (!result) return nb;
+          const next: typeof nb = { ...nb };
+          if (result.id && result.id !== nb.id) next.id = result.id;
+          if (result.bookmarks) next.bookmarks = result.bookmarks;
+          return next;
         }));
-        setActiveNotebookId(prev => idMap.get(prev) ?? prev);
+        setActiveNotebookId(prev => {
+          const result = results.get(prev);
+          return result?.id ?? prev;
+        });
       }
     }, 3000);
     return () => {
@@ -374,7 +386,7 @@ export const Dashboard: React.FC = () => {
     }));
   };
 
-  const handleNewNotebook = () => {
+  const handleNewNotebook = async () => {
     const newNb: Notebook = {
       id: crypto.randomUUID(),
       title: 'New Notebook',
@@ -383,10 +395,33 @@ export const Dashboard: React.FC = () => {
       bookmarks: [],
       pages: []
     };
+    // Optimistic: add immediately for snappy UX
     setNotebooks([newNb, ...notebooks]);
     setActiveNotebookId(newNb.id);
     setActivePageIndex(-1);
     setContentKey(k => k + 1);
+
+    // Validate against the server's plan-limit enforcement. If we hit the
+    // notebook cap, roll back and show the real error message verbatim.
+    if (!auth.isAuthenticated) return; // signed-out users only ever have local state
+    try {
+      const result = await convex.saveNotebook(newNb);
+      if (result && result.id && result.id !== newNb.id) {
+        setNotebooks(prev => prev.map(nb => nb.id === newNb.id ? { ...nb, id: result.id } : nb));
+        setActiveNotebookId(prev => prev === newNb.id ? result.id : prev);
+      }
+    } catch (e: unknown) {
+      const err = e as Error & { code?: string };
+      if (err?.code === 'plan_limit') {
+        // Roll back the optimistic add
+        setNotebooks(prev => prev.filter(nb => nb.id !== newNb.id));
+        setActiveNotebookId(prev => prev === newNb.id ? (notebooks[0]?.id ?? '') : prev);
+        addToast(err.message, 'error');
+      } else {
+        // Other errors: leave the local copy alone, the next debounced sync retries.
+        console.warn('saveNotebook failed (non-plan-limit):', err);
+      }
+    }
   };
 
   const handleSwitchNotebook = (nbId: string) => {

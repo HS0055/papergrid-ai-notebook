@@ -5,6 +5,7 @@ import { PlanLimitsEditor } from './admin/PlanLimitsEditor';
 import { PricingEditor } from './admin/PricingEditor';
 import { RoadmapEditor } from './admin/RoadmapEditor';
 import { InkCostsEditor } from './admin/InkCostsEditor';
+import { WaitlistViewer } from './admin/WaitlistViewer';
 
 type AdminTab = 'users' | 'plans' | 'pricing' | 'ink-costs' | 'roadmap' | 'waitlist';
 
@@ -334,18 +335,9 @@ export function AdminPanel() {
           </div>
         )}
 
-        {/* Waitlist tab — placeholder until COMM.1 view lands */}
-        {activeTab === 'waitlist' && (
-          <div className="bg-white rounded-xl border p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">iOS Launch Waitlist</h3>
-            <p className="text-sm text-gray-500">
-              Full waitlist viewer + CSV export lands in the next release. For now, query Convex directly:
-            </p>
-            <pre className="mt-3 text-xs bg-gray-50 rounded p-3 overflow-x-auto">
-              npx convex run --no-cache waitlist:count{'{'}{'}'}
-            </pre>
-          </div>
-        )}
+        {/* Waitlist tab — iOS launch waitlist viewer + CSV export +
+            Ink-backfill runner (for legacy users with no ink grant). */}
+        {activeTab === 'waitlist' && <WaitlistViewer />}
 
         {/* Users tab — directory + plan + role + ink management (the default view) */}
         {activeTab === 'users' && (

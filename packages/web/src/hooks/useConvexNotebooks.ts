@@ -4,6 +4,23 @@ import type { Notebook } from '@papergrid/core';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const SESSION_KEY = 'papergrid_session';
 
+/**
+ * Authoritative result of /api/notebooks/save.
+ *
+ *  - `id`         — Convex document id (may differ from the local id when
+ *                   a new notebook was just created on the server).
+ *  - `pageIdMap`  — map of client-side page ids → new Convex page ids.
+ *                   Needed so local state can keep pointing at the same
+ *                   pages after the server recreates them.
+ *  - `bookmarks`  — the server-remapped bookmarks array. Already translated
+ *                   from old local page ids to new Convex page ids.
+ */
+export interface SaveResult {
+    id: string;
+    pageIdMap: Record<string, string>;
+    bookmarks: string[] | null;
+}
+
 function getToken(): string | null {
     return localStorage.getItem(SESSION_KEY);
 }
@@ -43,42 +60,70 @@ export function useConvexNotebooks() {
         }
     }, []);
 
-    /** Save a single notebook. Returns the Convex document ID on success. */
-    const saveNotebook = useCallback(async (notebook: Notebook): Promise<string | null> => {
+    /**
+     * Save a single notebook. Returns a SaveResult so the caller can
+     * reconcile optimistic local state with the server's authoritative
+     * shape (new Convex doc id + remapped bookmarks after a full save).
+     *
+     * THROWS a typed error on plan-limit rejections (HTTP 403) so the caller
+     * can roll back optimistic UI and show the real message. Network or
+     * unauthenticated failures still return null silently — those are
+     * recoverable on the next sync.
+     */
+    const saveNotebook = useCallback(async (notebook: Notebook): Promise<SaveResult | null> => {
         const token = getToken();
         if (!token || !API_BASE) return null;
 
+        let res: Response;
         try {
-            const res = await fetch(`${API_BASE}/api/notebooks/save`, {
+            res = await fetch(`${API_BASE}/api/notebooks/save`, {
                 method: 'POST',
                 headers: authHeaders(),
                 body: JSON.stringify({ notebook }),
             });
-            if (!res.ok) return null;
-            const data = await res.json();
-            return data.id || null;
         } catch {
-            return null;
+            return null; // network failure → silent retry on next sync
         }
+
+        if (res.ok) {
+            const data = await res.json().catch(() => null) as
+                | { id?: string; pageIdMap?: Record<string, string>; bookmarks?: string[] }
+                | null;
+            if (!data?.id) return null;
+            return {
+                id: data.id,
+                pageIdMap: data.pageIdMap ?? {},
+                bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks : null,
+            };
+        }
+
+        // Non-2xx — try to extract a real error message and propagate when
+        // it's a plan-limit rejection so the UI can show it.
+        const data = await res.json().catch(() => null) as { error?: string; code?: string } | null;
+        if (res.status === 403 && data?.code === 'plan_limit') {
+            const err = new Error(data.error || 'Plan limit reached');
+            (err as Error & { code?: string }).code = 'plan_limit';
+            throw err;
+        }
+        return null;
     }, []);
 
     /**
-     * Sync ALL notebooks to Convex. Returns a map of localId → convexId
-     * for any notebooks whose IDs changed (new notebooks created in Convex).
+     * Sync ALL notebooks to Convex. Returns a map of localId → SaveResult
+     * so callers can reconcile both the notebook id AND the bookmark page
+     * ids that got remapped server-side.
      */
-    const syncAllNotebooks = useCallback(async (notebooks: Notebook[]): Promise<Map<string, string>> => {
+    const syncAllNotebooks = useCallback(async (notebooks: Notebook[]): Promise<Map<string, SaveResult>> => {
         const token = getToken();
-        const idMap = new Map<string, string>();
-        if (!token || !API_BASE || syncingRef.current) return idMap;
+        const results = new Map<string, SaveResult>();
+        if (!token || !API_BASE || syncingRef.current) return results;
 
         syncingRef.current = true;
         try {
             for (const nb of notebooks) {
                 try {
-                    const convexId = await saveNotebook(nb);
-                    if (convexId && convexId !== nb.id) {
-                        idMap.set(nb.id, convexId);
-                    }
+                    const res = await saveNotebook(nb);
+                    if (res) results.set(nb.id, res);
                 } catch {
                     // Continue syncing other notebooks
                 }
@@ -86,7 +131,7 @@ export function useConvexNotebooks() {
         } finally {
             syncingRef.current = false;
         }
-        return idMap;
+        return results;
     }, [saveNotebook]);
 
     const deleteNotebook = useCallback(async (id: string): Promise<boolean> => {
