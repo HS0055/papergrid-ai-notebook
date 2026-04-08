@@ -73,6 +73,11 @@ export default defineSchema({
     coverImageUrl: v.optional(v.string()),
     bookmarks: v.array(v.string()),
     isShared: v.boolean(),
+    // Tombstone for background cascade cleanup — when set, the notebook
+    // has been deleted by the user and only orphan children remain to
+    // be swept. listByUser/get filter these out so the UX is identical
+    // to a hard delete.
+    deletedAt: v.optional(v.string()),
     createdAt: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 
@@ -85,7 +90,10 @@ export default defineSchema({
     sortOrder: v.number(),
     aiGenerated: v.optional(v.boolean()),
     createdAt: v.optional(v.string()),
-  }).index("by_notebook", ["notebookId"]),
+    // Compound index (notebookId, sortOrder) enables O(1) lookup of
+    // the current max sortOrder via `.order("desc").take(1)` instead
+    // of scanning every sibling page on each create.
+  }).index("by_notebook", ["notebookId", "sortOrder"]),
 
   blocks: defineTable({
     pageId: v.id("pages"),
@@ -116,7 +124,11 @@ export default defineSchema({
     containerStyle: v.optional(v.string()),
     icon: v.optional(v.string()),
     groupId: v.optional(v.string()),
-  }).index("by_page", ["pageId"]),
+    // Compound index: supports both legacy queries that filter only
+    // by pageId AND O(1) next-sortOrder lookup via
+    // `.order("desc").take(1)`. Eliminates the full-sibling scan on
+    // every block create.
+  }).index("by_page", ["pageId", "sortOrder"]),
 
   referenceLayouts: defineTable({
     source: v.string(),
@@ -145,6 +157,7 @@ export default defineSchema({
       v.literal("subscription_refill"),
       v.literal("purchase"),
       v.literal("spend"),
+      v.literal("refund"),
       v.literal("reward"),
       v.literal("admin_grant"),
       v.literal("admin_deduct"),
@@ -153,10 +166,15 @@ export default defineSchema({
     balance: v.number(),
     action: v.optional(v.string()),
     description: v.optional(v.string()),
+    // Idempotency key — used to reverse a spend without double-refund on
+    // retries (e.g., AI HTTP failure path calls refund with the original
+    // spend's transaction id).
+    idempotencyKey: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_user", ["userId"])
-    .index("by_type", ["type"]),
+    .index("by_type", ["type"])
+    .index("by_idempotency", ["idempotencyKey"]),
 
   aiGenerations: defineTable({
     userId: v.id("users"),
@@ -171,4 +189,279 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_aesthetic", ["aesthetic"]),
+
+  // Rate-limit buckets. Keyed by "<scope>:<subject>:<action>" where
+  // scope is ip|user|email|global. Fixed-window counters; cheap single
+  // doc read+write per check. Prevents credential stuffing, AI abuse,
+  // signup spam. See rateLimit.ts for the enforcement helper.
+  rateLimits: defineTable({
+    key: v.string(),
+    count: v.number(),
+    windowStart: v.number(),          // epoch ms
+    windowMs: v.number(),              // window length
+    limit: v.number(),                 // enforced ceiling
+    lastHitAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  // Audit log for sensitive admin actions. Append-only.
+  adminAuditLog: defineTable({
+    actorUserId: v.id("users"),
+    actorEmail: v.string(),
+    action: v.string(),
+    targetUserId: v.optional(v.id("users")),
+    targetEmail: v.optional(v.string()),
+    details: v.optional(v.any()),
+    ip: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_actor", ["actorUserId"])
+    .index("by_target", ["targetUserId"]),
+
+  // Denormalized counters (replaces unbounded .collect() calls used
+  // just for counting). `waitlist_total` lives here; more keys as needed.
+  counters: defineTable({
+    key: v.string(),
+    value: v.number(),
+    updatedAt: v.string(),
+  }).index("by_key", ["key"]),
+
+  // ============================================================
+  // AFFILIATE PROGRAM
+  // ============================================================
+  affiliates: defineTable({
+    userId: v.id("users"),
+    code: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("banned"),
+    ),
+    commissionRate: v.number(),
+    cookieWindowDays: v.number(),
+    applicationNote: v.optional(v.string()),
+    audience: v.optional(v.string()),
+    promotionChannels: v.optional(v.array(v.string())),
+    websiteUrl: v.optional(v.string()),
+    socialHandles: v.optional(v.array(v.string())),
+    payoutMethod: v.optional(v.union(
+      v.literal("paypal"),
+      v.literal("stripe"),
+      v.literal("bank"),
+    )),
+    payoutEmail: v.optional(v.string()),
+    payoutCountry: v.optional(v.string()),
+    totalClicks: v.number(),
+    totalConversions: v.number(),
+    totalEarnedCents: v.number(),
+    totalPaidCents: v.number(),
+    appliedAt: v.string(),
+    approvedAt: v.optional(v.string()),
+    approvedBy: v.optional(v.id("users")),
+    rejectedAt: v.optional(v.string()),
+    rejectionReason: v.optional(v.string()),
+    bannedAt: v.optional(v.string()),
+    banReason: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_code", ["code"])
+    .index("by_status", ["status"]),
+
+  affiliateClicks: defineTable({
+    affiliateId: v.id("affiliates"),
+    code: v.string(),
+    visitorId: v.string(),
+    landingPath: v.optional(v.string()),
+    referrer: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    ip: v.optional(v.string()),
+    country: v.optional(v.string()),
+    convertedToUserId: v.optional(v.id("users")),
+    convertedAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_affiliate", ["affiliateId"])
+    .index("by_visitor", ["visitorId"])
+    .index("by_code", ["code"]),
+
+  affiliateConversions: defineTable({
+    affiliateId: v.id("affiliates"),
+    referredUserId: v.id("users"),
+    type: v.union(
+      v.literal("signup"),
+      v.literal("subscription"),
+      v.literal("renewal"),
+      v.literal("ink_purchase"),
+    ),
+    grossAmountCents: v.number(),
+    commissionCents: v.number(),
+    commissionRate: v.number(),
+    currency: v.string(),
+    stripePaymentIntentId: v.optional(v.string()),
+    stripeInvoiceId: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("paid"),
+      v.literal("voided"),
+    ),
+    payoutId: v.optional(v.id("affiliatePayouts")),
+    createdAt: v.string(),
+    approvedAt: v.optional(v.string()),
+    paidAt: v.optional(v.string()),
+  })
+    .index("by_affiliate", ["affiliateId"])
+    .index("by_user", ["referredUserId"])
+    .index("by_status", ["status"])
+    .index("by_payout", ["payoutId"]),
+
+  affiliatePayouts: defineTable({
+    affiliateId: v.id("affiliates"),
+    amountCents: v.number(),
+    currency: v.string(),
+    method: v.union(
+      v.literal("paypal"),
+      v.literal("stripe"),
+      v.literal("bank"),
+      v.literal("manual"),
+    ),
+    status: v.union(
+      v.literal("requested"),
+      v.literal("processing"),
+      v.literal("paid"),
+      v.literal("failed"),
+    ),
+    reference: v.optional(v.string()),
+    note: v.optional(v.string()),
+    requestedAt: v.string(),
+    paidAt: v.optional(v.string()),
+    paidBy: v.optional(v.id("users")),
+  })
+    .index("by_affiliate", ["affiliateId"])
+    .index("by_status", ["status"]),
+
+  userReferrals: defineTable({
+    userId: v.id("users"),
+    affiliateId: v.id("affiliates"),
+    code: v.string(),
+    cookieSetAt: v.string(),
+    expiresAt: v.string(),
+    firstSeenLandingPath: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_affiliate", ["affiliateId"]),
+
+  // ============================================================
+  // COMMUNITY
+  // ============================================================
+  communityPosts: defineTable({
+    authorId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    notebookId: v.optional(v.id("notebooks")),
+    coverImageUrl: v.optional(v.string()),
+    tags: v.array(v.string()),
+    likeCount: v.number(),
+    commentCount: v.number(),
+    viewCount: v.number(),
+    status: v.union(
+      v.literal("published"),
+      v.literal("hidden"),
+      v.literal("removed"),
+      v.literal("draft"),
+    ),
+    pinnedAt: v.optional(v.string()),
+    featuredAt: v.optional(v.string()),
+    hiddenReason: v.optional(v.string()),
+    hiddenBy: v.optional(v.id("users")),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_author", ["authorId"])
+    .index("by_status_created", ["status", "createdAt"])
+    .index("by_status_likes", ["status", "likeCount"]),
+
+  communityComments: defineTable({
+    postId: v.id("communityPosts"),
+    authorId: v.id("users"),
+    body: v.string(),
+    parentCommentId: v.optional(v.id("communityComments")),
+    likeCount: v.number(),
+    status: v.union(
+      v.literal("published"),
+      v.literal("hidden"),
+      v.literal("removed"),
+    ),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_post", ["postId", "createdAt"])
+    .index("by_author", ["authorId"])
+    .index("by_parent", ["parentCommentId"]),
+
+  communityLikes: defineTable({
+    userId: v.id("users"),
+    targetType: v.union(v.literal("post"), v.literal("comment")),
+    targetId: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_target", ["targetType", "targetId"])
+    .index("by_user_target", ["userId", "targetType", "targetId"]),
+
+  communityFollows: defineTable({
+    followerId: v.id("users"),
+    followeeId: v.id("users"),
+    createdAt: v.string(),
+  })
+    .index("by_follower", ["followerId"])
+    .index("by_followee", ["followeeId"])
+    .index("by_pair", ["followerId", "followeeId"]),
+
+  communityReports: defineTable({
+    reporterId: v.id("users"),
+    targetType: v.union(v.literal("post"), v.literal("comment"), v.literal("user")),
+    targetId: v.string(),
+    reason: v.union(
+      v.literal("spam"),
+      v.literal("harassment"),
+      v.literal("nsfw"),
+      v.literal("copyright"),
+      v.literal("other"),
+    ),
+    note: v.optional(v.string()),
+    status: v.union(
+      v.literal("open"),
+      v.literal("resolved"),
+      v.literal("dismissed"),
+    ),
+    resolution: v.optional(v.string()),
+    handledBy: v.optional(v.id("users")),
+    handledAt: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_status_created", ["status", "createdAt"])
+    .index("by_target", ["targetType", "targetId"]),
+
+  communityProfiles: defineTable({
+    userId: v.id("users"),
+    handle: v.string(),
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    bannerUrl: v.optional(v.string()),
+    websiteUrl: v.optional(v.string()),
+    location: v.optional(v.string()),
+    followerCount: v.number(),
+    followingCount: v.number(),
+    postCount: v.number(),
+    isBanned: v.boolean(),
+    bannedAt: v.optional(v.string()),
+    banReason: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_handle", ["handle"]),
 });
