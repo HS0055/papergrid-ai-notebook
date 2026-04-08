@@ -268,6 +268,11 @@ export interface NotebookPage {
   hexMapData?: HexMapData;
   isoFlowData?: IsoFlowData;
   gridSheetData?: GridSheetData;
+  // Right-page canvas data. Each spread has independent left/right canvases
+  // for grid/hex/iso paper types so users can write on both pages.
+  hexMapDataRight?: HexMapData;
+  isoFlowDataRight?: IsoFlowData;
+  gridSheetDataRight?: GridSheetData;
 }
 
 export interface Notebook {

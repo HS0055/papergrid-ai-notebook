@@ -506,16 +506,28 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     addBlock(BlockType.TEXT, side);
   };
 
-  const handleHexMapChange = (next: HexMapData) => {
-    onUpdatePage({ ...page, hexMapData: next });
+  const handleHexMapChange = (next: HexMapData, side: 'left' | 'right' = 'left') => {
+    onUpdatePage(
+      side === 'right'
+        ? { ...page, hexMapDataRight: next }
+        : { ...page, hexMapData: next }
+    );
   };
 
-  const handleIsoFlowChange = (next: IsoFlowData) => {
-    onUpdatePage({ ...page, isoFlowData: next });
+  const handleIsoFlowChange = (next: IsoFlowData, side: 'left' | 'right' = 'left') => {
+    onUpdatePage(
+      side === 'right'
+        ? { ...page, isoFlowDataRight: next }
+        : { ...page, isoFlowData: next }
+    );
   };
 
-  const handleGridSheetChange = (next: GridSheetData) => {
-    onUpdatePage({ ...page, gridSheetData: next });
+  const handleGridSheetChange = (next: GridSheetData, side: 'left' | 'right' = 'left') => {
+    onUpdatePage(
+      side === 'right'
+        ? { ...page, gridSheetDataRight: next }
+        : { ...page, gridSheetData: next }
+    );
   };
 
   const handleDragEnd = (event: DragEndEvent, side: 'left' | 'right') => {
@@ -950,14 +962,23 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         {page.paperType !== 'blank' && page.paperType !== 'lined' && page.paperType !== 'hex' && page.paperType !== 'isometric' && (
           <div className={`absolute top-0 bottom-0 left-12 md:left-16 w-px ${marginColorClass} pointer-events-none z-0`} />
         )}
-        {page.paperType === 'hex' && isLeft && !isPaperTypeComingSoon('hex') && (
-          <HexPaperCanvas data={page.hexMapData} onChange={handleHexMapChange} />
+        {page.paperType === 'hex' && !isPaperTypeComingSoon('hex') && (
+          <HexPaperCanvas
+            data={isLeft ? page.hexMapData : page.hexMapDataRight}
+            onChange={(next) => handleHexMapChange(next, side)}
+          />
         )}
-        {page.paperType === 'isometric' && isLeft && !isPaperTypeComingSoon('isometric') && (
-          <IsoPaperCanvas data={page.isoFlowData} onChange={handleIsoFlowChange} />
+        {page.paperType === 'isometric' && !isPaperTypeComingSoon('isometric') && (
+          <IsoPaperCanvas
+            data={isLeft ? page.isoFlowData : page.isoFlowDataRight}
+            onChange={(next) => handleIsoFlowChange(next, side)}
+          />
         )}
-        {page.paperType === 'grid' && isLeft && !isPaperTypeComingSoon('grid') && (
-          <GridPaperCanvas data={page.gridSheetData} onChange={handleGridSheetChange} />
+        {page.paperType === 'grid' && !isPaperTypeComingSoon('grid') && (
+          <GridPaperCanvas
+            data={isLeft ? page.gridSheetData : page.gridSheetDataRight}
+            onChange={(next) => handleGridSheetChange(next, side)}
+          />
         )}
         {/* Coming-soon placeholder when a page's paper type is feature-flagged off */}
         {isLeft && isPaperTypeComingSoon(page.paperType) && (
@@ -992,9 +1013,14 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           //   isometric — placed flow steps
           //   grid — filled grid cells
           //   music — placed melody notes (TBD when music ships)
-          const hexEmpty = !page.hexMapData?.nodes?.length;
-          const isoEmpty = !page.isoFlowData?.steps?.length;
-          const gridEmpty = !page.gridSheetData?.cells || Object.keys(page.gridSheetData.cells).length === 0;
+          // Per-side empty checks: each side has its own canvas data, so the
+          // hint must reflect the side currently being rendered.
+          const hexData = isLeft ? page.hexMapData : page.hexMapDataRight;
+          const isoData = isLeft ? page.isoFlowData : page.isoFlowDataRight;
+          const gridData = isLeft ? page.gridSheetData : page.gridSheetDataRight;
+          const hexEmpty = !hexData?.nodes?.length;
+          const isoEmpty = !isoData?.steps?.length;
+          const gridEmpty = !gridData?.cells || Object.keys(gridData.cells).length === 0;
           const blocksEmpty = blocks.length === 0;
           const isCanvasPaper = page.paperType === 'hex' || page.paperType === 'isometric' || page.paperType === 'grid';
           const isPaperEmpty =

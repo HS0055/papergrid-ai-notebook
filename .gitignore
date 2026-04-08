@@ -51,3 +51,6 @@ node_modules/
 # Turbo cache
 .turbo
 .worktrees/
+
+# Vendored reference repos (curated lists, third-party clones)
+vendor/

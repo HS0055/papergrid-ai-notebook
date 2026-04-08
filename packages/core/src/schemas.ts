@@ -283,6 +283,9 @@ export const NotebookPageSchema = z.object({
   hexMapData: HexMapDataSchema.optional(),
   isoFlowData: IsoFlowDataSchema.optional(),
   gridSheetData: GridSheetDataSchema.optional(),
+  hexMapDataRight: HexMapDataSchema.optional(),
+  isoFlowDataRight: IsoFlowDataSchema.optional(),
+  gridSheetDataRight: GridSheetDataSchema.optional(),
 });
 
 // Notebook - mirrors Notebook interface
