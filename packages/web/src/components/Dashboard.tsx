@@ -153,12 +153,48 @@ const Toast: React.FC<{ toast: ToastData; onDismiss: (id: number) => void }> = (
   );
 };
 
+// Persistence keys for last-viewed context (which notebook + page the user
+// was on when they left). Lives outside the notebooks payload so it
+// survives a full Convex re-sync.
+const ACTIVE_CONTEXT_KEY = 'papergrid_active_context';
+
+interface ActiveContext {
+  notebookId: string;
+  pageIndex: number;
+}
+
+function loadActiveContext(): ActiveContext | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_CONTEXT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ActiveContext>;
+    if (typeof parsed?.notebookId !== 'string') return null;
+    if (typeof parsed?.pageIndex !== 'number') return null;
+    return { notebookId: parsed.notebookId, pageIndex: parsed.pageIndex };
+  } catch {
+    return null;
+  }
+}
+
+function saveActiveContext(ctx: ActiveContext): void {
+  try {
+    localStorage.setItem(ACTIVE_CONTEXT_KEY, JSON.stringify(ctx));
+  } catch {
+    // Quota exceeded or disabled — silently drop.
+  }
+}
+
 // ─── Dashboard ──────────────────────────────────────────────
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [activeNotebookId, setActiveNotebookId] = useState<string>('');
   const [activePageIndex, setActivePageIndex] = useState<number>(-1);
+  // Start TRUE so we render a spinner on mount instead of a blank page
+  // while the initial Convex fetch is in flight. On slow accounts (many
+  // notebooks), this fetch can take a few seconds and users were
+  // previously staring at a white screen.
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
@@ -214,6 +250,32 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     initialLoadDone.current = false;
+    setIsInitialLoading(true);
+
+    // Restore the user's last-viewed notebook + page. We capture this
+    // BEFORE the Convex fetch so we can apply it even if Convex is slow,
+    // and fall back to the first notebook + cover (pageIndex -1) if the
+    // saved context doesn't match anything that came back from the server.
+    const savedContext = loadActiveContext();
+
+    const applyInitial = (nbs: Notebook[]) => {
+      setNotebooks(nbs);
+      // Prefer the saved context if it still resolves to a real notebook.
+      const match = savedContext ? nbs.find((n) => n.id === savedContext.notebookId) : null;
+      if (match) {
+        setActiveNotebookId(match.id);
+        // Clamp pageIndex to the valid range — notebooks may have shrunk
+        // since last visit.
+        const maxIdx = Math.max(-1, match.pages.length - 1);
+        setActivePageIndex(Math.min(Math.max(-1, savedContext!.pageIndex), maxIdx));
+      } else {
+        setActiveNotebookId(nbs[0].id);
+        // -1 = cover. Default behavior for a fresh user.
+        setActivePageIndex(-1);
+      }
+      initialLoadDone.current = true;
+      setIsInitialLoading(false);
+    };
 
     const load = async () => {
       // 1) Authenticated → Convex is the ONLY source of truth
@@ -221,11 +283,9 @@ export const Dashboard: React.FC = () => {
         try {
           const cloudNbs = await convex.loadNotebooks();
           if (!cancelled && cloudNbs && cloudNbs.length > 0) {
-            setNotebooks(cloudNbs);
-            setActiveNotebookId(cloudNbs[0].id);
+            applyInitial(cloudNbs);
             // Cache to localStorage for offline
             void saveNotebooksToStorage(storageKey, cloudNbs).catch(() => {});
-            initialLoadDone.current = true;
             return;
           }
         } catch (e) {
@@ -235,9 +295,7 @@ export const Dashboard: React.FC = () => {
         try {
           const stored = await loadNotebooksFromStorage(storageKey);
           if (!cancelled && stored && stored.length > 0) {
-            setNotebooks(stored);
-            setActiveNotebookId(stored[0].id);
-            initialLoadDone.current = true;
+            applyInitial(stored);
             return;
           }
         } catch {
@@ -248,9 +306,7 @@ export const Dashboard: React.FC = () => {
         try {
           const stored = await loadNotebooksFromStorage(storageKey);
           if (!cancelled && stored && stored.length > 0) {
-            setNotebooks(stored);
-            setActiveNotebookId(stored[0].id);
-            initialLoadDone.current = true;
+            applyInitial(stored);
             return;
           }
         } catch {
@@ -279,9 +335,7 @@ export const Dashboard: React.FC = () => {
           ]
         }]
       };
-      setNotebooks([defaultNb]);
-      setActiveNotebookId(defaultNb.id);
-      initialLoadDone.current = true;
+      applyInitial([defaultNb]);
     };
 
     void load();
@@ -290,6 +344,15 @@ export const Dashboard: React.FC = () => {
       cancelled = true;
     };
   }, [auth.isAuthenticated, storageKey]);
+
+  // Persist the user's current context on every change so a reload
+  // drops them back where they were. Previously the state always reset
+  // to "first notebook, cover page" which felt like "lost my place."
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    if (!activeNotebookId) return;
+    saveActiveContext({ notebookId: activeNotebookId, pageIndex: activePageIndex });
+  }, [activeNotebookId, activePageIndex]);
 
   // Save to localStorage (user-scoped) on every change
   useEffect(() => {
@@ -303,6 +366,12 @@ export const Dashboard: React.FC = () => {
 
   // Sync ALL notebooks to Convex (debounced, remap IDs)
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Hold the freshest notebooks snapshot in a ref so the unload flush
+  // handler (which can't re-subscribe to state) always sees current data.
+  const notebooksRef = useRef<Notebook[]>(notebooks);
+  useEffect(() => {
+    notebooksRef.current = notebooks;
+  }, [notebooks]);
   useEffect(() => {
     if (!auth.isAuthenticated || notebooks.length === 0 || !initialLoadDone.current) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
@@ -347,6 +416,38 @@ export const Dashboard: React.FC = () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
   }, [auth.isAuthenticated, notebooks]);
+
+  // Flush any pending debounced sync before the tab closes / hides.
+  // Without this, users who hit reload within 3 seconds of editing a
+  // notebook lost the most recent changes (including newly added
+  // bookmarks) because the debounced sync never got a chance to fire.
+  // We also flush on `visibilitychange → hidden` which covers tab
+  // switching and mobile backgrounding.
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+    const flushNow = () => {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+      const snapshot = notebooksRef.current;
+      if (snapshot.length === 0 || !initialLoadDone.current) return;
+      // Fire-and-forget — browser may kill the tab before the request
+      // lands, but it gives us a chance in the common case.
+      void convex.syncAllNotebooks(snapshot).catch(() => {});
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushNow();
+    };
+    window.addEventListener('beforeunload', flushNow);
+    window.addEventListener('pagehide', flushNow);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', flushNow);
+      window.removeEventListener('pagehide', flushNow);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [auth.isAuthenticated, convex]);
 
   const activeNotebook = notebooks.find(n => n.id === activeNotebookId) || notebooks[0];
   const activePage = activeNotebook && activePageIndex >= 0 && activePageIndex < activeNotebook.pages.length
@@ -727,7 +828,17 @@ export const Dashboard: React.FC = () => {
     }
   }, [navigate]);
 
-  if (!activeNotebook) return null;
+  // Show a loading state while the initial Convex/localStorage load is in
+  // flight. Previously we returned null here, which rendered a blank
+  // white page for up to several seconds on accounts with many notebooks.
+  if (isInitialLoading || !activeNotebook) {
+    return (
+      <div className="min-h-screen bg-[#f0f2f5] flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-[3px] border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+        <p className="text-sm text-gray-500 font-medium">Loading your notebooks…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in">

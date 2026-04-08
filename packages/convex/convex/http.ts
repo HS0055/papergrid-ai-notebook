@@ -1938,52 +1938,67 @@ http.route({
         sessionToken,
       });
 
-      const full = [];
-      for (const nb of notebooks) {
-        const pages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nb._id, sessionToken });
-        const pagesWithBlocks = [];
-        for (const page of pages) {
-          const blocks = await ctx.runQuery(api.blocks.listByPage, { pageId: page._id, sessionToken });
-          pagesWithBlocks.push({
-            id: page._id,
-            title: page.title,
-            createdAt: page.createdAt || "",
-            paperType: page.paperType,
-            aesthetic: page.aesthetic,
-            themeColor: page.themeColor,
-            aiGenerated: page.aiGenerated,
-            blocks: blocks.map((b: any) => ({
-              id: b._id,
-              type: b.type,
-              content: b.content,
-              side: b.side,
-              checked: b.checked,
-              alignment: b.alignment,
-              emphasis: b.emphasis,
-              color: b.color,
-              gridData: b.gridData,
-              matrixData: b.matrixData,
-              moodValue: b.moodValue,
-              musicData: b.musicData,
-              calendarData: b.calendarData,
-              weeklyViewData: b.weeklyViewData,
-              habitTrackerData: b.habitTrackerData,
-              goalSectionData: b.goalSectionData,
-              timeBlockData: b.timeBlockData,
-              dailySectionData: b.dailySectionData,
-            })),
+      // Parallelize notebook → pages → blocks reads. Previously this was
+      // three nested serial awaits, which for a user with 50 notebooks ×
+      // 20 pages × 30 blocks meant 1000+ sequential DB round-trips per
+      // /api/notebooks call — several seconds of wall clock on a cold
+      // load. Now we fan out at each level with Promise.all so the total
+      // latency is bounded by the slowest single-notebook subtree, not
+      // the sum of everything.
+      const full = await Promise.all(
+        notebooks.map(async (nb) => {
+          const pages = await ctx.runQuery(api.pages.listByNotebook, {
+            notebookId: nb._id,
+            sessionToken,
           });
-        }
-        full.push({
-          id: nb._id,
-          title: nb.title,
-          coverColor: nb.coverColor,
-          coverImageUrl: (nb as any).coverImageUrl || undefined,
-          bookmarks: nb.bookmarks,
-          createdAt: (nb as any).createdAt || "",
-          pages: pagesWithBlocks,
-        });
-      }
+          const pagesWithBlocks = await Promise.all(
+            pages.map(async (page: any) => {
+              const blocks = await ctx.runQuery(api.blocks.listByPage, {
+                pageId: page._id,
+                sessionToken,
+              });
+              return {
+                id: page._id,
+                title: page.title,
+                createdAt: page.createdAt || "",
+                paperType: page.paperType,
+                aesthetic: page.aesthetic,
+                themeColor: page.themeColor,
+                aiGenerated: page.aiGenerated,
+                blocks: blocks.map((b: any) => ({
+                  id: b._id,
+                  type: b.type,
+                  content: b.content,
+                  side: b.side,
+                  checked: b.checked,
+                  alignment: b.alignment,
+                  emphasis: b.emphasis,
+                  color: b.color,
+                  gridData: b.gridData,
+                  matrixData: b.matrixData,
+                  moodValue: b.moodValue,
+                  musicData: b.musicData,
+                  calendarData: b.calendarData,
+                  weeklyViewData: b.weeklyViewData,
+                  habitTrackerData: b.habitTrackerData,
+                  goalSectionData: b.goalSectionData,
+                  timeBlockData: b.timeBlockData,
+                  dailySectionData: b.dailySectionData,
+                })),
+              };
+            }),
+          );
+          return {
+            id: nb._id,
+            title: nb.title,
+            coverColor: nb.coverColor,
+            coverImageUrl: (nb as any).coverImageUrl || undefined,
+            bookmarks: nb.bookmarks,
+            createdAt: (nb as any).createdAt || "",
+            pages: pagesWithBlocks,
+          };
+        }),
+      );
 
       return new Response(JSON.stringify({ notebooks: full }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2046,11 +2061,14 @@ http.route({
           sessionToken,
         });
 
-        // Delete existing pages + blocks, then recreate.
+        // Delete existing pages + blocks, then recreate. Parallelized —
+        // previously this serialized up to 20 page deletes per save.
         const oldPages = await ctx.runQuery(api.pages.listByNotebook, { notebookId: nbId, sessionToken });
-        for (const oldPage of oldPages) {
-          await ctx.runMutation(api.pages.remove, { id: oldPage._id, sessionToken });
-        }
+        await Promise.all(
+          oldPages.map((oldPage: any) =>
+            ctx.runMutation(api.pages.remove, { id: oldPage._id, sessionToken }),
+          ),
+        );
       } else {
         // Create new notebook
         nbId = await ctx.runMutation(api.notebooks.create, {
