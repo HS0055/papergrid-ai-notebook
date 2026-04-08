@@ -32,9 +32,7 @@ import {
   type RoadmapStatus,
   type RoadmapItem,
 } from '@papergrid/core';
-import { useEditableConfig } from '../../hooks/useEditableConfig';
-
-export const ROADMAP_STORAGE_KEY = 'papera_roadmap_override';
+import { useServerConfig } from '../../hooks/useServerConfig';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -58,9 +56,11 @@ const STATUS_ICONS: Record<RoadmapStatus, LucideIcon> = {
 export const RoadmapSection: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
   const [filter, setFilter] = useState<RoadmapStatus | 'all'>('all');
-  // Read from admin overrides (localStorage) with fallback to default config
-  const [editableRoadmap] = useEditableConfig<readonly RoadmapItem[]>(
-    ROADMAP_STORAGE_KEY,
+  // Live-edited roadmap from Convex (admin edits in /admin Roadmap tab
+  // propagate here after a ~500ms debounce). Falls back to hardcoded
+  // defaults when no override exists on the server.
+  const [editableRoadmap] = useServerConfig<readonly RoadmapItem[]>(
+    '/api/site-config/roadmap',
     DEFAULT_ROADMAP,
   );
   const allItems = editableRoadmap.filter((i) => i.publicVisible);

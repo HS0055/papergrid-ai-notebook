@@ -9,10 +9,12 @@ import {
   type PricingPlan,
   type InkPack,
 } from '@papergrid/core';
-import { useEditableConfig } from '../../hooks/useEditableConfig';
+import { useServerConfig } from '../../hooks/useServerConfig';
 
-export const PRICING_STORAGE_KEY = 'papera_pricing_override';
-export const INK_PACKS_STORAGE_KEY = 'papera_ink_packs_override';
+interface PricingConfigShape {
+  plans: Record<string, PricingPlan>;
+  packs: readonly InkPack[];
+}
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -45,15 +47,15 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('annual');
   const sectionRef = useRef<HTMLElement>(null);
 
-  // Admin-editable plans + Ink packs (localStorage with fallback to defaults)
-  const [plansRecord] = useEditableConfig<Record<string, PricingPlan>>(
-    PRICING_STORAGE_KEY,
-    DEFAULT_PRICING_PLANS,
+  // Live-edited plans + Ink packs from Convex (admin edits in /admin tab
+  // propagate here after a ~500ms debounce). Falls back to hardcoded
+  // defaults when no override exists on the server.
+  const [config] = useServerConfig<PricingConfigShape>(
+    '/api/site-config/pricing',
+    { plans: DEFAULT_PRICING_PLANS, packs: DEFAULT_INK_PACKS },
   );
-  const [packsList] = useEditableConfig<readonly InkPack[]>(
-    INK_PACKS_STORAGE_KEY,
-    DEFAULT_INK_PACKS,
-  );
+  const plansRecord = config.plans;
+  const packsList = config.packs;
   const plans = [plansRecord.free, plansRecord.pro, plansRecord.creator];
 
   useEffect(() => {

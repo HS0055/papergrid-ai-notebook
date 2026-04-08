@@ -1520,6 +1520,97 @@ http.route({
   }),
 });
 
+// ── Site Config (Pricing + Roadmap live edit) ─────────────
+http.route({
+  path: "/api/site-config/pricing",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const value = await ctx.runQuery(api.siteConfig.getPricing, {});
+      return new Response(JSON.stringify({ value }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: extractErrorMessage(error, "Failed to load pricing") }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/site-config/pricing",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const body = await request.json();
+      await ctx.runMutation(api.siteConfig.updatePricing, { sessionToken, value: body?.value });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to update pricing");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/site-config/roadmap",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const value = await ctx.runQuery(api.siteConfig.getRoadmap, {});
+      return new Response(JSON.stringify({ value }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: extractErrorMessage(error, "Failed to load roadmap") }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/site-config/roadmap",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const body = await request.json();
+      await ctx.runMutation(api.siteConfig.updateRoadmap, { sessionToken, value: body?.value });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to update roadmap");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // ── Admin: Plan Limits (live edit) ────────────────────────
 http.route({
   path: "/api/admin/plan-limits",
@@ -2089,6 +2180,8 @@ for (const path of [
   "/api/auth/reset-password",
   "/api/waitlist",
   "/api/admin/plan-limits",
+  "/api/site-config/pricing",
+  "/api/site-config/roadmap",
   "/api/notebooks",
   "/api/notebooks/save",
   "/api/notebooks/delete",

@@ -6,18 +6,26 @@ import {
   type PricingPlan,
   type InkPack,
 } from '@papergrid/core';
-import { useEditableConfig } from '../../hooks/useEditableConfig';
-import { PRICING_STORAGE_KEY, INK_PACKS_STORAGE_KEY } from '../landing/PricingSection';
+import { useServerConfig } from '../../hooks/useServerConfig';
+
+interface PricingConfigShape {
+  plans: Record<string, PricingPlan>;
+  packs: readonly InkPack[];
+}
 
 export const PricingEditor: React.FC = () => {
-  const [plans, setPlans, resetPlans] = useEditableConfig<Record<string, PricingPlan>>(
-    PRICING_STORAGE_KEY,
-    DEFAULT_PRICING_PLANS,
+  // Single Convex-backed config holding both plans and packs. Mutations
+  // are debounced to the server so fast typing doesn't DoS the endpoint.
+  const [config, setConfig, resetConfig] = useServerConfig<PricingConfigShape>(
+    '/api/site-config/pricing',
+    { plans: DEFAULT_PRICING_PLANS, packs: DEFAULT_INK_PACKS },
   );
-  const [packs, setPacks, resetPacks] = useEditableConfig<readonly InkPack[]>(
-    INK_PACKS_STORAGE_KEY,
-    DEFAULT_INK_PACKS,
-  );
+  const plans = config.plans;
+  const packs = config.packs;
+  const setPlans = (next: Record<string, PricingPlan>) => setConfig({ ...config, plans: next });
+  const setPacks = (next: readonly InkPack[]) => setConfig({ ...config, packs: next });
+  const resetPlans = resetConfig;
+  const resetPacks = resetConfig;
 
   const updatePlan = (id: 'free' | 'pro' | 'creator', patch: Partial<PricingPlan>) => {
     setPlans({

@@ -6,8 +6,7 @@ import {
   type RoadmapItem,
   type RoadmapStatus,
 } from '@papergrid/core';
-import { useEditableConfig } from '../../hooks/useEditableConfig';
-import { ROADMAP_STORAGE_KEY } from '../landing/RoadmapSection';
+import { useServerConfig } from '../../hooks/useServerConfig';
 
 const STATUSES: RoadmapStatus[] = ['live', 'in_progress', 'coming_soon', 'planned'];
 
@@ -25,8 +24,8 @@ const COMMON_ICONS = [
 ];
 
 export const RoadmapEditor: React.FC = () => {
-  const [roadmap, setRoadmap, reset] = useEditableConfig<readonly RoadmapItem[]>(
-    ROADMAP_STORAGE_KEY,
+  const [roadmap, setRoadmap, reset] = useServerConfig<readonly RoadmapItem[]>(
+    '/api/site-config/roadmap',
     DEFAULT_ROADMAP,
   );
   const [showImportArea, setShowImportArea] = useState(false);
