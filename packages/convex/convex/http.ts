@@ -5,6 +5,7 @@ import { detectDomain, getDomainRules, getDesignPrinciples } from "./domainDetec
 import type { CompactBlock, CompactReference } from "./referenceLayouts";
 import { registerAffiliateRoutes } from "./affiliateHttp";
 import { registerStripeRoutes } from "./stripeWebhook";
+import { registerCommunityRoutes } from "./communityHttp";
 
 // Generate a procedural premium SVG data URL as fallback cover
 function buildFallbackCover(prompt: string): string {
@@ -2573,6 +2574,11 @@ registerAffiliateRoutes(http);
 // env vars to be set — the routes return 503 if not configured so the
 // landing page can render a graceful fallback.
 registerStripeRoutes(http);
+
+// Register community HTTP routes (feed, posts, comments, likes, follows,
+// profiles). These are thin wrappers around api.community.* that forward
+// the session token.
+registerCommunityRoutes(http);
 
 
 export default http;

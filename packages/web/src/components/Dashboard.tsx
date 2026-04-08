@@ -9,7 +9,8 @@ import {
   Book, Plus, Sparkles, Menu, ChevronLeft, ChevronRight, Bookmark,
   AlertCircle, CheckCircle2, X, Home, Search, FileText, Undo2,
   Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
-  Download, Image, Printer, Volume2, VolumeX, Wand2, Trash2
+  Download, Image, Printer, Volume2, VolumeX, Wand2, Trash2,
+  Users, DollarSign,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { useSoundEffects } from '../hooks/useSoundEffects';
@@ -313,6 +314,13 @@ export const Dashboard: React.FC = () => {
       //                    delete/recreate pages on each save (see http.ts
       //                    /api/notebooks/save). Without this, bookmarks
       //                    disappear on the next reload.
+      //   - page.id      → ALSO remapped server-side via pageIdMap. Without
+      //                    translating local page ids to their new server
+      //                    ids, the UI's bookmark filter
+      //                    `pages.filter(p => bookmarks.includes(p.id))`
+      //                    silently fails between saves and reloads — pages
+      //                    still carry stale local ids while bookmarks
+      //                    already hold the fresh server ids.
       if (results.size > 0) {
         setNotebooks(prev => prev.map(nb => {
           const result = results.get(nb.id);
@@ -320,6 +328,13 @@ export const Dashboard: React.FC = () => {
           const next: typeof nb = { ...nb };
           if (result.id && result.id !== nb.id) next.id = result.id;
           if (result.bookmarks) next.bookmarks = result.bookmarks;
+          if (result.pageIdMap && Object.keys(result.pageIdMap).length > 0) {
+            const map = result.pageIdMap;
+            next.pages = next.pages.map(p => ({
+              ...p,
+              id: map[p.id] ?? p.id,
+            }));
+          }
           return next;
         }));
         setActiveNotebookId(prev => {
@@ -892,6 +907,20 @@ export const Dashboard: React.FC = () => {
           >
             <Plus size={16} />
             <span>New Notebook</span>
+          </button>
+          <button
+            onClick={() => navigate('/community')}
+            className="w-full py-2 px-4 text-gray-400 hover:text-white rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors border border-gray-800 hover:border-gray-700"
+          >
+            <Users size={14} />
+            <span>Community</span>
+          </button>
+          <button
+            onClick={() => navigate('/affiliate')}
+            className="w-full py-2 px-4 text-gray-400 hover:text-white rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors border border-gray-800 hover:border-gray-700"
+          >
+            <DollarSign size={14} />
+            <span>Affiliate · Earn 30%</span>
           </button>
           <button
             onClick={() => navigate('/')}

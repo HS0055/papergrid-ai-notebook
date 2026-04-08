@@ -14,6 +14,7 @@ import type * as aiGenerations from "../aiGenerations.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as blocks from "../blocks.js";
 import type * as community from "../community.js";
+import type * as communityHttp from "../communityHttp.js";
 import type * as domainDetection from "../domainDetection.js";
 import type * as http from "../http.js";
 import type * as notebooks from "../notebooks.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   authHelpers: typeof authHelpers;
   blocks: typeof blocks;
   community: typeof community;
+  communityHttp: typeof communityHttp;
   domainDetection: typeof domainDetection;
   http: typeof http;
   notebooks: typeof notebooks;

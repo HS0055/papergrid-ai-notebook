@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LandingPage } from './components/LandingPage';
 import { Dashboard } from './components/Dashboard';
@@ -9,6 +9,23 @@ import { AdminPanel } from './components/AdminPanel';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { isNativeApp } from './utils/platform';
 import { BaselineTest } from './components/__debug__/BaselineTest';
+
+// Lazy-load community + affiliate so they don't bloat the main bundle
+// for users who never visit them.
+const CommunityPage = lazy(() =>
+  import('./components/community/CommunityPage').then((m) => ({ default: m.CommunityPage })),
+);
+const AffiliatePage = lazy(() =>
+  import('./components/affiliate/AffiliatePage').then((m) => ({ default: m.AffiliatePage })),
+);
+
+function LazyFallback() {
+  return (
+    <div className="min-h-screen bg-[#f0f2f5] flex items-center justify-center">
+      <div className="w-10 h-10 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+    </div>
+  );
+}
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -66,6 +83,20 @@ export default function App() {
             <Route path="/app" element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } />
+            {/* Community feed — visible to everyone, writes require auth */}
+            <Route path="/community" element={
+              <Suspense fallback={<LazyFallback />}>
+                <CommunityPage />
+              </Suspense>
+            } />
+            {/* Affiliate dashboard — auth-gated inside the component */}
+            <Route path="/affiliate" element={
+              <ProtectedRoute>
+                <Suspense fallback={<LazyFallback />}>
+                  <AffiliatePage />
+                </Suspense>
               </ProtectedRoute>
             } />
             {/* Admin panel is hidden on native builds to avoid App Store rejection */}
