@@ -246,77 +246,119 @@ export const Dashboard: React.FC = () => {
   // Track whether initial load is complete to avoid syncing stale data
   const initialLoadDone = useRef(false);
 
-  // Load notebooks — Convex is source of truth when authenticated
+  // Flag so the sync effect knows it has local-only edits to push up
+  // next time it runs (set by the loader when it detects a divergence
+  // between localStorage and Convex in favour of local).
+  const needsPushUpRef = useRef(false);
+
+  // Load notebooks — MERGE cloud + local, never silently overwrite.
+  //
+  // The old loader blindly called `saveNotebooksToStorage(storageKey, cloudNbs)`
+  // after every cloud fetch. During the Convex outage users kept editing
+  // locally (the debounced sync was failing silently), and when Convex
+  // came back online the loader overwrote those edits with the stale
+  // pre-outage snapshot. This new loader:
+  //
+  //   1. Fetches BOTH cloud and local in parallel
+  //   2. Picks the "winner" as the snapshot with more total pages (best
+  //      available proxy for "more recent work" when we don't have
+  //      per-doc timestamps)
+  //   3. If local wins, sets needsPushUpRef so the next sync uploads it
+  //   4. Only writes to localStorage when cloud wins — never overwrites
+  //      a richer local snapshot
   useEffect(() => {
     let cancelled = false;
     initialLoadDone.current = false;
     setIsInitialLoading(true);
 
-    // Restore the user's last-viewed notebook + page. We capture this
-    // BEFORE the Convex fetch so we can apply it even if Convex is slow,
-    // and fall back to the first notebook + cover (pageIndex -1) if the
-    // saved context doesn't match anything that came back from the server.
     const savedContext = loadActiveContext();
 
     const applyInitial = (nbs: Notebook[]) => {
+      if (cancelled) return;
       setNotebooks(nbs);
-      // Prefer the saved context if it still resolves to a real notebook.
       const match = savedContext ? nbs.find((n) => n.id === savedContext.notebookId) : null;
       if (match) {
         setActiveNotebookId(match.id);
-        // Clamp pageIndex to the valid range — notebooks may have shrunk
-        // since last visit.
         const maxIdx = Math.max(-1, match.pages.length - 1);
         setActivePageIndex(Math.min(Math.max(-1, savedContext!.pageIndex), maxIdx));
-      } else {
+      } else if (nbs.length > 0) {
         setActiveNotebookId(nbs[0].id);
-        // -1 = cover. Default behavior for a fresh user.
         setActivePageIndex(-1);
       }
       initialLoadDone.current = true;
       setIsInitialLoading(false);
     };
 
+    // Cheap proxy for "how much content does this snapshot contain?".
+    // Notebook count + total page count across all notebooks. Whichever
+    // snapshot has more wins the conflict. Not perfect (doesn't notice
+    // edits to existing pages) but strictly better than "cloud always
+    // wins" which destroyed data.
+    const totalWork = (nbs: Notebook[] | null | undefined): number => {
+      if (!nbs || nbs.length === 0) return 0;
+      let total = nbs.length;
+      for (const nb of nbs) total += nb.pages.length;
+      return total;
+    };
+
     const load = async () => {
-      // 1) Authenticated → Convex is the ONLY source of truth
-      if (auth.isAuthenticated) {
-        try {
-          const cloudNbs = await convex.loadNotebooks();
-          if (!cancelled && cloudNbs && cloudNbs.length > 0) {
-            applyInitial(cloudNbs);
-            // Cache to localStorage for offline
-            void saveNotebooksToStorage(storageKey, cloudNbs).catch(() => {});
-            return;
-          }
-        } catch (e) {
-          console.error("Failed to load from Convex:", e);
-        }
-        // Convex returned empty or failed — try localStorage as offline cache
-        try {
-          const stored = await loadNotebooksFromStorage(storageKey);
-          if (!cancelled && stored && stored.length > 0) {
-            applyInitial(stored);
-            return;
-          }
-        } catch {
-          // ignore
-        }
-      } else {
-        // 2) Not authenticated → localStorage only
-        try {
-          const stored = await loadNotebooksFromStorage(storageKey);
-          if (!cancelled && stored && stored.length > 0) {
-            applyInitial(stored);
-            return;
-          }
-        } catch {
-          // ignore
-        }
-      }
+      // Fetch both snapshots in parallel. Neither throws — each returns
+      // null on failure so we can reason about which source we trust.
+      const [cloudNbs, localNbs] = await Promise.all([
+        auth.isAuthenticated
+          ? convex.loadNotebooks().catch((e) => {
+              console.error('Failed to load from Convex:', e);
+              return null;
+            })
+          : Promise.resolve(null),
+        loadNotebooksFromStorage(storageKey).catch(() => null),
+      ]);
 
       if (cancelled) return;
 
-      // 3) Nothing found anywhere — create default notebook
+      const cloudWork = totalWork(cloudNbs);
+      const localWork = totalWork(localNbs);
+
+      // Case A: local has more content than cloud → there are local-only
+      // edits (likely made during an outage). Trust local AND flag the
+      // sync effect to push it up.
+      if (localWork > cloudWork && localNbs && localNbs.length > 0) {
+        if (cloudWork > 0) {
+          // Loud warning so the user can see it in the dev tools if the
+          // symptom repeats. We deliberately do NOT addToast here because
+          // it's informational, not an error.
+          console.warn(
+            `[Dashboard] localStorage has more data (${localWork} items) than Convex (${cloudWork}). Using local and scheduling push-up.`,
+          );
+        }
+        applyInitial(localNbs);
+        if (auth.isAuthenticated && cloudWork < localWork) {
+          needsPushUpRef.current = true;
+        }
+        return;
+      }
+
+      // Case B: cloud has as much or more than local → trust cloud.
+      // ONLY write to localStorage if cloud is strictly richer, so a
+      // reload right after a brief outage doesn't nuke fresh local data.
+      if (cloudNbs && cloudNbs.length > 0) {
+        applyInitial(cloudNbs);
+        if (cloudWork > localWork) {
+          void saveNotebooksToStorage(storageKey, cloudNbs).catch(() => {});
+        }
+        return;
+      }
+
+      // Case C: cloud is empty, but local has something → use local.
+      if (localNbs && localNbs.length > 0) {
+        applyInitial(localNbs);
+        if (auth.isAuthenticated) {
+          needsPushUpRef.current = true;
+        }
+        return;
+      }
+
+      // Case D: nothing anywhere → create default welcome notebook.
       const defaultNb: Notebook = {
         id: 'nb-1',
         title: 'My Journal',
@@ -375,6 +417,12 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!auth.isAuthenticated || notebooks.length === 0 || !initialLoadDone.current) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    // If the loader detected local-only edits that need to be pushed up
+    // (e.g. after the Convex outage), skip the debounce and fire the
+    // sync on the next tick so stale cloud state can't race the user
+    // closing the tab.
+    const delay = needsPushUpRef.current ? 0 : 3000;
+    needsPushUpRef.current = false;
     syncTimerRef.current = setTimeout(async () => {
       const results = await convex.syncAllNotebooks(notebooks);
       // Reconcile local state against the server's authoritative snapshot:
