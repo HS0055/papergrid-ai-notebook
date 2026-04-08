@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { detectDomain, getDomainRules, getDesignPrinciples } from "./domainDetection";
 import type { CompactBlock, CompactReference } from "./referenceLayouts";
+import { registerAffiliateRoutes } from "./affiliateHttp";
 
 // Generate a procedural premium SVG data URL as fallback cover
 function buildFallbackCover(prompt: string): string {
@@ -2561,6 +2562,11 @@ for (const path of [
     }),
   });
 }
+
+// Register the affiliate routes (click tracking, lookup, payouts, admin).
+// Previously this was defined in affiliateHttp.ts but the registration
+// call was never made — every affiliate route was dead.
+registerAffiliateRoutes(http);
 
 
 export default http;
