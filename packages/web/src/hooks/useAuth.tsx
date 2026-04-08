@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import React from 'react';
+import { getStoredReferralCode, clearStoredReferralCode } from '../utils/referralCapture';
 
 interface User {
     id: string;
@@ -161,10 +162,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
         setError(null);
         try {
+            // Attach any previously-captured referral code so the backend
+            // can credit the referrer. The capture helper pulls the code
+            // out of `?ref=` at first page load and persists it to
+            // localStorage with a 30-day TTL.
+            const referralCode = getStoredReferralCode() ?? undefined;
             const response = await fetch(`${API_BASE}/api/auth/signup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password }),
+                body: JSON.stringify({ name, email, password, referralCode }),
             });
             const isJson = response.headers.get('content-type')?.includes('application/json');
             if (!isJson) {
@@ -179,6 +185,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 throw new Error(data.error || 'Signup failed');
             }
             persistAuth(mapUser(data.user), data.sessionToken);
+            // Only clear the stored code AFTER the signup succeeded so
+            // a failed attempt can retry.
+            clearStoredReferralCode();
         } catch (e) {
             setError(normalizeAuthError(e));
         } finally {

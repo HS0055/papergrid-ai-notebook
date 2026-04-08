@@ -22,6 +22,8 @@ import type * as pages from "../pages.js";
 import type * as planLimits from "../planLimits.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as referenceLayouts from "../referenceLayouts.js";
+import type * as referrals from "../referrals.js";
+import type * as referralsHttp from "../referralsHttp.js";
 import type * as siteConfig from "../siteConfig.js";
 import type * as stripeWebhook from "../stripeWebhook.js";
 import type * as users from "../users.js";
@@ -48,6 +50,8 @@ declare const fullApi: ApiFromModules<{
   planLimits: typeof planLimits;
   rateLimit: typeof rateLimit;
   referenceLayouts: typeof referenceLayouts;
+  referrals: typeof referrals;
+  referralsHttp: typeof referralsHttp;
   siteConfig: typeof siteConfig;
   stripeWebhook: typeof stripeWebhook;
   users: typeof users;

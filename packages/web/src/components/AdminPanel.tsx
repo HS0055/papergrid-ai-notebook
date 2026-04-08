@@ -6,8 +6,18 @@ import { PricingEditor } from './admin/PricingEditor';
 import { RoadmapEditor } from './admin/RoadmapEditor';
 import { InkCostsEditor } from './admin/InkCostsEditor';
 import { WaitlistViewer } from './admin/WaitlistViewer';
+import { AffiliatesAdmin } from './admin/AffiliatesAdmin';
+import { ReferralsAdmin } from './admin/ReferralsAdmin';
 
-type AdminTab = 'users' | 'plans' | 'pricing' | 'ink-costs' | 'roadmap' | 'waitlist';
+type AdminTab =
+  | 'users'
+  | 'plans'
+  | 'pricing'
+  | 'ink-costs'
+  | 'roadmap'
+  | 'waitlist'
+  | 'affiliates'
+  | 'referrals';
 
 const TAB_ORDER: Array<{ id: AdminTab; label: string; subtitle: string }> = [
   { id: 'users', label: 'Users', subtitle: 'Directory + plan + role' },
@@ -16,6 +26,8 @@ const TAB_ORDER: Array<{ id: AdminTab; label: string; subtitle: string }> = [
   { id: 'ink-costs', label: 'Ink Costs', subtitle: 'Cost per action' },
   { id: 'roadmap', label: 'Roadmap', subtitle: 'What ships next' },
   { id: 'waitlist', label: 'Waitlist', subtitle: 'iOS early access' },
+  { id: 'affiliates', label: 'Affiliates', subtitle: 'Apps + payouts' },
+  { id: 'referrals', label: 'Referrals', subtitle: 'User growth loop' },
 ];
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -338,6 +350,12 @@ export function AdminPanel() {
         {/* Waitlist tab — iOS launch waitlist viewer + CSV export +
             Ink-backfill runner (for legacy users with no ink grant). */}
         {activeTab === 'waitlist' && <WaitlistViewer />}
+
+        {/* Affiliates tab — application approvals, payout management. */}
+        {activeTab === 'affiliates' && <AffiliatesAdmin />}
+
+        {/* Referrals tab — user→user growth loop tracking. */}
+        {activeTab === 'referrals' && <ReferralsAdmin />}
 
         {/* Users tab — directory + plan + role + ink management (the default view) */}
         {activeTab === 'users' && (

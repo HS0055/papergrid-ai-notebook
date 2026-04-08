@@ -10,7 +10,7 @@ import {
   AlertCircle, CheckCircle2, X, Home, Search, FileText, Undo2,
   Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
   Download, Image, Printer, Volume2, VolumeX, Wand2, Trash2,
-  Users, DollarSign,
+  Users, DollarSign, Gift,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { useSoundEffects } from '../hooks/useSoundEffects';
@@ -1073,6 +1073,13 @@ export const Dashboard: React.FC = () => {
           >
             <Users size={14} />
             <span>Community</span>
+          </button>
+          <button
+            onClick={() => navigate('/referral')}
+            className="w-full py-2 px-4 text-gray-400 hover:text-white rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors border border-gray-800 hover:border-gray-700"
+          >
+            <Gift size={14} />
+            <span>Invite friends · Give Ink</span>
           </button>
           <button
             onClick={() => navigate('/affiliate')}

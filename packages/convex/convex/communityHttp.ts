@@ -93,7 +93,7 @@ function installPreflight(http: HttpRouter, path: string) {
 }
 
 export function registerCommunityRoutes(http: HttpRouter) {
-  // ── GET /api/community/feed?sort=recent|trending|featured&tag=&cursor=&limit= ──
+  // ── GET /api/community/feed?sort=&kind=&tag=&cursor=&limit= ──
   http.route({
     path: "/api/community/feed",
     method: "GET",
@@ -102,6 +102,15 @@ export function registerCommunityRoutes(http: HttpRouter) {
         const url = new URL(request.url);
         const sort = url.searchParams.get("sort") as
           | "recent" | "trending" | "featured" | null;
+        const kindParam = url.searchParams.get("kind");
+        const kind =
+          kindParam === "feedback" ||
+          kindParam === "feature_request" ||
+          kindParam === "bug" ||
+          kindParam === "announcement" ||
+          kindParam === "discussion"
+            ? kindParam
+            : undefined;
         const tag = url.searchParams.get("tag") ?? undefined;
         const cursor = url.searchParams.get("cursor") ?? undefined;
         const limitRaw = url.searchParams.get("limit");
@@ -110,6 +119,7 @@ export function registerCommunityRoutes(http: HttpRouter) {
         const result = await ctx.runQuery(api.community.listFeed, {
           sessionToken: getSessionToken(request) ?? undefined,
           sort: sort ?? undefined,
+          kind,
           tag,
           cursor,
           limit,
@@ -122,6 +132,55 @@ export function registerCommunityRoutes(http: HttpRouter) {
     }),
   });
   installPreflight(http, "/api/community/feed");
+
+  // ── POST /api/community/admin/announce ──────────────────
+  http.route({
+    path: "/api/community/admin/announce",
+    method: "POST",
+    handler: httpAction(async (ctx, request) => {
+      try {
+        const body = await request.json().catch(() => ({}));
+        const postId = await ctx.runMutation(api.community.adminPostAnnouncement, {
+          sessionToken: getSessionToken(request) ?? undefined,
+          title: String(body.title ?? ""),
+          body: String(body.body ?? ""),
+          tags: Array.isArray(body.tags)
+            ? body.tags.filter((t: unknown) => typeof t === "string")
+            : undefined,
+          pinned: typeof body.pinned === "boolean" ? body.pinned : false,
+        });
+        return json({ postId }, 200, request);
+      } catch (error) {
+        const msg = errMsg(error, "Failed to post announcement");
+        return json({ error: msg }, statusFromMessage(msg), request);
+      }
+    }),
+  });
+  installPreflight(http, "/api/community/admin/announce");
+
+  // ── POST /api/community/admin/roadmap-status ────────────
+  http.route({
+    path: "/api/community/admin/roadmap-status",
+    method: "POST",
+    handler: httpAction(async (ctx, request) => {
+      try {
+        const body = await request.json().catch(() => ({}));
+        if (!body.postId || !body.roadmapStatus) {
+          return json({ error: "postId and roadmapStatus required" }, 400, request);
+        }
+        await ctx.runMutation(api.community.adminSetRoadmapStatus, {
+          sessionToken: getSessionToken(request) ?? undefined,
+          postId: body.postId,
+          roadmapStatus: body.roadmapStatus,
+        });
+        return json({ success: true }, 200, request);
+      } catch (error) {
+        const msg = errMsg(error, "Failed to update roadmap status");
+        return json({ error: msg }, statusFromMessage(msg), request);
+      }
+    }),
+  });
+  installPreflight(http, "/api/community/admin/roadmap-status");
 
   // ── GET /api/community/following-feed?limit= ──
   http.route({
@@ -236,6 +295,13 @@ export function registerCommunityRoutes(http: HttpRouter) {
     handler: httpAction(async (ctx, request) => {
       try {
         const body = await request.json().catch(() => ({}));
+        const kind =
+          body.kind === "feedback" ||
+          body.kind === "feature_request" ||
+          body.kind === "bug" ||
+          body.kind === "discussion"
+            ? body.kind
+            : undefined;
         const postId = await ctx.runMutation(api.community.createPost, {
           sessionToken: getSessionToken(request) ?? undefined,
           title: String(body.title ?? ""),
@@ -245,6 +311,7 @@ export function registerCommunityRoutes(http: HttpRouter) {
           notebookId: typeof body.notebookId === "string"
             ? (body.notebookId as Id<"notebooks">)
             : undefined,
+          kind,
         });
         return json({ postId }, 200, request);
       } catch (error) {

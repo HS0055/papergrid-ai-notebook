@@ -268,22 +268,56 @@ export const listFeed = query({
       v.literal("trending"),
       v.literal("featured"),
     )),
+    // Category filter. Omit to get everything. When set we use the
+    // compound `by_kind_*` index so the page is a bounded index scan.
+    kind: v.optional(v.union(
+      v.literal("feedback"),
+      v.literal("feature_request"),
+      v.literal("bug"),
+      v.literal("announcement"),
+      v.literal("discussion"),
+    )),
     tag: v.optional(v.string()),
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, { sessionToken, sort, tag, cursor, limit }) => {
+  handler: async (ctx, { sessionToken, sort, kind, tag, cursor, limit }) => {
     const cap = Math.min(limit ?? FEED_PAGE, FEED_PAGE * 2);
     const sortMode = sort ?? "recent";
+    const sortByVotes = sortMode === "trending";
 
-    // Real pagination via Convex's .paginate() API.
-    const indexName: "by_status_likes" | "by_status_created" =
-      sortMode === "trending" ? "by_status_likes" : "by_status_created";
-    const page = await ctx.db
-      .query("communityPosts")
-      .withIndex(indexName, (q) => q.eq("status", "published"))
-      .order("desc")
-      .paginate({ numItems: cap, cursor: cursor ?? null });
+    // Pick the right index. When a kind filter is set, use the compound
+    // kind/status/(createdAt|likeCount) index so each tab stays cheap at
+    // scale. Otherwise fall back to the status-only indexes.
+    type PageResult = { page: Doc<"communityPosts">[]; isDone: boolean; continueCursor: string };
+    let page: PageResult;
+    if (kind) {
+      if (sortByVotes) {
+        page = await ctx.db
+          .query("communityPosts")
+          .withIndex("by_kind_likes", (q) =>
+            q.eq("kind", kind).eq("status", "published"),
+          )
+          .order("desc")
+          .paginate({ numItems: cap, cursor: cursor ?? null });
+      } else {
+        page = await ctx.db
+          .query("communityPosts")
+          .withIndex("by_kind_created", (q) =>
+            q.eq("kind", kind).eq("status", "published"),
+          )
+          .order("desc")
+          .paginate({ numItems: cap, cursor: cursor ?? null });
+      }
+    } else {
+      const indexName: "by_status_likes" | "by_status_created" =
+        sortByVotes ? "by_status_likes" : "by_status_created";
+      page = await ctx.db
+        .query("communityPosts")
+        .withIndex(indexName, (q) => q.eq("status", "published"))
+        .order("desc")
+        .paginate({ numItems: cap, cursor: cursor ?? null });
+    }
 
     let rows: Doc<"communityPosts">[] = page.page;
     if (tag) {
@@ -507,6 +541,11 @@ export const getMyProfile = query({
 // USER MUTATIONS
 // ─────────────────────────────────────────────────────────────
 
+// Valid post kinds a regular user can pick. `announcement` is admin-only —
+// see `adminPostAnnouncement` below.
+const USER_POST_KINDS = ["feedback", "feature_request", "bug", "discussion"] as const;
+type UserPostKind = (typeof USER_POST_KINDS)[number];
+
 export const createPost = mutation({
   args: {
     sessionToken: v.optional(v.string()),
@@ -515,6 +554,14 @@ export const createPost = mutation({
     notebookId: v.optional(v.id("notebooks")),
     coverImageUrl: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
+    // Category the user picked in the composer. Defaults to `discussion`
+    // for back-compat with older clients.
+    kind: v.optional(v.union(
+      v.literal("feedback"),
+      v.literal("feature_request"),
+      v.literal("bug"),
+      v.literal("discussion"),
+    )),
   },
   handler: async (ctx, args) => {
     const user = await requireAuthUser(ctx, args.sessionToken);
@@ -533,6 +580,11 @@ export const createPost = mutation({
       .map((t) => t.trim().toLowerCase())
       .filter((t) => t.length > 0 && t.length <= 24)
       .slice(0, MAX_TAGS);
+
+    const kind: UserPostKind =
+      args.kind && (USER_POST_KINDS as readonly string[]).includes(args.kind)
+        ? (args.kind as UserPostKind)
+        : "discussion";
 
     // If linking a notebook, verify ownership and auto-share.
     if (args.notebookId) {
@@ -556,6 +608,10 @@ export const createPost = mutation({
       commentCount: 0,
       viewCount: 0,
       status: "published",
+      kind,
+      // Only feature requests get a roadmap lifecycle — other kinds
+      // leave roadmapStatus undefined.
+      roadmapStatus: kind === "feature_request" ? "open" : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -564,6 +620,81 @@ export const createPost = mutation({
     await ctx.db.patch(profile._id, { postCount: profile.postCount + 1 });
 
     return postId;
+  },
+});
+
+// Admin-only: post a product announcement / changelog entry. Lives in
+// the same `communityPosts` table so the feed can render it inline
+// with a distinct "Update" badge. Bypasses the per-user rate limit.
+export const adminPostAnnouncement = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    title: v.string(),
+    body: v.string(),
+    tags: v.optional(v.array(v.string())),
+    pinned: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx, args.sessionToken);
+    const title = args.title.trim();
+    const body = args.body.trim();
+    if (!title || title.length > MAX_TITLE) throw new Error("Invalid title");
+    if (!body || body.length > MAX_BODY) throw new Error("Invalid body");
+    const tags = (args.tags ?? [])
+      .map((t) => t.trim().toLowerCase())
+      .filter((t) => t.length > 0 && t.length <= 24)
+      .slice(0, MAX_TAGS);
+    const now = new Date().toISOString();
+    const postId = await ctx.db.insert("communityPosts", {
+      authorId: admin._id,
+      title,
+      body,
+      tags,
+      likeCount: 0,
+      commentCount: 0,
+      viewCount: 0,
+      status: "published",
+      kind: "announcement",
+      pinnedAt: args.pinned ? now : undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await writeAuditLog(ctx, admin, "community.adminPostAnnouncement", {
+      postId, title, pinned: args.pinned ?? false,
+    });
+    return postId;
+  },
+});
+
+// Admin-only: advance a feature request through the roadmap lifecycle.
+// This is what admins click on the roadmap board to mark an idea as
+// planned / in progress / shipped / declined.
+export const adminSetRoadmapStatus = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    postId: v.id("communityPosts"),
+    roadmapStatus: v.union(
+      v.literal("open"),
+      v.literal("planned"),
+      v.literal("in_progress"),
+      v.literal("shipped"),
+      v.literal("declined"),
+    ),
+  },
+  handler: async (ctx, { sessionToken, postId, roadmapStatus }) => {
+    const admin = await requireAdmin(ctx, sessionToken);
+    const post = await ctx.db.get(postId);
+    if (!post) throw new Error("Post not found");
+    if (post.kind !== "feature_request") {
+      throw new Error("Roadmap status only applies to feature requests");
+    }
+    await ctx.db.patch(postId, {
+      roadmapStatus,
+      updatedAt: new Date().toISOString(),
+    });
+    await writeAuditLog(ctx, admin, "community.adminSetRoadmapStatus", {
+      postId, roadmapStatus,
+    });
   },
 });
 

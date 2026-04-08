@@ -371,6 +371,30 @@ export default defineSchema({
       v.literal("removed"),
       v.literal("draft"),
     ),
+    // Post kind — what the post is FOR. Drives the tabs on the
+    // community page and governs which admin actions apply.
+    //   feedback:        general suggestion / free-form feedback
+    //   feature_request: new feature proposal — voteable + has roadmap state
+    //   bug:             bug report
+    //   announcement:    admin-only product update / changelog entry
+    //   discussion:      generic community thread (default for back-compat)
+    kind: v.optional(v.union(
+      v.literal("feedback"),
+      v.literal("feature_request"),
+      v.literal("bug"),
+      v.literal("announcement"),
+      v.literal("discussion"),
+    )),
+    // Roadmap lifecycle state for feature requests. Admins move posts
+    // through this as the idea advances from raw community vote to
+    // shipped feature. Unused for other kinds.
+    roadmapStatus: v.optional(v.union(
+      v.literal("open"),
+      v.literal("planned"),
+      v.literal("in_progress"),
+      v.literal("shipped"),
+      v.literal("declined"),
+    )),
     pinnedAt: v.optional(v.string()),
     featuredAt: v.optional(v.string()),
     hiddenReason: v.optional(v.string()),
@@ -380,7 +404,13 @@ export default defineSchema({
   })
     .index("by_author", ["authorId"])
     .index("by_status_created", ["status", "createdAt"])
-    .index("by_status_likes", ["status", "likeCount"]),
+    .index("by_status_likes", ["status", "likeCount"])
+    // Category-filtered feeds: "newest feature requests", "most-voted
+    // bugs", etc. The compound index keeps each tab a cheap index scan.
+    .index("by_kind_created", ["kind", "status", "createdAt"])
+    .index("by_kind_likes", ["kind", "status", "likeCount"])
+    // Admin roadmap view grouped by lifecycle state.
+    .index("by_roadmap", ["roadmapStatus", "status", "createdAt"]),
 
   communityComments: defineTable({
     postId: v.id("communityPosts"),
@@ -464,4 +494,61 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_handle", ["handle"]),
+
+  // ============================================================
+  // REFERRAL PROGRAM (user → user growth loop)
+  //
+  // Separate from the affiliate program above. Affiliates are paid
+  // revenue-share partners. Referrals are the built-in viral loop —
+  // EVERY user gets a code on signup, both parties get bonus Ink when
+  // the referred user joins and completes a qualifying action.
+  // ============================================================
+  referralCodes: defineTable({
+    userId: v.id("users"),
+    code: v.string(), // lowercased slug, unique, collision-checked
+    totalClicks: v.number(),   // landing visits
+    totalSignups: v.number(),  // people who signed up with this code
+    totalQualified: v.number(), // signups that triggered the reward
+    totalRewardInk: v.number(), // lifetime Ink this referrer earned
+    createdAt: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_code", ["code"])
+    // Leaderboard index — admin view "top referrers by qualified
+    // signups this period".
+    .index("by_qualified", ["totalQualified"]),
+
+  // One row per successful referral. Status machine:
+  //   pending     — user signed up with a ref cookie, no reward yet
+  //   qualified   — they met the reward threshold (e.g. created a
+  //                 notebook, verified email, purchased) — both
+  //                 sides receive Ink at this point
+  //   voided      — referred user was banned / refunded / marked
+  //                 fraud → reward is rolled back
+  referralRedemptions: defineTable({
+    referrerId: v.id("users"),     // the person who shared the link
+    referredUserId: v.id("users"), // the new signup
+    code: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("qualified"),
+      v.literal("voided"),
+    ),
+    // Ink awarded to each side on qualification. Stored per row so
+    // admins can change the global bonus without affecting historical
+    // numbers in payouts.
+    referrerInkReward: v.optional(v.number()),
+    referredInkReward: v.optional(v.number()),
+    qualifiedAt: v.optional(v.string()),
+    voidedAt: v.optional(v.string()),
+    voidReason: v.optional(v.string()),
+    // Attribution source for admin diagnostics.
+    ip: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_referrer", ["referrerId"])
+    .index("by_referred", ["referredUserId"])
+    .index("by_code", ["code"])
+    .index("by_status_created", ["status", "createdAt"]),
 });

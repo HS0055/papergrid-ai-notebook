@@ -6,6 +6,7 @@ import type { CompactBlock, CompactReference } from "./referenceLayouts";
 import { registerAffiliateRoutes } from "./affiliateHttp";
 import { registerStripeRoutes } from "./stripeWebhook";
 import { registerCommunityRoutes } from "./communityHttp";
+import { registerReferralRoutes } from "./referralsHttp";
 
 // Generate a procedural premium SVG data URL as fallback cover
 function buildFallbackCover(prompt: string): string {
@@ -1506,6 +1507,14 @@ http.route({
       const email = typeof body?.email === "string" ? body.email : "";
       const password = typeof body?.password === "string" ? body.password : "";
       const name = typeof body?.name === "string" ? body.name : undefined;
+      // Optional referral code captured at signup — consumed AFTER the
+      // user row exists via internal.referrals.attachOnSignupInternal.
+      // We accept it from the body (client persisted from ?ref=) OR a
+      // signed cookie if we ever issue one.
+      const referralCode =
+        typeof body?.referralCode === "string" && body.referralCode.trim()
+          ? body.referralCode.trim().slice(0, 32)
+          : undefined;
 
       if (!email.trim() || !password) {
         return new Response(JSON.stringify({ error: "email and password are required" }), {
@@ -1543,6 +1552,22 @@ http.route({
         password,
         name,
       });
+
+      // If a referral code was supplied, attach the user to the
+      // referrer. Any failure here is swallowed — we never want to
+      // block a signup on the growth-loop side path.
+      if (referralCode && result && typeof (result as any).user?._id === "string") {
+        try {
+          await ctx.runMutation(internal.referrals.attachOnSignupInternal, {
+            userId: (result as any).user._id,
+            code: referralCode,
+            ip: clientIp ?? undefined,
+            userAgent: request.headers.get("user-agent") ?? undefined,
+          });
+        } catch (e) {
+          console.warn("Referral attach failed (non-fatal):", e);
+        }
+      }
 
       return new Response(JSON.stringify(result), {
         status: 200,
@@ -2597,6 +2622,9 @@ registerStripeRoutes(http);
 // profiles). These are thin wrappers around api.community.* that forward
 // the session token.
 registerCommunityRoutes(http);
+
+// Register user-to-user referral routes (growth loop).
+registerReferralRoutes(http);
 
 
 export default http;
