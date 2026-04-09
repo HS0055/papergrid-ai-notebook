@@ -13,8 +13,8 @@ interface DemoVideoSectionProps {
 }
 
 /**
- * Premium demo video section. Pure player experience — no auto-play,
- * no muting gimmicks, just a beautiful frame for a real product demo.
+ * Premium demo video section. No autoplay, muted by default, and an
+ * explicit sound toggle so users can opt into voice without surprise.
  *
  * To add your video:
  *   1. Record with OpenScreen (installed)
@@ -30,7 +30,7 @@ export const DemoVideoSection: React.FC<DemoVideoSectionProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [videoExists, setVideoExists] = useState<boolean | null>(null);
 
@@ -98,7 +98,7 @@ export const DemoVideoSection: React.FC<DemoVideoSectionProps> = ({
     if (isPlaying) {
       videoRef.current.pause();
     } else {
-      videoRef.current.play();
+      void videoRef.current.play();
     }
   };
 
@@ -206,11 +206,29 @@ export const DemoVideoSection: React.FC<DemoVideoSectionProps> = ({
                   src={videoSrc}
                   poster={posterSrc}
                   playsInline
+                  muted={isMuted}
                   onLoadedData={() => setHasLoaded(true)}
+                  onLoadedMetadata={() => {
+                    if (!videoRef.current) return;
+                    videoRef.current.muted = isMuted;
+                  }}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   className="w-full h-full object-cover"
                 />
+
+                <button
+                  onClick={toggleMute}
+                  className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-white transition-colors"
+                  style={{
+                    background: 'rgba(15,17,26,0.72)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                  <span>{isMuted ? 'Sound off' : 'Sound on'}</span>
+                </button>
 
                 {/* Custom play overlay */}
                 {!isPlaying && (
@@ -234,7 +252,7 @@ export const DemoVideoSection: React.FC<DemoVideoSectionProps> = ({
                 {/* Controls bar */}
                 {isPlaying && hasLoaded && (
                   <div
-                    className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-center gap-3 opacity-0 hover:opacity-100 transition-opacity"
+                    className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-center gap-3 opacity-100 md:opacity-0 md:hover:opacity-100 transition-opacity"
                     style={{
                       background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.7) 100%)',
                     }}

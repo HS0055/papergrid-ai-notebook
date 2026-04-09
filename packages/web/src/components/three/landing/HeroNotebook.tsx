@@ -101,16 +101,21 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     ctx.font = `bold italic ${Math.round(h * 0.34)}px "Playfair Display", Georgia, serif`;
     ctx.fillText('Papera', w / 2, h * 0.34);
 
-    ctx.font = `${Math.round(h * 0.07)}px "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-    ctx.fillStyle = '#c4956a';
+    ctx.font = `${Math.round(h * (isMobile ? 0.085 : 0.07))}px "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.fillStyle = isMobile ? '#d7ae7d' : '#c4956a';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', w / 2, h * 0.66);
+    if (isMobile) {
+      ctx.fillText('THE NOTEBOOK', w / 2, h * 0.62);
+      ctx.fillText('THAT THINKS WITH YOU', w / 2, h * 0.72);
+    } else {
+      ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', w / 2, h * 0.66);
+    }
 
-    ctx.strokeStyle = '#c4956a';
-    ctx.lineWidth = Math.max(2, Math.round(h * 0.004));
-    const lineY = h * 0.79;
-    const lineHalf = w * 0.24;
+    ctx.strokeStyle = isMobile ? '#d7ae7d' : '#c4956a';
+    ctx.lineWidth = Math.max(2, Math.round(h * (isMobile ? 0.005 : 0.004)));
+    const lineY = isMobile ? h * 0.84 : h * 0.79;
+    const lineHalf = w * (isMobile ? 0.22 : 0.24);
     ctx.beginPath();
     ctx.moveTo(w / 2 - lineHalf, lineY);
     ctx.lineTo(w / 2 + lineHalf, lineY);
