@@ -11,7 +11,7 @@ import {
   Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
   Printer, Volume2, VolumeX, Wand2, Trash2,
   Users, DollarSign, Gift, Maximize2, Minimize2, CreditCard,
-  MessageSquare, Droplet,
+  MessageSquare, Droplet, Megaphone,
 } from 'lucide-react';
 import { useSoundEffects } from '../hooks/useSoundEffects';
 import { useAuth } from '../hooks/useAuth';
@@ -30,6 +30,14 @@ import { isNativeApp } from '../utils/platform';
 import { coverColorToHex, darkenHex } from '../utils/coverColors';
 import { normalizeExportColors } from '../utils/normalizeExportColors';
 import { useKeyboardHandler } from '../hooks/useKeyboardHandler';
+import { api as apiClient } from '../services/apiClient';
+import {
+  getLatestCommunityNewsTimestamp,
+  getSeenCommunityNewsAt,
+  getUnreadCommunityNewsCount,
+  markCommunityNewsSeen,
+  sortCommunityNews,
+} from '../utils/communityNews';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
 const BookCoverScene = lazy(() => import('./three/notebook/BookCoverScene'));
@@ -479,6 +487,18 @@ interface ActiveContext {
   pageIndex: number;
 }
 
+interface CommunityNewsPost {
+  _id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  pinnedAt?: string;
+}
+
+interface CommunityFeedResponse {
+  page: CommunityNewsPost[];
+}
+
 function loadActiveContext(): ActiveContext | null {
   try {
     const raw = localStorage.getItem(ACTIVE_CONTEXT_KEY);
@@ -574,6 +594,9 @@ export const Dashboard: React.FC = () => {
   // Toast state
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const toastCounter = useRef(0);
+  const [communityNews, setCommunityNews] = useState<CommunityNewsPost[]>([]);
+  const [lastSeenNewsAt, setLastSeenNewsAt] = useState<string | null>(null);
+  const newsToastShownRef = useRef<string | null>(null);
 
   const addToast = useCallback((message: string, type: 'error' | 'success' | 'undo', onUndo?: () => void) => {
     const id = ++toastCounter.current;
@@ -761,6 +784,84 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     void fetchInkBalance();
   }, [fetchInkBalance]);
+
+  useEffect(() => {
+    setLastSeenNewsAt(getSeenCommunityNewsAt(auth.user?.id));
+    newsToastShownRef.current = null;
+  }, [auth.user?.id]);
+
+  useEffect(() => {
+    if (!auth.user?.id) {
+      setCommunityNews([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCommunityNews = async () => {
+      try {
+        const response = await apiClient.get<CommunityFeedResponse>(
+          '/api/community/feed?sort=recent&kind=announcement&limit=12',
+        );
+        if (cancelled) return;
+        setCommunityNews(sortCommunityNews(response.page ?? []));
+      } catch {
+        if (cancelled) return;
+        setCommunityNews([]);
+      }
+    };
+
+    void loadCommunityNews();
+    const intervalId = window.setInterval(() => {
+      void loadCommunityNews();
+    }, 120000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [auth.user?.id]);
+
+  const latestNewsCreatedAt = getLatestCommunityNewsTimestamp(communityNews);
+  const unreadNewsCount = getUnreadCommunityNewsCount(communityNews, lastSeenNewsAt);
+  const latestNews = communityNews[0] ?? null;
+  const hasUnreadNews = unreadNewsCount > 0;
+  const showSidebarNewsMessage = !!latestNews && hasUnreadNews;
+
+  useEffect(() => {
+    if (!latestNews || unreadNewsCount === 0) return;
+    if (newsToastShownRef.current === latestNews._id) return;
+
+    newsToastShownRef.current = latestNews._id;
+    addToast(
+      unreadNewsCount === 1
+        ? 'New Papera news is waiting for you.'
+        : `You have ${unreadNewsCount} unread Papera updates.`,
+      'success',
+    );
+  }, [addToast, latestNews, unreadNewsCount]);
+
+  const handleOpenCommunityNews = useCallback(() => {
+    if (auth.user?.id && latestNewsCreatedAt) {
+      markCommunityNewsSeen(auth.user.id, latestNewsCreatedAt);
+      setLastSeenNewsAt(latestNewsCreatedAt);
+    }
+    navigate('/community?kind=announcement');
+  }, [auth.user?.id, latestNewsCreatedAt, navigate]);
+
+  const handleDismissCommunityNews = useCallback(() => {
+    if (!auth.user?.id || !latestNewsCreatedAt) return;
+    markCommunityNewsSeen(auth.user.id, latestNewsCreatedAt);
+    setLastSeenNewsAt(latestNewsCreatedAt);
+  }, [auth.user?.id, latestNewsCreatedAt]);
+
+  const handleOpenCommunity = useCallback(() => {
+    if (unreadNewsCount > 0) {
+      handleOpenCommunityNews();
+      return;
+    }
+    navigate('/community');
+  }, [handleOpenCommunityNews, navigate, unreadNewsCount]);
 
   // Esc to exit focus mode. Bound at the window level so it works
   // regardless of which child has focus.
@@ -1933,17 +2034,71 @@ export const Dashboard: React.FC = () => {
             <span>New notebook</span>
           </button>
 
+          {showSidebarNewsMessage && latestNews && (
+            <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/12 via-slate-900/70 to-slate-900 px-3.5 py-3 shadow-lg shadow-black/20">
+              <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-indigo-400/18 blur-2xl" />
+              <div className="relative flex items-start gap-2.5">
+                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border ${
+                  hasUnreadNews
+                    ? 'border-indigo-400/35 bg-indigo-400/20 text-indigo-200'
+                    : 'border-white/10 bg-white/8 text-slate-300'
+                }`}>
+                  <Megaphone size={15} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                      {hasUnreadNews ? 'New from Papera' : 'Papera update'}
+                    </p>
+                    {hasUnreadNews && (
+                      <span className="rounded-full bg-indigo-400/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-indigo-200">
+                        {unreadNewsCount > 1 ? `${unreadNewsCount} new` : 'Unread'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 line-clamp-1 text-sm font-semibold text-white">
+                    {latestNews.title}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-300">
+                    {latestNews.body}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      onClick={handleOpenCommunityNews}
+                      className="rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-900 transition-colors hover:bg-indigo-50"
+                    >
+                      {hasUnreadNews ? 'Read news' : 'Open newsroom'}
+                    </button>
+                    {hasUnreadNews && (
+                      <button
+                        onClick={handleDismissCommunityNews}
+                        className="rounded-full border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-slate-300 transition-colors hover:border-white/20 hover:text-white"
+                      >
+                        Hide
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Beautified nav — community / referral / affiliate as a
               compact 3-tile grid with icons, instead of 3 stacked outline
               buttons that took half the sidebar. */}
           <div className="grid grid-cols-3 gap-2">
             <button
-              onClick={() => navigate('/community')}
-              className="group/nav flex flex-col items-center justify-center gap-1 py-2.5 px-2 bg-gray-800/30 hover:bg-indigo-500/15 border border-gray-700/50 hover:border-indigo-500/40 rounded-xl transition-all"
+              onClick={handleOpenCommunity}
+              className="group/nav relative flex flex-col items-center justify-center gap-1 py-2.5 px-2 bg-gray-800/30 hover:bg-indigo-500/15 border border-gray-700/50 hover:border-indigo-500/40 rounded-xl transition-all"
               title="Feedback, requests, updates"
             >
               <MessageSquare size={15} className="text-gray-400 group-hover/nav:text-indigo-300 transition-colors" />
               <span className="text-[10px] font-semibold text-gray-400 group-hover/nav:text-white transition-colors">Community</span>
+              {unreadNewsCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-[18px] shadow-lg shadow-indigo-500/30">
+                  {unreadNewsCount > 9 ? '9+' : unreadNewsCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => navigate('/referral')}
