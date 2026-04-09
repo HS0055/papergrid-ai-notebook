@@ -1545,7 +1545,7 @@ export const Dashboard: React.FC = () => {
     <>
       <div
         data-dashboard-shell
-        className="flex h-screen w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in"
+        className="flex h-dvh w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in"
       >
       {/* Sidebar backdrop (mobile) — hidden on native iOS (uses tab bar) */}
       {!native && isSidebarOpen && (
@@ -1819,7 +1819,7 @@ export const Dashboard: React.FC = () => {
           chevrons, FAB) was built assuming `main` shrinks when keyboard appears
           — it never did until now. */}
       <main
-        className={`flex-1 relative flex flex-col items-center overflow-hidden ${native ? 'px-0 justify-start' : 'p-4 md:p-12 justify-center'}`}
+        className={`flex-1 relative flex flex-col items-center overflow-hidden ${native ? 'px-0 justify-start' : 'md:p-12 md:justify-center'}`}
         style={native ? {
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)',
           // Keyboard down: reserve tab bar + home indicator (56pt + safe-area)
@@ -1836,7 +1836,7 @@ export const Dashboard: React.FC = () => {
         {!native && (
           !focusMode && (
           <div
-            className="absolute left-3 z-30 flex gap-2"
+            className="hidden md:flex absolute left-3 z-30 gap-2"
             style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
           >
             <button
@@ -1867,7 +1867,7 @@ export const Dashboard: React.FC = () => {
             and the floating AI FAB. */}
         {!native && !focusMode && (
         <div
-          className="absolute right-3 z-30 flex gap-1.5 md:gap-2"
+          className="hidden md:flex absolute right-3 z-30 gap-1.5 md:gap-2"
           style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
         >
           {activePage && (
@@ -1932,6 +1932,87 @@ export const Dashboard: React.FC = () => {
             <span>Exit focus</span>
             <kbd className="px-1 py-0.5 ml-1 bg-white/15 rounded text-[9px] font-mono uppercase">Esc</kbd>
           </button>
+        )}
+
+        {/* Mobile sticky top toolbar — mobile web only (< md).
+            Replaces the absolute desktop clusters so icons never collide
+            with the Left/Right page pill on narrow screens. Two flex
+            clusters with justify-between give breathing room and the
+            Left/Right pill in NotebookView naturally sits below. */}
+        {!native && !focusMode && (
+          <div
+            className="md:hidden w-full shrink-0 z-30 flex items-center justify-between gap-1.5 px-2.5 pb-2 bg-gray-100/95 backdrop-blur-md border-b border-gray-200"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
+          >
+            {/* Left cluster: sidebar + sound */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="p-2 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-700 active:bg-gray-100 transition-colors"
+                aria-label={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+                aria-expanded={isSidebarOpen}
+              >
+                <Menu size={18} />
+              </button>
+              <button
+                onClick={sfx.toggle}
+                className={`p-2 rounded-lg shadow-sm border transition-colors ${sfx.enabled
+                  ? 'bg-indigo-100 border-indigo-300 text-indigo-600'
+                  : 'bg-white border-gray-200 text-gray-400'
+                  }`}
+                aria-label={sfx.enabled ? 'Mute sounds' : 'Enable sounds'}
+                title={sfx.enabled ? 'Sound effects on' : 'Sound effects off'}
+              >
+                {sfx.enabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </button>
+            </div>
+
+            {/* Right cluster: bookmark + AI + print + focus */}
+            <div className="flex items-center gap-1.5">
+              {activePage && (
+                <>
+                  <button
+                    onClick={toggleBookmark}
+                    className={`relative p-2 rounded-lg shadow-sm border transition-all ${(activeNotebook.bookmarks ?? []).includes(activePage.id)
+                      ? 'bg-amber-100 border-amber-300 text-amber-600'
+                      : 'bg-white border-gray-200 text-gray-700'
+                      }`}
+                    aria-label={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? 'Remove bookmark' : 'Bookmark page'}
+                  >
+                    <Bookmark size={18} fill={(activeNotebook.bookmarks ?? []).includes(activePage.id) ? 'currentColor' : 'none'} />
+                    {(activeNotebook.bookmarks ?? []).includes(activePage.id) && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-500 rounded-full border border-white" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setIsGeneratorOpen(true)}
+                    className="h-9 w-9 flex items-center justify-center bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-lg shadow-sm"
+                    aria-label="Generate AI layout"
+                  >
+                    <Sparkles size={16} />
+                  </button>
+                </>
+              )}
+              {activeNotebook.pages.length > 0 && (
+                <button
+                  onClick={handleExportPdf}
+                  className="p-2 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-700"
+                  aria-label="Export notebook as PDF"
+                  title="Export notebook as PDF"
+                >
+                  <Printer size={18} />
+                </button>
+              )}
+              <button
+                onClick={handleEnterFocusMode}
+                className="p-2 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-700"
+                aria-label="Enter focus mode"
+                title="Focus mode (hide everything)"
+              >
+                <Maximize2 size={16} />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Notebook Container — flex-fills available main space */}

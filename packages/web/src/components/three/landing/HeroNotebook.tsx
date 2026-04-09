@@ -289,9 +289,9 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
   const hh = BOOK_HEIGHT / 2;
 
   // Mobile: compensate for inner hw offset (all meshes sit at x=hw=1.6) to visually center,
-  // and push well below CTA buttons so it doesn't overlap text content
+  // and sit below the (now slimmer) phase-1 text so book cover with "Papera" title is visible
   // Desktop: start below hero text, center horizontally (hw offset compensates for spine-origin geometry)
-  const bookPosition: [number, number, number] = isMobile ? [-hw, -4.5, 0] : [-hw + 1.7, -2.35, 0];
+  const bookPosition: [number, number, number] = isMobile ? [-hw, -3.6, 0] : [-hw + 1.7, -2.35, 0];
 
   const notebookContent = (
     <group position={bookPosition}>

@@ -33,7 +33,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
   const phase1Ref = useRef<HTMLDivElement>(null);
   const phase2Ref = useRef<HTMLDivElement>(null);
   const phase3Ref = useRef<HTMLDivElement>(null);
-  const progressBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!sectionRef.current || !pinContainerRef.current) return;
@@ -53,13 +52,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           onUpdate: (self) => {
             // Only write to ref — NO setState
             scrollRef.current.progress = self.progress;
-
-            // Update progress bar directly via DOM
-            if (progressBarRef.current) {
-              progressBarRef.current.style.width = `${self.progress * 100}%`;
-              progressBarRef.current.style.opacity =
-                self.progress > 0 && self.progress < 1 ? '0.8' : '0';
-            }
           },
         },
       });
@@ -120,20 +112,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
       className="hero-section relative"
       style={{ minHeight: isMobile ? '200vh' : '250vh', background: '#0f111a' }}
     >
-      {/* Scroll progress indicator — outside pin container to avoid jump */}
-      <div
-        ref={progressBarRef}
-        className="fixed top-0 left-0 h-[3px] z-50 pointer-events-none"
-        style={{
-          width: '0%',
-          background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
-          opacity: 0,
-        }}
-      />
-
       <div
         ref={pinContainerRef}
-        className={`relative flex flex-col items-center overflow-hidden px-6 ${isMobile ? 'justify-start min-h-screen pt-20 pb-64' : 'justify-center min-h-screen pt-24 pb-16'}`}
+        className={`relative flex flex-col items-center overflow-hidden px-6 ${isMobile ? 'justify-start min-h-[100svh] pt-14 pb-6' : 'justify-center min-h-screen pt-24 pb-16'}`}
         style={{
           background: 'linear-gradient(160deg, #0f111a 0%, #1a1c23 45%, #2a1f3d 70%, #0f111a 100%)',
         }}
@@ -197,7 +178,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           }}
         >
           {/* Badge */}
-          <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-8 border"
+          <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-3 md:mb-8 border"
             style={{
               background: 'rgba(79,70,229,0.15)',
               borderColor: 'rgba(79,70,229,0.4)',
@@ -210,9 +191,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
 
           {/* Headline */}
           <h1
-            className="font-serif font-bold tracking-tight mb-6 leading-[1.05] text-white"
+            className="font-serif font-bold tracking-tight mb-3 md:mb-6 leading-[1.05] text-white"
             style={{
-              fontSize: 'clamp(3.5rem, 9vw, 7.5rem)',
+              fontSize: isMobile ? 'clamp(2.5rem, 10vw, 3.5rem)' : 'clamp(3.5rem, 9vw, 7.5rem)',
               maxWidth: isMobile ? undefined : '11ch',
               marginInline: 'auto',
             }}
@@ -223,15 +204,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </h1>
 
           {/* Subheadline */}
-          <p className="hero-desc max-w-2xl mx-auto text-lg md:text-xl mb-10 leading-relaxed" style={{ color: '#94a3b8' }}>
+          <p className="hero-desc max-w-2xl mx-auto text-sm md:text-xl mb-4 md:mb-10 leading-relaxed" style={{ color: '#94a3b8' }}>
             Describe your day, task, or idea — AI generates the perfect notebook layout instantly.
           </p>
 
           {/* CTAs */}
-          <div className="hero-btns flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+          <div className="hero-btns flex flex-col sm:flex-row items-center justify-center gap-2.5 md:gap-4 mb-3 md:mb-6">
             <button
               onClick={onLaunch}
-              className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-4 text-white font-bold text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
+              className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-3 md:py-4 text-white font-bold text-base md:text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
               style={{
                 background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                 boxShadow: '0 20px 60px rgba(79,70,229,0.4)',
@@ -244,7 +225,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
               href="https://github.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-4 font-bold text-lg rounded-2xl border transition-all hover:bg-white/5"
+              className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-3 md:py-4 font-bold text-base md:text-lg rounded-2xl border transition-all hover:bg-white/5"
               style={{ borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)' }}
             >
               <Github size={20} />
@@ -252,7 +233,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             </a>
           </div>
 
-          <p className="text-xs font-medium tracking-widest uppercase" style={{ color: 'rgba(148,163,184,0.6)' }}>
+          <p className="text-[10px] md:text-xs font-medium tracking-widest uppercase" style={{ color: 'rgba(148,163,184,0.6)' }}>
             Free · AI-Powered · No credit card needed
           </p>
         </div>

@@ -1164,8 +1164,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       {/* Mobile Page Toggle — only shown on non-native mobile (web mobile Safari).
           Native replaces it with the compact L/R switch inside the header row. */}
       {!native && (
-        <div className="md:hidden flex justify-center pt-1 pb-1.5 shrink-0">
-          <div className="bg-white/90 backdrop-blur-sm rounded-full p-0.5 flex shadow-sm border border-gray-200">
+        <div className="md:hidden flex justify-center pt-2 pb-2 shrink-0">
+          <div className="bg-white/95 backdrop-blur-sm rounded-full p-0.5 flex shadow-sm border border-gray-200">
             <button
               onClick={() => setMobileSide('left')}
               className={`px-4 py-1 rounded-full text-[11px] font-semibold transition-all ${
