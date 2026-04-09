@@ -34,7 +34,6 @@ gsap.registerPlugin(ScrollTrigger);
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
-  const inkLineRef = useRef<HTMLDivElement>(null);
   const contentSectionsRef = useRef<HTMLDivElement>(null);
   const scrollProgressRef = useRef(0);
   const isMobile = useIsMobile();
@@ -188,25 +187,6 @@ export const LandingPage: React.FC = () => {
         }
       });
 
-      // ── Continuous ink progress line ──
-      // Draws from top of StatsStrip to bottom of page, controlled by scroll
-      if (inkLineRef.current) {
-        gsap.fromTo(
-          inkLineRef.current,
-          { scaleY: 0 },
-          {
-            scaleY: 1,
-            ease: 'none',
-            scrollTrigger: {
-              trigger: document.documentElement,
-              start: 'top top',
-              end: 'bottom bottom',
-              scrub: 0.3,
-            },
-          },
-        );
-      }
-
       // Ensure all ScrollTrigger positions are recalculated after pin spacers
       ScrollTrigger.refresh();
     }, rootRef);
@@ -222,11 +202,6 @@ export const LandingPage: React.FC = () => {
       className="min-h-screen font-sans overflow-x-hidden"
       style={{ color: 'var(--color-ink)' }}
     >
-      {/* Continuous ink progress line */}
-      <div ref={inkLineRef} className="ink-progress-line">
-        <div className="ink-progress-dot" />
-      </div>
-
       <NavBar onLaunch={handleLaunch} />
       <ReferralBanner />
       <HeroSection onLaunch={handleLaunch} />
