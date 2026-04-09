@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Copy, Check, Loader2, Gift, TrendingUp, Users, Sparkles,
-  Twitter, Mail, MessageCircle, Share2, AlertCircle,
+  Twitter, Mail, MessageCircle, Share2, AlertCircle, ArrowRight, Zap, Heart,
 } from 'lucide-react';
 import { api as apiClient } from '../../services/apiClient';
 import { useAuth } from '../../hooks/useAuth';
 import {
   getStoredReferralCode,
   clearStoredReferralCode,
+  lookupReferralReward,
 } from '../../utils/referralCapture';
 
 // ─────────────────────────────────────────────────────────────
@@ -79,12 +80,16 @@ export const ReferralPage: React.FC = () => {
 
   useEffect(() => {
     if (authLoading) return;
+    // Unauthenticated visitors get the public invitation page instead
+    // of being bounced to /login. The URL stays at /referral so the
+    // marketing link is shareable, and the page still funnels them to
+    // signup via a clear CTA.
     if (!isAuthenticated) {
-      navigate('/login');
+      setLoading(false);
       return;
     }
     load();
-  }, [authLoading, isAuthenticated, navigate, load]);
+  }, [authLoading, isAuthenticated, load]);
 
   // Self-referral guard: if the logged-in user has their own code
   // stored from a prior ?ref= visit (e.g. they opened their own share
@@ -154,6 +159,11 @@ export const ReferralPage: React.FC = () => {
         <Loader2 size={32} className="animate-spin text-indigo-500" />
       </div>
     );
+  }
+
+  // Public invitation variant for unauthenticated visitors.
+  if (!isAuthenticated) {
+    return <PublicInvite onBack={() => navigate('/')} onSignUp={() => navigate('/login')} />;
   }
 
   if (!stats) {
@@ -359,6 +369,175 @@ const Header: React.FC<{ onBack: () => void }> = ({ onBack }) => (
         <p className="text-xs text-gray-500">Give Ink, get Ink. Real peer-to-peer rewards.</p>
       </div>
     </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────
+// PublicInvite — the `/referral` page for unauthenticated visitors
+//
+// If a visitor has a stored referral code (captured from an earlier
+// `?ref=CODE` URL), render a "You're invited" hero with the real
+// reward amounts. If there's no stored code, render a generic
+// explainer so the page is still useful as a marketing destination.
+//
+// Either way, the CTA funnels to /login so the signup flow can pick
+// up the referral code from localStorage and attribute the signup.
+// ─────────────────────────────────────────────────────────────
+const PublicInvite: React.FC<{
+  onBack: () => void;
+  onSignUp: () => void;
+}> = ({ onBack, onSignUp }) => {
+  const [rewards, setRewards] = useState<{ referrer: number; referred: number } | null>(null);
+  const [hasCode, setHasCode] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const code = getStoredReferralCode();
+      if (!code) return;
+      const r = await lookupReferralReward(code);
+      if (!cancelled && r) {
+        setRewards(r);
+        setHasCode(true);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const referred = rewards?.referred ?? 25;
+  const referrer = rewards?.referrer ?? 25;
+
+  return (
+    <div className="min-h-screen bg-[#f0f2f5]">
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-black/5">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="p-2 -ml-2 rounded-full hover:bg-black/5 transition-colors"
+            aria-label="Back to home"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div className="flex-1">
+            <h1 className="font-serif text-xl font-bold leading-tight">
+              {hasCode ? "You're invited to Papera" : 'Refer a friend'}
+            </h1>
+            <p className="text-xs text-gray-500">
+              {hasCode ? 'Claim your welcome Ink below.' : 'Give Ink, get Ink.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <main className="max-w-3xl mx-auto px-4 py-8">
+        {/* Hero reward card */}
+        <section
+          className="rounded-3xl p-6 md:p-10 mb-6 text-white shadow-xl relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%)',
+          }}
+        >
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-[11px] font-bold uppercase tracking-wider mb-5">
+              <Gift size={12} /> {hasCode ? 'A friend invited you' : 'Papera referrals'}
+            </div>
+            <h2 className="font-serif text-3xl md:text-5xl font-bold mb-4 leading-tight max-w-xl">
+              {hasCode
+                ? `Welcome. Your ${referred} Ink is waiting.`
+                : 'Give Ink. Get Ink.'}
+            </h2>
+            <p className="text-sm md:text-base text-white/85 leading-relaxed mb-6 max-w-md">
+              {hasCode
+                ? `A friend thought you'd love Papera — the notebook that thinks with you. Sign up and we'll credit ${referred} free Ink to your account, no card required.`
+                : `Invite a friend with your personal link. When they sign up, you BOTH get ${referrer} free Ink — enough for a handful of AI-generated notebook layouts.`}
+            </p>
+            <button
+              onClick={onSignUp}
+              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white text-indigo-700 text-sm font-bold hover:bg-white/95 active:bg-white/85 transition-colors shadow-lg focus:outline-none focus:ring-2 focus:ring-white/80"
+            >
+              {hasCode ? `Claim ${referred} Ink` : 'Sign up to get started'}
+              <ArrowRight size={16} />
+            </button>
+          </div>
+          <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+          <div className="absolute -right-20 bottom-0 w-40 h-40 rounded-full bg-pink-300/30 blur-2xl pointer-events-none" />
+        </section>
+
+        {/* How it works strip */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+          <HowTile
+            icon={<Gift size={18} />}
+            title="1. Get invited"
+            body="Open a friend's Papera invite link — the reward is attached automatically."
+          />
+          <HowTile
+            icon={<Zap size={18} />}
+            title={`2. Claim ${referred} Ink`}
+            body="Sign up with any email. Your bonus Ink lands in your wallet instantly."
+          />
+          <HowTile
+            icon={<Heart size={18} />}
+            title="3. Pay it forward"
+            body={`Share your own link and earn ${referrer} Ink every time a friend joins.`}
+          />
+        </section>
+
+        {/* FAQ strip */}
+        <section className="bg-white rounded-3xl border border-black/5 shadow-sm p-6">
+          <h3 className="font-serif text-lg font-bold text-slate-900 mb-4">How the program works</h3>
+          <div className="space-y-3 text-sm text-slate-700">
+            <FaqRow q="What is Ink?">
+              Ink is the credit you spend on AI-powered features in Papera — generating layouts, covers, and handwriting polish. Every plan gets a monthly Ink allowance, and bonus Ink from referrals rolls over and never expires.
+            </FaqRow>
+            <FaqRow q={`Do I really get ${referred} Ink just for signing up?`}>
+              Yes — when you sign up with a valid invitation link, we credit both you and the friend who invited you. No card, no trial, no strings. Papera is free to start.
+            </FaqRow>
+            <FaqRow q="Can I invite friends too?">
+              Absolutely. Every account gets a unique share link on your dashboard. You'll earn {referrer} Ink for every friend who joins through it.
+            </FaqRow>
+            <FaqRow q="Are there limits?">
+              We monitor for fraud (self-referrals, bot signups, duplicates) and may void rewards that look abusive, but genuine invitations are always welcome.
+            </FaqRow>
+          </div>
+        </section>
+
+        {/* Secondary CTA */}
+        <div className="mt-8 text-center">
+          <button
+            onClick={onSignUp}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            {hasCode ? `Claim ${referred} free Ink` : 'Get started — free'}
+            <ArrowRight size={14} />
+          </button>
+          <p className="mt-3 text-xs text-gray-500">No credit card. Cancel any time.</p>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+const HowTile: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}> = ({ icon, title, body }) => (
+  <div className="bg-white rounded-2xl border border-black/5 shadow-sm p-5">
+    <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+      {icon}
+    </div>
+    <h4 className="font-serif text-base font-bold text-slate-900 mb-1">{title}</h4>
+    <p className="text-xs text-slate-600 leading-relaxed">{body}</p>
+  </div>
+);
+
+const FaqRow: React.FC<{ q: string; children: React.ReactNode }> = ({ q, children }) => (
+  <div>
+    <p className="font-semibold text-slate-900 mb-0.5">{q}</p>
+    <p className="text-xs text-slate-600 leading-relaxed">{children}</p>
   </div>
 );
 
