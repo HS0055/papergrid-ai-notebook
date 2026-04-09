@@ -691,11 +691,31 @@ export function registerStripeRoutes(http: HttpRouter) {
               payment_intent?: { id: string; client_secret: string };
             } | null;
           };
-          const existingList = await stripeFetch<{ data: StripeSub[] }>(
-            `/customers/${encodeURIComponent(customerId!)}/subscriptions`,
-            { status: "all", limit: "100" },
-            stripeKey,
+          // List subscriptions — this is a GET endpoint, so we must use
+          // a direct fetch with query-string params. `stripeFetch` POSTs
+          // a form body, which Stripe would reject on a list endpoint as
+          // "unknown parameters: limit, status". Same pattern is already
+          // used for /prices/:id earlier in this file.
+          const listRes = await fetch(
+            `https://api.stripe.com/v1/customers/${encodeURIComponent(
+              customerId!,
+            )}/subscriptions?status=all&limit=100`,
+            {
+              headers: {
+                Authorization: `Bearer ${stripeKey}`,
+                "Stripe-Version": "2024-06-20",
+              },
+            },
           );
+          if (!listRes.ok) {
+            const body = await listRes.text().catch(() => "");
+            return errorResponse(
+              `Stripe list subscriptions failed: ${listRes.status} ${body}`,
+              500,
+              request,
+            );
+          }
+          const existingList = (await listRes.json()) as { data: StripeSub[] };
           const reusable = (existingList.data ?? []).find(
             (s) => s.status === "active" || s.status === "trialing" || s.status === "past_due",
           );
