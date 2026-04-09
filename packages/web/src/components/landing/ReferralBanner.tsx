@@ -29,7 +29,7 @@ import {
 // visitor within a session but reappears on a fresh visit.
 // ─────────────────────────────────────────────────────────────
 
-const DISMISS_KEY = 'papergrid_referral_banner_dismissed';
+const DISMISS_KEY_PREFIX = 'papergrid_referral_banner_dismissed:';
 
 interface Rewards {
   referrer: number;
@@ -39,15 +39,9 @@ interface Rewards {
 export const ReferralBanner: React.FC = () => {
   const navigate = useNavigate();
   const [rewards, setRewards] = useState<Rewards | null>(null);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      return sessionStorage.getItem(DISMISS_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     // The capture helper is async and may still be validating/storing
@@ -65,6 +59,12 @@ export const ReferralBanner: React.FC = () => {
           setTimeout(tryLoad, 400);
         }
         return;
+      }
+      setReferralCode(code);
+      try {
+        setDismissed(sessionStorage.getItem(`${DISMISS_KEY_PREFIX}${code}`) === '1');
+      } catch {
+        setDismissed(false);
       }
       const r = await lookupReferralReward(code);
       if (cancelled) return;
@@ -87,7 +87,9 @@ export const ReferralBanner: React.FC = () => {
     setTimeout(() => {
       setDismissed(true);
       try {
-        sessionStorage.setItem(DISMISS_KEY, '1');
+        if (referralCode) {
+          sessionStorage.setItem(`${DISMISS_KEY_PREFIX}${referralCode}`, '1');
+        }
       } catch {
         // ignore
       }
@@ -111,8 +113,12 @@ export const ReferralBanner: React.FC = () => {
           ? 'opacity-100 translate-y-0'
           : 'opacity-0 translate-y-4 pointer-events-none'
       }
-        bottom-4 left-4 right-4
-        sm:left-auto sm:right-6 sm:bottom-6 sm:w-[360px]`}
+        left-4 right-4
+        sm:left-auto sm:right-6 sm:w-[360px]`}
+      style={{
+        zIndex: 60,
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)',
+      }}
       role="complementary"
       aria-label="Referral invitation"
     >
