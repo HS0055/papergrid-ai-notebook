@@ -172,18 +172,6 @@ function CoverBook({
     [coverHex],
   );
 
-  const goldMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: '#ffc87c',
-        roughness: 0.3,
-        metalness: 0.5,
-        emissive: '#c4956a',
-        emissiveIntensity: 0.35,
-      }),
-    [],
-  );
-
   // Debounce title to avoid recreating the CanvasTexture on every keystroke
   const debouncedTitle = useDebouncedValue(title, 300);
 
@@ -308,12 +296,11 @@ function CoverBook({
             <boxGeometry args={[0.12, BOOK_HEIGHT + 0.04, PS + CT * 2 + 0.02]} />
           </mesh>
 
-          {/* ─── Gold spine accent lines ─── */}
-          {[-HH + 0.3, HH - 0.3].map((y, i) => (
-            <mesh key={i} position={[-0.02, y, PS / 2 + CT + 0.002]} material={goldMat}>
-              <boxGeometry args={[0.14, 0.01, 0.01]} />
-            </mesh>
-          ))}
+          {/* NOTE: previously two "gold spine accent" meshes were
+              rendered here near the top and bottom of the book. No matter
+              how they were positioned they showed up as bright gold
+              specks on the closed cover. Removed entirely — the leather
+              cover is now a single clean colour with no corner marks. */}
 
           {/* Shadow plane (lightweight replacement for ContactShadows) */}
           <mesh position={[HW * 0.5, -HH - 0.08, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
