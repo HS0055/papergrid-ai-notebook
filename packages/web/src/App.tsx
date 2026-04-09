@@ -76,7 +76,7 @@ export default function App() {
   // around first. Runs once per mount (StrictMode double-invokes are
   // harmless — the helper is idempotent).
   useEffect(() => {
-    captureReferralFromUrl();
+    void captureReferralFromUrl();
   }, []);
 
   if (typeof window !== 'undefined' && window.location.search.includes('baselinetest')) {

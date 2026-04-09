@@ -4,6 +4,7 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 import { NavBar } from './landing/NavBar';
+import { ReferralBanner } from './landing/ReferralBanner';
 import { HeroSection } from './landing/HeroSection';
 import { StatsStrip } from './landing/StatsStrip';
 import { HowItWorksSection } from './landing/HowItWorksSection';
@@ -227,6 +228,7 @@ export const LandingPage: React.FC = () => {
       </div>
 
       <NavBar onLaunch={handleLaunch} />
+      <ReferralBanner />
       <HeroSection onLaunch={handleLaunch} />
       <StatsStrip />
 

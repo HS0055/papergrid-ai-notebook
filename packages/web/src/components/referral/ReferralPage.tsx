@@ -2,10 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Copy, Check, Loader2, Gift, TrendingUp, Users, Sparkles,
-  Twitter, Mail, MessageCircle, Share2,
+  Twitter, Mail, MessageCircle, Share2, AlertCircle,
 } from 'lucide-react';
 import { api as apiClient } from '../../services/apiClient';
 import { useAuth } from '../../hooks/useAuth';
+import {
+  getStoredReferralCode,
+  clearStoredReferralCode,
+} from '../../utils/referralCapture';
 
 // ─────────────────────────────────────────────────────────────
 // ReferralPage — high-conversion user referral dashboard
@@ -55,6 +59,7 @@ export const ReferralPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selfReferralNotice, setSelfReferralNotice] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +85,21 @@ export const ReferralPage: React.FC = () => {
     }
     load();
   }, [authLoading, isAuthenticated, navigate, load]);
+
+  // Self-referral guard: if the logged-in user has their own code
+  // stored from a prior ?ref= visit (e.g. they opened their own share
+  // link in the same browser), clear it and show a friendly notice.
+  // Server-side attachOnSignupInternal blocks self-referral anyway,
+  // but clearing here prevents the stale code from silently travelling
+  // to a future logout/signup flow on this device.
+  useEffect(() => {
+    if (!stats?.code) return;
+    const stored = getStoredReferralCode();
+    if (stored && stored === stats.code) {
+      clearStoredReferralCode();
+      setSelfReferralNotice(true);
+    }
+  }, [stats?.code]);
 
   const referralUrl = useMemo(
     () => (stats ? `${window.location.origin}/?ref=${stats.code}` : ''),
@@ -171,6 +191,26 @@ export const ReferralPage: React.FC = () => {
         {error && (
           <div className="mb-6 px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
             {error}
+          </div>
+        )}
+
+        {selfReferralNotice && (
+          <div className="mb-6 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800 flex items-start gap-2">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold">That's your own referral link.</p>
+              <p className="text-xs mt-0.5 opacity-90">
+                You can't refer yourself — share the link with a friend instead. The stored code has been cleared.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelfReferralNotice(false)}
+              className="shrink-0 text-amber-700/60 hover:text-amber-900"
+              aria-label="Dismiss notice"
+            >
+              <Check size={14} />
+            </button>
           </div>
         )}
 

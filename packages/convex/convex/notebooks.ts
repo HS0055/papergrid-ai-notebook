@@ -83,7 +83,7 @@ export const create = mutation({
       }
     }
 
-    return await ctx.db.insert("notebooks", {
+    const notebookId = await ctx.db.insert("notebooks", {
       userId,
       title,
       coverColor,
@@ -92,6 +92,24 @@ export const create = mutation({
       isShared: false,
       createdAt,
     });
+
+    // ── Referral program hook ──────────────────────────────
+    // If the admin has set the qualifying action to "first_notebook",
+    // this call will flip a pending redemption to qualified and credit
+    // both the referrer and referred user with bonus Ink. The helper is
+    // idempotent — after the first qualifying call, subsequent notebook
+    // creations are a no-op. Any failure here is swallowed so the
+    // growth-loop side-path never blocks notebook creation.
+    try {
+      await ctx.runMutation(internal.referrals.onQualifyingEventInternal, {
+        userId,
+        event: "first_notebook",
+      });
+    } catch (e) {
+      console.warn("Referral qualify on first_notebook failed (non-fatal):", e);
+    }
+
+    return notebookId;
   },
 });
 
