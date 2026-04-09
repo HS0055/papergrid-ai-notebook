@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Gift, X, ArrowRight } from 'lucide-react';
 import {
-  getStoredReferralCode,
+  getCurrentVisitReferralCode,
   lookupReferralReward,
 } from '../../utils/referralCapture';
+import { useAuth } from '../../hooks/useAuth';
 
 // ─────────────────────────────────────────────────────────────
 // ReferralBanner
@@ -38,12 +39,15 @@ interface Rewards {
 
 export const ReferralBanner: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading } = useAuth();
   const [rewards, setRewards] = useState<Rewards | null>(null);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    if (isAuthenticated) return;
+
     // The capture helper is async and may still be validating/storing
     // the code when the landing page first mounts. Retry a couple of
     // times over ~1.5s so we don't miss the first paint.
@@ -52,7 +56,7 @@ export const ReferralBanner: React.FC = () => {
 
     const tryLoad = async () => {
       if (cancelled) return;
-      const code = getStoredReferralCode();
+      const code = getCurrentVisitReferralCode();
       if (!code) {
         attempts++;
         if (attempts < 4) {
@@ -80,7 +84,7 @@ export const ReferralBanner: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const handleDismiss = () => {
     setMounted(false);
@@ -104,7 +108,7 @@ export const ReferralBanner: React.FC = () => {
     navigate('/referral');
   };
 
-  if (!rewards || dismissed) return null;
+  if (isLoading || isAuthenticated || !rewards || dismissed) return null;
 
   return (
     <div
@@ -123,7 +127,7 @@ export const ReferralBanner: React.FC = () => {
       aria-label="Referral invitation"
     >
       <div
-        className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+        className="relative overflow-hidden rounded-[22px] border border-white/10 shadow-2xl"
         style={{
           background:
             'linear-gradient(135deg, rgba(79,70,229,0.98) 0%, rgba(124,58,237,0.98) 55%, rgba(219,39,119,0.98) 100%)',
@@ -132,56 +136,85 @@ export const ReferralBanner: React.FC = () => {
       >
         {/* Decorative blobs */}
         <div
-          className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/15 blur-2xl pointer-events-none"
+          className="pointer-events-none absolute -right-8 -top-8 hidden h-32 w-32 rounded-full bg-white/15 blur-2xl sm:block"
           aria-hidden
         />
         <div
-          className="absolute -left-6 -bottom-8 w-28 h-28 rounded-full bg-pink-300/20 blur-2xl pointer-events-none"
+          className="pointer-events-none absolute -left-6 -bottom-8 hidden h-28 w-28 rounded-full bg-pink-300/20 blur-2xl sm:block"
           aria-hidden
         />
 
-        <div className="relative p-5 text-white">
+        <div className="relative p-4 text-white sm:p-5">
           {/* Dismiss */}
           <button
             type="button"
             onClick={handleDismiss}
-            className="absolute top-3 right-3 p-1 rounded-full text-white/70 hover:text-white hover:bg-white/15 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
+            className="absolute right-3 top-3 rounded-full p-1 text-white/70 transition-colors hover:bg-white/15 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50"
             aria-label="Dismiss invitation"
           >
             <X size={14} />
           </button>
 
-          {/* Badge */}
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur text-[10px] font-bold uppercase tracking-wider mb-3">
-            <Gift size={11} />
-            You're invited
+          <div className="sm:hidden">
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/14 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] backdrop-blur">
+              <Gift size={11} />
+              Invited
+            </div>
+            <h3 className="pr-7 font-serif text-[17px] font-bold leading-[1.05]">
+              Get {rewards.referred} free Ink
+            </h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-white/78">
+              Claim it when you sign up.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleClaim}
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-bold text-indigo-700 transition-colors hover:bg-white/95 active:bg-white/85 focus:outline-none focus:ring-2 focus:ring-white/80"
+              >
+                Claim
+                <ArrowRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={handleLearnMore}
+                className="inline-flex min-h-10 items-center justify-center rounded-xl px-3 text-[11px] font-semibold text-white/78 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+              >
+                Details
+              </button>
+            </div>
           </div>
 
-          {/* Headline */}
-          <h3 className="font-serif text-[20px] leading-tight font-bold mb-1.5 pr-6">
-            A friend sent you {rewards.referred} free Ink
-          </h3>
-          <p className="text-xs text-white/80 leading-relaxed mb-4">
-            Enough for a handful of AI-generated notebook layouts. Claim it when you sign up — no card needed.
-          </p>
+          <div className="hidden sm:block">
+            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur">
+              <Gift size={11} />
+              You're invited
+            </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleClaim}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-indigo-700 text-sm font-bold hover:bg-white/95 active:bg-white/85 transition-colors focus:outline-none focus:ring-2 focus:ring-white/80"
-            >
-              Claim {rewards.referred} Ink
-              <ArrowRight size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={handleLearnMore}
-              className="px-3 py-2.5 rounded-xl text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
-            >
-              Details
-            </button>
+            <h3 className="mb-1.5 pr-6 font-serif text-[20px] font-bold leading-tight">
+              A friend sent you {rewards.referred} free Ink
+            </h3>
+            <p className="mb-4 text-xs leading-relaxed text-white/80">
+              Enough for a handful of AI-generated notebook layouts. Claim it when you sign up — no card needed.
+            </p>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleClaim}
+                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-indigo-700 transition-colors hover:bg-white/95 active:bg-white/85 focus:outline-none focus:ring-2 focus:ring-white/80"
+              >
+                Claim {rewards.referred} Ink
+                <ArrowRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={handleLearnMore}
+                className="rounded-xl px-3 py-2.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+              >
+                Details
+              </button>
+            </div>
           </div>
         </div>
       </div>

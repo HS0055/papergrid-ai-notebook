@@ -29,6 +29,7 @@
 
 const STORAGE_KEY = 'papergrid_referral_ref';
 const CLICK_DEDUP_KEY = 'papergrid_referral_click_ttl';
+const CURRENT_VISIT_KEY = 'papergrid_referral_current_visit';
 const EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CLICK_DEDUP_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -88,9 +89,15 @@ export async function captureReferralFromUrl(): Promise<void> {
     const queryCode = url.searchParams.get('ref');
 
     const raw = pathCode ?? queryCode;
-    if (!raw) return;
+    if (!raw) {
+      clearCurrentVisitReferralCode();
+      return;
+    }
     const candidate = raw.trim().toLowerCase().slice(0, 32);
-    if (!candidate || !/^[a-z0-9_-]+$/.test(candidate)) return;
+    if (!candidate || !/^[a-z0-9_-]+$/.test(candidate)) {
+      clearCurrentVisitReferralCode();
+      return;
+    }
     code = candidate;
 
     // Only clean the URL if we came in via `?ref=`. For path-based
@@ -106,6 +113,7 @@ export async function captureReferralFromUrl(): Promise<void> {
       window.history.replaceState({}, '', clean);
     }
   } catch {
+    clearCurrentVisitReferralCode();
     return;
   }
 
@@ -127,7 +135,10 @@ export async function captureReferralFromUrl(): Promise<void> {
   } catch {
     // Swallow — network failure means "unknown", not "invalid".
   }
-  if (serverSaidInvalid) return;
+  if (serverSaidInvalid) {
+    clearCurrentVisitReferralCode();
+    return;
+  }
 
   // Persist (overwrites any prior ref so the latest valid link wins).
   try {
@@ -137,6 +148,8 @@ export async function captureReferralFromUrl(): Promise<void> {
     // If localStorage is full or blocked, skip storage but still let
     // the click tracker fire below.
   }
+
+  setCurrentVisitReferralCode(code);
 
   // Fire click tracking — deduped per code in a 24h window so reloads
   // don't inflate the counter. Server also rate-limits by IP as a
@@ -150,6 +163,24 @@ export async function captureReferralFromUrl(): Promise<void> {
     }).catch(() => {
       // Swallow — click tracking is fire-and-forget
     });
+  }
+}
+
+function setCurrentVisitReferralCode(code: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(CURRENT_VISIT_KEY, code);
+  } catch {
+    // ignore
+  }
+}
+
+function clearCurrentVisitReferralCode(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(CURRENT_VISIT_KEY);
+  } catch {
+    // ignore
   }
 }
 
@@ -199,6 +230,16 @@ export function getStoredReferralCode(): string | null {
   }
 }
 
+export function getCurrentVisitReferralCode(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const code = sessionStorage.getItem(CURRENT_VISIT_KEY);
+    return code && /^[a-z0-9_-]{1,32}$/i.test(code) ? code : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Look up the reward info attached to a referral code so UIs can
  * render "🎁 You get X Ink" banners. Returns null on miss or network
@@ -231,6 +272,7 @@ export function clearStoredReferralCode(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(CURRENT_VISIT_KEY);
   } catch {
     // ignore
   }
