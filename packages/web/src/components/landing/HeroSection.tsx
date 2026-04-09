@@ -147,22 +147,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           cursorRef.current.x = 0;
           cursorRef.current.y = 0;
         }}
-        onTouchStart={isMobile ? (e) => {
-          const touch = e.touches[0];
-          if (!touch) return;
-          engageMobileHover(touch, e.currentTarget.getBoundingClientRect());
-        } : undefined}
-        onTouchMove={isMobile ? (e) => {
-          const touch = e.touches[0];
-          if (!touch) return;
-          engageMobileHover(touch, e.currentTarget.getBoundingClientRect());
-        } : undefined}
-        onTouchEnd={isMobile ? () => {
-          scheduleMobileHoverReset();
-        } : undefined}
-        onTouchCancel={isMobile ? () => {
-          scheduleMobileHoverReset();
-        } : undefined}
       >
         {/* Ambient glow blobs — centered to frame notebook */}
         {!isMobile && (
@@ -360,13 +344,30 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </div>
         </div>
 
-        {/* ── Notebook hover target (desktop only) — centered ── */}
+        {/* ── Notebook interaction target ── */}
         {!isMobile && (
           <div
             className="absolute inset-x-0 bottom-0 top-[26%]"
             style={{ zIndex: 15 }}
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
+          />
+        )}
+        {isMobile && (
+          <div
+            className="absolute left-[10%] right-[10%] top-[34%] bottom-[10%]"
+            style={{ zIndex: 15 }}
+            onTouchStart={(e) => {
+              const touch = e.touches[0];
+              if (!touch) return;
+              engageMobileHover(touch, e.currentTarget.getBoundingClientRect());
+            }}
+            onTouchEnd={() => {
+              scheduleMobileHoverReset();
+            }}
+            onTouchCancel={() => {
+              scheduleMobileHoverReset();
+            }}
           />
         )}
       </div>
