@@ -8,6 +8,7 @@ interface Testimonial {
   name: string;
   role: string;
   quote: string;
+  photo: string;
   color: string;
 }
 
@@ -16,18 +17,21 @@ const testimonials: Testimonial[] = [
     name: 'Sarah Chen',
     role: 'Graduate Student',
     quote: 'Papera replaced three different apps for me. The AI layouts save me hours every week organizing my research notes.',
+    photo: '/testimonials/sarah-chen.png',
     color: '#4f46e5', // indigo
   },
   {
     name: 'Marcus Rivera',
     role: 'Product Designer',
     quote: 'The paper textures feel so real. I actually enjoy digital note-taking now — something I never thought I\'d say.',
+    photo: '/testimonials/marcus-rivera.png',
     color: '#d97706', // amber
   },
   {
     name: 'Aiko Tanaka',
     role: 'Music Teacher',
     quote: 'The music staff paper type is a game-changer. My students love creating compositions right in their notebooks.',
+    photo: '/testimonials/aiko-tanaka.png',
     color: '#8b6f4e', // leather
   },
 ];
@@ -103,13 +107,14 @@ export const InlineTestimonials: React.FC = () => {
 
               {/* Author - smaller muted text */}
               <div className="flex items-center gap-3">
-                {/* Monogram avatar - first letter in colored circle */}
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-                  style={{ background: t.color }}
-                >
-                  {t.name.charAt(0)}
-                </div>
+                <img
+                  src={t.photo}
+                  alt={t.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-10 h-10 rounded-full object-cover shrink-0"
+                  style={{ border: `1.5px solid ${t.color}` }}
+                />
                 <div>
                   <div className="text-sm font-semibold text-gray-900">{t.name}</div>
                   <div className="text-xs text-gray-500">{t.role}</div>

@@ -1,46 +1,54 @@
 import React from 'react';
 
-const testimonials = [
+interface Testimonial {
+  quote: string;
+  name: string;
+  role: string;
+  photo: string;
+  color: string;
+}
+
+const testimonials: Testimonial[] = [
   {
     quote: 'Papera AI completely replaced my physical notebook. The lined paper feels so real, and the AI generates layouts I never would have thought of.',
     name: 'Mira Chen',
     role: 'UX Designer, Figma',
-    emoji: '👩‍🎨',
+    photo: '/testimonials/mira-chen.png',
     color: '#4f46e5',
   },
   {
     quote: 'I use the Cornell notes aesthetic every single day for my lectures. It\'s the only tool that actually respects the structure of academic notes.',
     name: 'James Osei',
     role: 'PhD Student, MIT',
-    emoji: '👨‍🎓',
+    photo: '/testimonials/james-osei.png',
     color: '#d97706',
   },
   {
     quote: 'As a productivity coach, I\'ve tried everything. Papera\'s Priority Matrix + Mood Tracker combination is genuinely unlike anything else.',
     name: 'Sarah Okonkwo',
     role: 'Productivity Coach',
-    emoji: '🧘‍♀️',
+    photo: '/testimonials/sarah-okonkwo.png',
     color: '#059669',
   },
   {
     quote: 'The bullet journal mode with dotted paper and washi tape callouts is SO good. Finally a digital tool that actually gets the BuJo community.',
     name: 'Lea Rossi',
     role: 'Freelance Illustrator',
-    emoji: '✏️',
+    photo: '/testimonials/lea-rossi.png',
     color: '#e11d48',
   },
   {
     quote: 'I described our sprint planning session and got a fully formatted notebook page in about 3 seconds. The AI layouts are seriously impressive.',
     name: 'Noah Park',
     role: 'Engineering Lead, Vercel',
-    emoji: '👨‍💻',
+    photo: '/testimonials/noah-park.png',
     color: '#0ea5e9',
   },
   {
     quote: 'My students love that I can share Cornell notes layouts with them directly. Papera has become a classroom staple.',
     name: 'Maria Santos',
     role: 'High School Teacher',
-    emoji: '🍎',
+    photo: '/testimonials/maria-santos.png',
     color: '#7c3aed',
   },
 ];
@@ -80,12 +88,14 @@ export const TestimonialsSection: React.FC = () => {
               <div className="font-serif text-5xl leading-none mb-4" style={{ color: t.color, opacity: 0.6 }}>"</div>
               <p className="text-base leading-relaxed mb-6" style={{ color: 'rgba(248,250,252,0.8)' }}>{t.quote}</p>
               <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-xl shrink-0"
-                  style={{ background: `${t.color}20`, border: `1px solid ${t.color}40` }}
-                >
-                  {t.emoji}
-                </div>
+                <img
+                  src={t.photo}
+                  alt={t.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-10 h-10 rounded-full object-cover shrink-0"
+                  style={{ border: `1px solid ${t.color}40` }}
+                />
                 <div>
                   <div className="font-semibold text-sm text-white">{t.name}</div>
                   <div className="text-xs" style={{ color: '#64748b' }}>{t.role}</div>
