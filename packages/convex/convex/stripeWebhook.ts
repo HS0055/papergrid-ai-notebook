@@ -693,13 +693,18 @@ export function registerStripeRoutes(http: HttpRouter) {
           };
           // List subscriptions — this is a GET endpoint, so we must use
           // a direct fetch with query-string params. `stripeFetch` POSTs
-          // a form body, which Stripe would reject on a list endpoint as
-          // "unknown parameters: limit, status". Same pattern is already
-          // used for /prices/:id earlier in this file.
+          // a form body, which Stripe would reject on a list endpoint.
+          //
+          // We use the TOP-LEVEL `/v1/subscriptions?customer=…` endpoint
+          // instead of the subresource `/v1/customers/:id/subscriptions`
+          // because only the top-level endpoint accepts `status` as a
+          // filter. The subresource variant rejects it with
+          // "Received unknown parameter: status". Same pattern is
+          // already used for /prices/:id earlier in this file.
           const listRes = await fetch(
-            `https://api.stripe.com/v1/customers/${encodeURIComponent(
+            `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(
               customerId!,
-            )}/subscriptions?status=all&limit=100`,
+            )}&status=all&limit=100`,
             {
               headers: {
                 Authorization: `Bearer ${stripeKey}`,
@@ -1109,10 +1114,14 @@ async function handleEvent(
         try {
           const stripeKey = process.env.STRIPE_SECRET_KEY;
           if (stripeKey) {
+            // Top-level /v1/subscriptions supports the `status` filter;
+            // the `/v1/customers/:id/subscriptions` subresource does
+            // NOT and rejects it with 400 "Received unknown parameter:
+            // status". Use the top-level endpoint with `?customer=`.
             const res = await fetch(
-              `https://api.stripe.com/v1/customers/${encodeURIComponent(
+              `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(
                 sub.customer,
-              )}/subscriptions?status=all&limit=100`,
+              )}&status=all&limit=100`,
               {
                 headers: {
                   Authorization: `Bearer ${stripeKey}`,
