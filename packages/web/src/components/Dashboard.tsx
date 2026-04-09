@@ -1385,6 +1385,57 @@ export const Dashboard: React.FC = () => {
       // Assigned to the outer-scope variable so `finally` can call it.
       restoreColors = normalizeExportColors(exportRoot);
 
+      // ── Pre-inline all <img> elements as base64 data URLs ──
+      // Root cause of the "data:," empty-data-URL error on Vercel:
+      // html-to-image uses a foreignObject → SVG → canvas path, and
+      // when the SVG references an external image URL, Safari (and
+      // some Chrome builds) can fail to inline the image in time,
+      // producing an EMPTY canvas whose toDataURL() returns "data:,".
+      // Localhost worked because Vite dev server served assets with
+      // permissive headers and faster response times.
+      //
+      // The bulletproof fix is to swap every img.src in the export
+      // tree for a base64 data URL BEFORE rasterizing. After this
+      // step there are zero external fetches during the snapshot, so
+      // the canvas can never be tainted and the timing is irrelevant.
+      // React will reset the src on the next render, so we don't
+      // need a restore step.
+      const exportImages = Array.from(
+        exportRoot.querySelectorAll<HTMLImageElement>('img'),
+      );
+      await Promise.all(
+        exportImages.map(async (img) => {
+          if (!img.src || img.src.startsWith('data:')) return;
+          try {
+            const response = await fetch(img.src, { cache: 'force-cache' });
+            if (!response.ok) return;
+            const blob = await response.blob();
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(blob);
+            });
+            img.src = dataUrl;
+          } catch (inlineError) {
+            // Non-fatal: leaving the original src is worse but we
+            // prefer a degraded export over a hard failure.
+            console.warn('Failed to inline image for export:', img.src, inlineError);
+          }
+        }),
+      );
+
+      // After swapping srcs, wait for the browser to actually decode
+      // the new data URLs before html-to-image snapshots. decode()
+      // returns a promise that resolves once the bitmap is ready.
+      await Promise.all(
+        exportImages.map((img) =>
+          img.decode().catch(() => {
+            /* decode can reject on some Safari builds — fall back to complete flag */
+          }),
+        ),
+      );
+
       const pageSections = Array.from(
         exportRoot.querySelectorAll<HTMLElement>('[data-pdf-export-page]'),
       );
@@ -1414,7 +1465,11 @@ export const Dashboard: React.FC = () => {
         // keeping the PDF well under 1 MB per page.
         const dataUrl = await toJpeg(section, {
           pixelRatio: 2,
-          cacheBust: true,
+          // cacheBust would append ?cache-bust=... to resource URLs,
+          // defeating the pre-inlined data URLs above and causing a
+          // re-fetch (with no CORS headers on Vercel). We inlined
+          // everything already, so cache-busting serves no purpose.
+          cacheBust: false,
           backgroundColor: '#ffffff',
           quality: 0.95,
           // Filter out any stray nodes that shouldn't be in the PDF
