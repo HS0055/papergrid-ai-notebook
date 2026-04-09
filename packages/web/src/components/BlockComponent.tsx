@@ -155,24 +155,31 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
 
   return (
     <div data-block-type={block.type} className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0">
-      {/* Block Controls (Hover) */}
-      <div className="absolute left-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20">
-        <div className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center text-gray-400 cursor-move hover:text-gray-600 active:bg-gray-100 rounded" {...dragHandleProps}>
-          <GripVertical size={18} />
+      {/* Block Controls (Hover)
+          Moved from `left-2` (which overlapped the checkbox/content
+          inside narrow container blocks like Top 3 Priorities) to
+          `right-2` so the handle never blocks the primary click
+          target. Added `pointer-events-none` on the wrapper with
+          `pointer-events-auto` on the individual buttons so the
+          invisible resting state can't intercept clicks on the
+          block content below.  */}
+      <div className="absolute right-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20 pointer-events-none bg-white/90 backdrop-blur rounded-lg shadow-sm border border-black/5 p-0.5">
+        <div className="pointer-events-auto w-7 h-7 flex items-center justify-center text-gray-400 cursor-move hover:text-gray-600 active:bg-gray-100 rounded" {...dragHandleProps}>
+          <GripVertical size={16} />
         </div>
         <button
           onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })}
-          className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center hover:bg-blue-100 active:bg-blue-200 rounded text-gray-400 hover:text-blue-500"
+          className="pointer-events-auto w-7 h-7 flex items-center justify-center hover:bg-blue-100 active:bg-blue-200 rounded text-gray-400 hover:text-blue-500"
           aria-label="Move block to other page"
         >
-          <ArrowLeftRight size={16} />
+          <ArrowLeftRight size={14} />
         </button>
         <button
           onClick={() => onDelete(block.id)}
-          className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center hover:bg-red-100 active:bg-red-200 rounded text-gray-400 hover:text-red-500"
+          className="pointer-events-auto w-7 h-7 flex items-center justify-center hover:bg-red-100 active:bg-red-200 rounded text-gray-400 hover:text-red-500"
           aria-label="Delete block"
         >
-          <Trash2 size={16} />
+          <Trash2 size={14} />
         </button>
       </div>
 
