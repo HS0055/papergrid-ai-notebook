@@ -38,9 +38,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     if (!sectionRef.current || !pinContainerRef.current) return;
 
     const ctx = gsap.context(() => {
-      // Both mobile and desktop get scroll-driven hero, but with different durations
-      // Mobile: shorter scroll (+=100%), desktop: shorter pin (+=150%) to avoid blank end
-      const scrollEnd = isMobile ? '+=100%' : '+=150%';
+      // Mobile and desktop share the same 3-phase scroll narrative
+      // (Phase 1 → fade → Phase 2 → fade → Phase 3), but mobile uses
+      // a shorter pin duration since the mobile layout is denser.
+      const scrollEnd = isMobile ? '+=130%' : '+=150%';
 
       const masterTl = gsap.timeline({
         scrollTrigger: {
@@ -56,46 +57,34 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
         },
       });
 
-      if (isMobile) {
-        // Mobile: Phase 1 fades out at 60-80% of scroll, book opens via scrollRef
-        masterTl.to(
-          phase1Ref.current,
-          { opacity: 0, y: -40, pointerEvents: 'none', duration: 0.20, ease: 'power2.in' },
-          0.60,
+      // Phase 1: visible 0-18%, fades out 18-26%
+      masterTl.to(
+        phase1Ref.current,
+        { opacity: 0, y: -50, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
+        0.18,
+      );
+
+      // Phase 2: fades in 24-32%, visible until 48%, fades out 48-56%
+      masterTl
+        .fromTo(
+          phase2Ref.current,
+          { opacity: 0, y: 30, pointerEvents: 'none' },
+          { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.08, ease: 'power2.out' },
+          0.24,
+        )
+        .to(
+          phase2Ref.current,
+          { opacity: 0, y: -30, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
+          0.48,
         );
-      } else {
-        // Desktop: full 3-phase scroll narrative
 
-        // Phase 1: visible 0-18%, fades out 18-26%
-        masterTl.to(
-          phase1Ref.current,
-          { opacity: 0, y: -50, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
-          0.18,
-        );
-
-        // Phase 2: fades in 24-32%, visible until 48%, fades out 48-56%
-        masterTl
-          .fromTo(
-            phase2Ref.current,
-            { opacity: 0, y: 30, pointerEvents: 'none' },
-            { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.08, ease: 'power2.out' },
-            0.24,
-          )
-          .to(
-            phase2Ref.current,
-            { opacity: 0, y: -30, pointerEvents: 'none', duration: 0.08, ease: 'power2.in' },
-            0.48,
-          );
-
-        // Phase 3: fades in 54-62%, stays visible until end (no fade-out)
-        masterTl
-          .fromTo(
-            phase3Ref.current,
-            { opacity: 0, y: 30, pointerEvents: 'none' },
-            { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.10, ease: 'power2.out' },
-            0.54,
-          );
-      }
+      // Phase 3: fades in 54-62%, stays visible until end (no fade-out)
+      masterTl.fromTo(
+        phase3Ref.current,
+        { opacity: 0, y: 30, pointerEvents: 'none' },
+        { opacity: 1, y: 0, pointerEvents: 'auto', duration: 0.10, ease: 'power2.out' },
+        0.54,
+      );
     }, sectionRef);
 
     // Refresh ScrollTrigger after all contexts are initialized
@@ -238,20 +227,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </p>
         </div>
 
-        {/* ── Phase 2: Feature callout (starts hidden, desktop only) ── */}
+        {/* ── Phase 2: Feature callout ── */}
         <div
           ref={phase2Ref}
-          className="absolute inset-0 flex items-center justify-center px-6"
-          style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
+          className="absolute inset-0 flex items-center justify-center px-4 md:px-6"
+          style={{ zIndex: 20, opacity: 0, pointerEvents: 'none' }}
         >
           <div
-            className="text-center max-w-3xl rounded-3xl px-10 py-12"
+            className="text-center max-w-3xl rounded-3xl px-5 py-7 md:px-10 md:py-12"
             style={{
               background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
               backdropFilter: 'blur(8px)',
             }}
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold mb-3 md:mb-6 border"
               style={{
                 background: 'rgba(217,119,6,0.15)',
                 borderColor: 'rgba(217,119,6,0.4)',
@@ -262,33 +251,33 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
               <span>10 Paper Textures · 22+ Block Types</span>
             </div>
             <h2
-              className="font-serif font-bold text-white mb-4"
-              style={{ fontSize: 'clamp(2.5rem, 6vw, 5rem)', lineHeight: 1.1 }}
+              className="font-serif font-bold text-white mb-3 md:mb-4"
+              style={{ fontSize: 'clamp(2rem, 7vw, 5rem)', lineHeight: 1.1 }}
             >
               Open the cover.
               <br />
               <span className="italic" style={{ color: '#818cf8' }}>Discover the pages.</span>
             </h2>
-            <p className="text-lg" style={{ color: '#94a3b8' }}>
+            <p className="text-sm md:text-lg" style={{ color: '#94a3b8' }}>
               Scroll to watch the notebook unfold with real paper textures and AI-generated content.
             </p>
           </div>
         </div>
 
-        {/* ── Phase 3: Final CTA (starts hidden, desktop only) ── */}
+        {/* ── Phase 3: Final CTA ── */}
         <div
           ref={phase3Ref}
-          className="absolute inset-0 flex items-center justify-center px-6"
-          style={{ zIndex: 20, opacity: 0, pointerEvents: 'none', display: isMobile ? 'none' : undefined }}
+          className="absolute inset-0 flex items-center justify-center px-4 md:px-6"
+          style={{ zIndex: 20, opacity: 0, pointerEvents: 'none' }}
         >
           <div
-            className="text-center max-w-3xl rounded-3xl px-10 py-12"
+            className="text-center max-w-3xl rounded-3xl px-5 py-7 md:px-10 md:py-12"
             style={{
               background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
               backdropFilter: 'blur(8px)',
             }}
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-6 border"
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold mb-3 md:mb-6 border"
               style={{
                 background: 'rgba(16,185,129,0.15)',
                 borderColor: 'rgba(16,185,129,0.4)',
@@ -299,8 +288,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
               <span>Lined · Grid · Dotted · Music · Legal & More</span>
             </div>
             <h2
-              className="font-serif font-bold text-white mb-6"
-              style={{ fontSize: 'clamp(2.5rem, 6vw, 5rem)', lineHeight: 1.1 }}
+              className="font-serif font-bold text-white mb-4 md:mb-6"
+              style={{ fontSize: 'clamp(2rem, 7vw, 5rem)', lineHeight: 1.1 }}
             >
               Your pages.
               <br />
@@ -308,7 +297,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             </h2>
             <button
               onClick={onLaunch}
-              className="inline-flex items-center justify-center gap-3 px-10 py-5 text-white font-bold text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
+              className="inline-flex items-center justify-center gap-3 px-7 py-3 md:px-10 md:py-5 text-white font-bold text-base md:text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
               style={{
                 background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                 boxShadow: '0 20px 60px rgba(79,70,229,0.4)',

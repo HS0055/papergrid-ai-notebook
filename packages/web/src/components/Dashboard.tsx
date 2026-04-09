@@ -1348,7 +1348,14 @@ export const Dashboard: React.FC = () => {
     try {
       // Dynamic imports — the ~400KB of PDF libraries only load on
       // first export, keeping the dashboard initial bundle small.
-      const [{ toPng }, { jsPDF }] = await Promise.all([
+      //
+      // We use toJpeg (not toPng) because jsPDF's PNG parser throws
+      // "wrong PNG signature" on some html-to-image PNG outputs,
+      // particularly on Safari and certain Chrome builds. JPEG is a
+      // much more lenient format for PDF embedding, produces smaller
+      // output, and since we force a white backgroundColor on every
+      // snapshot we don't need PNG's alpha channel anyway.
+      const [{ toJpeg }, { jsPDF }] = await Promise.all([
         import('html-to-image'),
         import('jspdf'),
       ]);
@@ -1403,12 +1410,13 @@ export const Dashboard: React.FC = () => {
 
         // pixelRatio: 2 gives retina-quality raster on high-DPI
         // displays without blowing up file size for 4K monitors.
-        // We force backgroundColor on the snapshot to avoid
-        // transparent PNGs that render as black in the PDF.
-        const dataUrl = await toPng(section, {
+        // quality: 0.95 is visually lossless for text/diagrams while
+        // keeping the PDF well under 1 MB per page.
+        const dataUrl = await toJpeg(section, {
           pixelRatio: 2,
           cacheBust: true,
           backgroundColor: '#ffffff',
+          quality: 0.95,
           // Filter out any stray nodes that shouldn't be in the PDF
           // (e.g. React devtools hooks, stale modals).
           filter: (node) => {
@@ -1418,6 +1426,16 @@ export const Dashboard: React.FC = () => {
           },
         });
 
+        // Defensive check: html-to-image occasionally returns an empty
+        // string or a non-image data URL when the DOM tree is in a
+        // transient state. Fail loudly with a useful error instead of
+        // letting jsPDF throw "wrong JPEG" / "wrong PNG signature".
+        if (!dataUrl || !dataUrl.startsWith('data:image/jpeg')) {
+          throw new Error(
+            `Snapshot for page ${i + 1} is not a valid JPEG (got: ${dataUrl?.slice(0, 32) || 'empty'}...)`,
+          );
+        }
+
         if (i > 0) pdf.addPage();
         // Fit the snapshot inside the page — same width, proportional
         // height. If the snapshot is taller than a page it gets
@@ -1426,7 +1444,7 @@ export const Dashboard: React.FC = () => {
         // min-height constraints).
         pdf.addImage(
           dataUrl,
-          'PNG',
+          'JPEG',
           0,
           0,
           pdfWidthPt,
