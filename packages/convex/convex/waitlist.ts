@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,8 +67,17 @@ export const join = mutation({
 /**
  * Admin-only: list waitlist entries with pagination + filtering.
  * Used by the AdminPanel waitlist tab.
+ *
+ * SECURITY: exposed ONLY as `internalQuery` so it can't be called from
+ * the public Convex client. The only legitimate caller is the
+ * /api/admin/waitlist HTTP route, which performs the admin role check
+ * BEFORE invoking this via `ctx.runQuery(internal.waitlist.list, ...)`.
+ * Previously this was a public `query`, which meant the admin HTTP
+ * gate was trivially bypassable by calling `api.waitlist.list` from
+ * any signed-in browser — returning raw email addresses of everyone
+ * on the waitlist.
  */
-export const list = query({
+export const list = internalQuery({
   args: {
     limit: v.optional(v.number()),
     source: v.optional(v.string()),
@@ -97,8 +106,11 @@ export const list = query({
  * Reads the denormalized counter maintained by `join`. Previously this did a
  * full .collect() of the entire waitlist table on every admin dashboard
  * render — at 10k emails that's a guaranteed O(n) scan.
+ *
+ * SECURITY: same reasoning as `list` above — exposed ONLY as
+ * `internalQuery`. The signal (exact waitlist size) is also admin-only.
  */
-export const count = query({
+export const count = internalQuery({
   args: {},
   handler: async (ctx) => {
     const counter = await ctx.db

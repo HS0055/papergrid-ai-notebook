@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { detectDomain, getDomainRules, getDesignPrinciples } from "./domainDetection";
 import type { CompactBlock, CompactReference } from "./referenceLayouts";
 import { registerAffiliateRoutes } from "./affiliateHttp";
@@ -434,6 +435,20 @@ function getSessionTokenFromRequest(request: Request): string | null {
   return request.headers.get("X-Session-Token");
 }
 
+// Narrow the `signupWithEmailPassword` return shape (which is typed
+// loosely as `Record<string, unknown>` because `sanitizeUser` widens
+// the user row) back to an `Id<"users">` without resorting to `any`.
+// Returns null if the shape doesn't match — callers should treat that
+// as "referral attribution skipped" rather than fatal.
+function extractUserIdFromSignup(result: unknown): Id<"users"> | null {
+  if (!result || typeof result !== "object") return null;
+  const withUser = result as { user?: unknown };
+  if (!withUser.user || typeof withUser.user !== "object") return null;
+  const withId = withUser.user as { _id?: unknown };
+  if (typeof withId._id !== "string") return null;
+  return withId._id as Id<"users">;
+}
+
 // Best-effort client IP extraction. Cloudflare → cf-connecting-ip; most
 // proxies → x-forwarded-for (first entry). Clamped to 64 chars so a
 // pathological header can't blow up rate-limit keys.
@@ -485,7 +500,7 @@ http.route({
       // via the RATE_LIMIT_RULES constants in rateLimit.ts.
       const rlUser = await ctx.runMutation(api.rateLimit.consume, {
         scope: "user", subject: userId,
-        action: "ai.generate_layout", limit: 20, windowMs: 60 * 60 * 1000,
+        action: "ai.generate_layout",
       });
       if (!rlUser.allowed) {
         return new Response(
@@ -498,7 +513,7 @@ http.route({
       if (clientIp) {
         const rlIp = await ctx.runMutation(api.rateLimit.consume, {
           scope: "ip", subject: clientIp,
-          action: "ai.generate_layout_ip", limit: 60, windowMs: 60 * 60 * 1000,
+          action: "ai.generate_layout_ip",
         });
         if (!rlIp.allowed) {
           return new Response(
@@ -1306,7 +1321,7 @@ http.route({
       // Rate limit: 20 covers / user / hour.
       const rlUser = await ctx.runMutation(api.rateLimit.consume, {
         scope: "user", subject: userId,
-        action: "ai.generate_cover", limit: 20, windowMs: 60 * 60 * 1000,
+        action: "ai.generate_cover",
       });
       if (!rlUser.allowed) {
         return new Response(
@@ -1452,7 +1467,7 @@ http.route({
       const emailLower = email.trim().toLowerCase();
       const rlEmail = await ctx.runMutation(api.rateLimit.consume, {
         scope: "email", subject: emailLower,
-        action: "auth.login", limit: 5, windowMs: 60_000,
+        action: "auth.login",
       });
       if (!rlEmail.allowed) {
         return new Response(JSON.stringify({ error: "Too many login attempts. Please wait a minute and try again." }), {
@@ -1463,7 +1478,7 @@ http.route({
       if (clientIp) {
         const rlIp = await ctx.runMutation(api.rateLimit.consume, {
           scope: "ip", subject: clientIp,
-          action: "auth.login_ip", limit: 30, windowMs: 60_000,
+          action: "auth.login_ip",
         });
         if (!rlIp.allowed) {
           return new Response(JSON.stringify({ error: "Too many login attempts from this network." }), {
@@ -1527,7 +1542,7 @@ http.route({
       // (signup spam + throwaway-account abuse protection).
       const rlEmail = await ctx.runMutation(api.rateLimit.consume, {
         scope: "email", subject: email.trim().toLowerCase(),
-        action: "auth.signup", limit: 3, windowMs: 60_000,
+        action: "auth.signup",
       });
       if (!rlEmail.allowed) {
         return new Response(JSON.stringify({ error: "Too many signups. Please wait a minute." }), {
@@ -1538,7 +1553,7 @@ http.route({
       if (clientIp) {
         const rlIp = await ctx.runMutation(api.rateLimit.consume, {
           scope: "ip", subject: clientIp,
-          action: "auth.signup_ip", limit: 10, windowMs: 60_000,
+          action: "auth.signup_ip",
         });
         if (!rlIp.allowed) {
           return new Response(JSON.stringify({ error: "Too many signups from this network." }), {
@@ -1556,10 +1571,11 @@ http.route({
       // If a referral code was supplied, attach the user to the
       // referrer. Any failure here is swallowed — we never want to
       // block a signup on the growth-loop side path.
-      if (referralCode && result && typeof (result as any).user?._id === "string") {
+      const newUserId = extractUserIdFromSignup(result);
+      if (referralCode && newUserId) {
         try {
           await ctx.runMutation(internal.referrals.attachOnSignupInternal, {
-            userId: (result as any).user._id,
+            userId: newUserId,
             code: referralCode,
             ip: clientIp ?? undefined,
             userAgent: request.headers.get("user-agent") ?? undefined,
@@ -1672,7 +1688,7 @@ http.route({
       const clientIp = getClientIp(request);
       const rl1 = await ctx.runMutation(api.rateLimit.consume, {
         scope: "email", subject: email.trim().toLowerCase(),
-        action: "auth.password_reset_req", limit: 3, windowMs: 60_000,
+        action: "auth.password_reset_req",
       });
       if (!rl1.allowed) {
         return new Response(JSON.stringify({ error: "Too many requests" }), {
@@ -1682,7 +1698,7 @@ http.route({
       if (clientIp) {
         const rl2 = await ctx.runMutation(api.rateLimit.consume, {
           scope: "ip", subject: clientIp,
-          action: "auth.password_reset_req_ip", limit: 10, windowMs: 60_000,
+          action: "auth.password_reset_req_ip",
         });
         if (!rl2.allowed) {
           return new Response(JSON.stringify({ error: "Too many requests" }), {
@@ -1739,7 +1755,7 @@ http.route({
       // brute-forcing the 6-digit code within the 15-minute TTL.
       const rl = await ctx.runMutation(api.rateLimit.consume, {
         scope: "email", subject: email.trim().toLowerCase(),
-        action: "auth.password_reset_conf", limit: 10, windowMs: 60_000,
+        action: "auth.password_reset_conf",
       });
       if (!rl.allowed) {
         return new Response(JSON.stringify({ error: "Too many attempts. Please wait and try again." }), {
@@ -2465,9 +2481,13 @@ http.route({
           status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      // Admin check: we require the caller to be an admin. The query itself
-      // is open, but we gate access at the HTTP layer by verifying the
-      // session → user role before returning rows.
+      // Admin check: we require the caller to be an admin. The underlying
+      // waitlist.list / waitlist.count queries are now `internalQuery`,
+      // meaning they cannot be called from the public Convex client at
+      // all — only from server code (this route). That means the HTTP
+      // admin gate below is now the single source of truth for who can
+      // see waitlist emails; it can no longer be bypassed by calling
+      // `api.waitlist.list` directly from a signed-in browser.
       const me = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
       if (!me || (me as any).role !== "admin") {
         return new Response(JSON.stringify({ error: "Admin only" }), {
@@ -2477,8 +2497,8 @@ http.route({
       const url = new URL(request.url);
       const limit = Number(url.searchParams.get("limit") ?? 200) || 200;
       const source = url.searchParams.get("source") ?? undefined;
-      const listRes = await ctx.runQuery(api.waitlist.list, { limit, source: source ?? undefined });
-      const countRes = await ctx.runQuery(api.waitlist.count, {});
+      const listRes = await ctx.runQuery(internal.waitlist.list, { limit, source: source ?? undefined });
+      const countRes = await ctx.runQuery(internal.waitlist.count, {});
       return new Response(JSON.stringify({ ...listRes, count: countRes.total }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

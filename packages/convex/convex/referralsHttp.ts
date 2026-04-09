@@ -159,7 +159,7 @@ export function registerReferralRoutes(http: HttpRouter) {
         if (ip) {
           const rl = await ctx.runMutation(api.rateLimit.consume, {
             scope: "ip", subject: ip,
-            action: "referral.lookup_ip", limit: 30, windowMs: 60_000,
+            action: "referral.lookup_ip",
           });
           if (!rl.allowed) return json({ valid: false, reason: "rate_limited" }, 429, request);
         }
@@ -187,7 +187,7 @@ export function registerReferralRoutes(http: HttpRouter) {
         if (ip) {
           const rl = await ctx.runMutation(api.rateLimit.consume, {
             scope: "ip", subject: ip,
-            action: "referral.track_click_ip", limit: 30, windowMs: 60_000,
+            action: "referral.track_click_ip",
           });
           if (!rl.allowed) return json({ ok: false, reason: "rate_limited" }, 429, request);
         }

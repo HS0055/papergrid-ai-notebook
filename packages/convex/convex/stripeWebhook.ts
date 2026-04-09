@@ -265,8 +265,50 @@ export function registerStripeRoutes(http: HttpRouter) {
         }
 
         // Read or mint a Stripe customer for this user so all sessions
-        // roll up to the same billing record. We pass client_reference_id
-        // AND metadata.userId so the webhook has a foolproof way back.
+        // roll up to the same billing record. Previously this route
+        // only passed `customer_email`, which causes Stripe to create
+        // a BRAND NEW customer on every checkout session — so a repeat
+        // purchase produced a second Stripe customer + subscription,
+        // and the user row only remembered the most recent one. Any
+        // `customer.subscription.deleted` webhook for the orphaned
+        // older sub would then downgrade the user to free even though
+        // a newer subscription was still active and billing them.
+        //
+        // Fix: always resolve to a persistent `stripeCustomerId` BEFORE
+        // calling /checkout/sessions. Reuse the stored id if we have
+        // one; otherwise mint a new Stripe customer, persist the id on
+        // the user row immediately, and pass `customer=` to Stripe.
+        // We NEVER pass `customer_email` alongside `customer` — doing
+        // both is what creates the fragmentation.
+        let customerId: string | undefined = (me as { stripeCustomerId?: string }).stripeCustomerId;
+        if (!customerId) {
+          const customerParams: Record<string, string> = {
+            "metadata[userId]": userId,
+          };
+          if (userEmail) customerParams.email = userEmail;
+          const newCustomer = await stripeFetch<{ id: string }>(
+            "/customers",
+            customerParams,
+            stripeKey,
+          );
+          customerId = newCustomer.id;
+          // Persist immediately so a crash between here and the first
+          // webhook fire doesn't leave us with a customer in Stripe
+          // we can never correlate back to this user. updatePlanInternal
+          // keeps the plan unchanged — this is a pure customer-link update.
+          try {
+            await ctx.runMutation(internal.users.updatePlanInternal, {
+              userId,
+              plan: ((me as { plan?: string }).plan ?? "free") as
+                | "pro" | "creator" | "starter" | "founder" | "free",
+              stripeCustomerId: customerId,
+            });
+          } catch {
+            // Non-fatal — the checkout.session.completed webhook will
+            // save the id too once Stripe calls us back.
+          }
+        }
+
         const params: Record<string, string> = {
           mode,
           "line_items[0][price]": priceId,
@@ -276,6 +318,8 @@ export function registerStripeRoutes(http: HttpRouter) {
           client_reference_id: userId,
           "metadata[userId]": userId,
           allow_promotion_codes: "true",
+          // Canonical customer — never `customer_email`.
+          customer: customerId,
         };
         if (planForMetadata) {
           params["metadata[plan]"] = planForMetadata;
@@ -283,9 +327,6 @@ export function registerStripeRoutes(http: HttpRouter) {
           params["subscription_data[metadata][plan]"] = planForMetadata;
         } else if (target.startsWith("ink_")) {
           params["metadata[inkPack]"] = target;
-        }
-        if (userEmail) {
-          params["customer_email"] = userEmail;
         }
 
         const session = await stripeFetch<{
@@ -619,11 +660,113 @@ export function registerStripeRoutes(http: HttpRouter) {
         }
 
         if (mode === "subscription") {
-          // Create an incomplete subscription. Stripe returns the
-          // latest_invoice.payment_intent.client_secret which the
-          // frontend uses to confirm with Elements. The subscription
-          // stays `incomplete` until confirmation succeeds — then it
-          // flips to `active` and the webhook fires.
+          // ── Idempotency check — NEVER create a second subscription
+          //    for a customer who already has one active/trialing. ──
+          //
+          // Previously this route always inserted a fresh row into
+          // /subscriptions, meaning a user who rapidly clicked
+          // "Upgrade" (or survived a network blip and retried) could
+          // end up with two concurrent active subs on the same Stripe
+          // customer. The user row only tracks ONE stripeSubscriptionId,
+          // so the second one would overwrite the first — then when
+          // either was cancelled, the webhook downgraded the account
+          // to free while the OTHER subscription kept billing.
+          //
+          // The correct Stripe pattern for plan changes is to UPDATE
+          // the existing subscription item with proration, not create
+          // a parallel subscription. So if we find an active/trialing
+          // sub on this customer we:
+          //   (a) update it to the new price (proration_behavior:
+          //       create_prorations — Stripe handles the credit/charge)
+          //   (b) use the sub's existing latest_invoice.payment_intent
+          //       as the client secret the Elements flow confirms,
+          //       falling back to a zero-amount SetupIntent if the
+          //       proration didn't need a fresh payment.
+          type StripeSub = {
+            id: string;
+            status: string;
+            items: { data: Array<{ id: string; price: { id: string } }> };
+            latest_invoice?: {
+              id: string;
+              payment_intent?: { id: string; client_secret: string };
+            } | null;
+          };
+          const existingList = await stripeFetch<{ data: StripeSub[] }>(
+            `/customers/${encodeURIComponent(customerId!)}/subscriptions`,
+            { status: "all", limit: "100" },
+            stripeKey,
+          );
+          const reusable = (existingList.data ?? []).find(
+            (s) => s.status === "active" || s.status === "trialing" || s.status === "past_due",
+          );
+
+          if (reusable) {
+            // Plan change path: update the single item on the existing
+            // subscription to the new price. Stripe will prorate.
+            const itemId = reusable.items.data[0]?.id;
+            if (!itemId) {
+              return errorResponse(
+                "Existing subscription is missing a billable item — contact support",
+                500,
+                request,
+              );
+            }
+            const updateParams: Record<string, string> = {
+              "items[0][id]": itemId,
+              "items[0][price]": priceId,
+              proration_behavior: "create_prorations",
+              payment_behavior: "default_incomplete",
+              "metadata[userId]": userId,
+              "metadata[plan]": planForMetadata ?? "",
+              "expand[0]": "latest_invoice.payment_intent",
+            };
+            const updated = await stripeFetch<StripeSub>(
+              `/subscriptions/${encodeURIComponent(reusable.id)}`,
+              updateParams,
+              stripeKey,
+            );
+            const clientSecret = updated.latest_invoice?.payment_intent?.client_secret;
+            if (!clientSecret) {
+              // No additional payment required (e.g. downgrade with
+              // credit). The front-end can treat this as a completed
+              // change without Elements confirmation.
+              return jsonResponse(
+                {
+                  mode: "subscription",
+                  clientSecret: null,
+                  subscriptionId: updated.id,
+                  customerId,
+                  amount: price.unit_amount,
+                  currency: price.currency,
+                  planId: planForMetadata,
+                  interval,
+                  reused: true,
+                },
+                200,
+                request,
+              );
+            }
+            return jsonResponse(
+              {
+                mode: "subscription",
+                clientSecret,
+                subscriptionId: updated.id,
+                customerId,
+                amount: price.unit_amount,
+                currency: price.currency,
+                planId: planForMetadata,
+                interval,
+                reused: true,
+              },
+              200,
+              request,
+            );
+          }
+
+          // First-purchase path: no live subscription on this customer,
+          // so we create one with default_incomplete so the client can
+          // confirm via Elements. Any subsequent upgrade reuses the
+          // branch above.
           const subParams: Record<string, string> = {
             customer: customerId!,
             "items[0][price]": priceId,
@@ -888,24 +1031,106 @@ async function handleEvent(
     }
 
     case "customer.subscription.deleted": {
+      // SECURITY/BILLING: previously this handler unconditionally
+      // downgraded the user to free on ANY subscription.deleted event,
+      // regardless of whether the deleted subscription was the user's
+      // *currently active* one. Combined with the old duplicate-sub
+      // bug, that meant:
+      //   - A user could have sub_A (older) and sub_B (current).
+      //   - sub_A's trial expires / gets cancelled.
+      //   - This handler fired → user downgraded to free.
+      //   - sub_B kept billing the customer in the background.
+      //
+      // The new handler enforces two guards:
+      //   1. If the user row's stripeSubscriptionId is set and does
+      //      NOT match the deleted subscription's id, this event is
+      //      about an orphaned/stale subscription — do nothing.
+      //   2. Otherwise, before downgrading, reconcile with Stripe:
+      //      if the customer still has ANY other active or trialing
+      //      subscription, don't downgrade. (We can't always tell
+      //      which plan the remaining sub represents without another
+      //      lookup, so we just keep the user on their current plan
+      //      and rely on the customer.subscription.updated handler
+      //      to normalise it next time Stripe fires an event.)
       const sub = obj as unknown as Subscription;
-      const userId = sub.metadata?.userId as Id<"users"> | undefined;
-      if (userId) {
-        await ctx.runMutation(internal.users.updatePlanInternal, {
-          userId,
-          plan: "free",
-        });
-      } else if (sub.customer) {
-        const found = await ctx.runQuery(internal.users.getByStripeCustomerInternal, {
-          stripeCustomerId: sub.customer,
-        });
-        if (found) {
-          await ctx.runMutation(internal.users.updatePlanInternal, {
-            userId: found._id,
-            plan: "free",
-          });
+
+      // Look up the user row. We always go via customer id — the
+      // subscription's metadata.userId is advisory, not authoritative.
+      // If we can't find a row at all, there's nothing to downgrade.
+      type UserRow = {
+        _id: Id<"users">;
+        stripeSubscriptionId?: string;
+      };
+      if (!sub.customer) break;
+      const foundRaw = await ctx.runQuery(
+        internal.users.getByStripeCustomerInternal,
+        { stripeCustomerId: sub.customer },
+      );
+      const found = foundRaw as UserRow | null;
+      if (!found) break;
+
+      // Guard 1: only act on the user's currently-tracked subscription.
+      if (
+        found.stripeSubscriptionId &&
+        found.stripeSubscriptionId !== sub.id
+      ) {
+        // This is a different (older or orphaned) subscription being
+        // cleaned up — the user's primary sub is still intact. Do
+        // nothing.
+        break;
+      }
+
+      // Guard 2: before downgrading, check Stripe for any *other*
+      // live subscriptions on this customer. If one exists, something
+      // else is still billing the user — do NOT yank them down to
+      // free. We'll let the matching customer.subscription.updated
+      // event re-normalise their plan.
+      if (sub.customer) {
+        try {
+          const stripeKey = process.env.STRIPE_SECRET_KEY;
+          if (stripeKey) {
+            const res = await fetch(
+              `https://api.stripe.com/v1/customers/${encodeURIComponent(
+                sub.customer,
+              )}/subscriptions?status=all&limit=100`,
+              {
+                headers: {
+                  Authorization: `Bearer ${stripeKey}`,
+                  "Stripe-Version": "2024-06-20",
+                },
+              },
+            );
+            if (res.ok) {
+              const body = (await res.json()) as {
+                data: Array<{ id: string; status: string }>;
+              };
+              const stillLive = (body.data ?? []).find(
+                (s) =>
+                  s.id !== sub.id &&
+                  (s.status === "active" || s.status === "trialing"),
+              );
+              if (stillLive) {
+                // Another subscription is still billing the customer —
+                // refuse to downgrade. The next webhook event for the
+                // live subscription will update stripeSubscriptionId
+                // on the user row.
+                break;
+              }
+            }
+          }
+        } catch {
+          // If the reconciliation call fails, err on the side of NOT
+          // downgrading: a false-positive downgrade is worse than a
+          // user staying on their old plan for a few minutes until
+          // Stripe retries the event.
+          break;
         }
       }
+
+      await ctx.runMutation(internal.users.updatePlanInternal, {
+        userId: found._id,
+        plan: "free",
+      });
       break;
     }
 

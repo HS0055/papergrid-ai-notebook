@@ -265,7 +265,7 @@ export function registerAffiliateRoutes(http: HttpRouter): void {
         if (ip) {
           const rlIp = await ctx.runMutation(api.rateLimit.consume, {
             scope: "ip", subject: ip,
-            action: "affiliate.track_click_ip", limit: 30, windowMs: 60_000,
+            action: "affiliate.track_click_ip",
           });
           if (!rlIp.allowed) {
             return jsonResponse({ ok: false, reason: "rate_limited" }, 429, request);
@@ -273,7 +273,7 @@ export function registerAffiliateRoutes(http: HttpRouter): void {
         }
         const rlCode = await ctx.runMutation(api.rateLimit.consume, {
           scope: "global", subject: code,
-          action: "affiliate.track_click_code", limit: 500, windowMs: 60_000,
+          action: "affiliate.track_click_code",
         });
         if (!rlCode.allowed) {
           return jsonResponse({ ok: false, reason: "rate_limited" }, 429, request);
@@ -326,7 +326,7 @@ export function registerAffiliateRoutes(http: HttpRouter): void {
         if (ip) {
           const rl = await ctx.runMutation(api.rateLimit.consume, {
             scope: "ip", subject: ip,
-            action: "affiliate.lookup_ip", limit: 30, windowMs: 60_000,
+            action: "affiliate.lookup_ip",
           });
           if (!rl.allowed) {
             return jsonResponse({ found: false }, 429, request);

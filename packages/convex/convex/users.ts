@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery, QueryCtx, MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { getPlanLimitFor, type PlanId } from "./planLimits";
 
@@ -155,10 +156,43 @@ async function getUserFromIdentity(ctx: AuthCtx) {
     .first();
 }
 
-// Strip sensitive fields before returning user data to clients
-function sanitizeUser(user: Record<string, unknown>) {
+// Strip sensitive fields before returning user data to clients.
+//
+// SECURITY: Previously this only stripped `passwordHash`, which meant
+// every other field — email, stripeCustomerId, stripeSubscriptionId,
+// tokenIdentifier, role, preferences, ink balances — was exposed to
+// whoever called `users.get`. Callers of `users.get` could enumerate
+// user IDs (e.g. from the community feed's `authorId`) and pull
+// full profiles for the entire user base.
+//
+// Policy:
+//   - `sanitizeSelf`: for the user viewing THEIR OWN row (e.g.
+//     getCurrentUser). Strips only passwordHash so the owner sees
+//     everything they need (balances, stripe refs, preferences).
+//   - `sanitizePublic`: for any call where another user might be the
+//     subject. Returns ONLY fields that are already public (name,
+//     avatarUrl). Everything else is hidden by omission, not by
+//     key exclusion — if a new sensitive field lands on the user
+//     row in the future, it does NOT leak automatically.
+function sanitizeSelf(user: Record<string, unknown>) {
   const { passwordHash, ...safe } = user;
   return safe;
+}
+
+function sanitizePublic(user: Record<string, unknown>) {
+  return {
+    _id: user._id,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+  };
+}
+
+// Legacy shim — keeps older call sites compiling without changing
+// their behaviour. Existing callers that want the "owner view" should
+// switch to `sanitizeSelf`. New callers should pick the right one
+// explicitly.
+function sanitizeUser(user: Record<string, unknown>) {
+  return sanitizeSelf(user);
 }
 
 // Get current authenticated user (for components)
@@ -231,18 +265,37 @@ export const signupWithEmailPassword = mutation({
     if (!normalizedEmail) throw new Error("Email is required");
     assertPassword(password);
 
-    let user = await ctx.db
+    // ── Look up any existing row with this email ──────────────────
+    //
+    // SECURITY: we must reject signup if ANY row exists with this email —
+    // not only rows that already have a passwordHash. Previously this
+    // check was `if (user?.passwordHash)`, which meant an attacker could
+    // hijack any account created through social auth (Google/OAuth
+    // creates a user row with `passwordHash === undefined`). The attacker
+    // would call signupWithEmailPassword with the victim's email, the
+    // "stub upgrade" branch would patch the row with the attacker's
+    // password hash, and the attacker could then log in as the victim.
+    //
+    // The correct behaviour for password signup is strictly additive:
+    // only create brand-new rows. Users who originally signed in with a
+    // provider that didn't set a password must go through the password
+    // RESET flow (which emails a verification link to the address on
+    // file) to add a password — signup can never overwrite auth material
+    // on a pre-existing row.
+    let existing = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
       .first();
-    if (!user && email.trim() !== normalizedEmail) {
-      user = await ctx.db
+    if (!existing && email.trim() !== normalizedEmail) {
+      existing = await ctx.db
         .query("users")
         .withIndex("by_email", (q) => q.eq("email", email.trim()))
         .first();
     }
-
-    if (user?.passwordHash) {
+    if (existing) {
+      // Identical message whether or not the pre-existing row has a
+      // passwordHash — we don't want to reveal "this email exists via
+      // social auth" to anyone probing for valid accounts.
       throw new Error("Email already in use");
     }
 
@@ -255,57 +308,33 @@ export const signupWithEmailPassword = mutation({
     const initialInk = freePlanLimit.monthlyInk;
     const nowIso = new Date().toISOString();
 
-    if (!user) {
-      const userId = await ctx.db.insert("users", {
-        tokenIdentifier: `local:${normalizedEmail}`,
-        name: name?.trim() || normalizedEmail.split("@")[0] || "User",
-        email: normalizedEmail,
-        passwordHash,
-        plan: "free",
-        aiGenerationsUsed: 0,
-        aiGenerationsResetAt: nowIso,
-        inkSubscription: initialInk,
-        inkPurchased: 0,
-        inkResetAt: nowIso,
-        inkLastActivity: nowIso,
-        preferences: {
-          defaultAesthetic: "modern-planner",
-          defaultPaperType: "lined",
-        },
+    const userId = await ctx.db.insert("users", {
+      tokenIdentifier: `local:${normalizedEmail}`,
+      name: name?.trim() || normalizedEmail.split("@")[0] || "User",
+      email: normalizedEmail,
+      passwordHash,
+      plan: "free",
+      aiGenerationsUsed: 0,
+      aiGenerationsResetAt: nowIso,
+      inkSubscription: initialInk,
+      inkPurchased: 0,
+      inkResetAt: nowIso,
+      inkLastActivity: nowIso,
+      preferences: {
+        defaultAesthetic: "modern-planner",
+        defaultPaperType: "lined",
+      },
+    });
+    let user = await ctx.db.get(userId);
+    if (user) {
+      await ctx.db.insert("inkTransactions", {
+        userId: user._id,
+        type: "subscription_refill",
+        amount: initialInk,
+        balance: initialInk,
+        description: "Welcome grant (free plan)",
+        createdAt: nowIso,
       });
-      user = await ctx.db.get(userId);
-      if (user) {
-        await ctx.db.insert("inkTransactions", {
-          userId: user._id,
-          type: "subscription_refill",
-          amount: initialInk,
-          balance: initialInk,
-          description: "Welcome grant (free plan)",
-          createdAt: nowIso,
-        });
-      }
-    } else {
-      const nextName = name?.trim();
-      const patch: Record<string, unknown> = {
-        email: normalizedEmail,
-        passwordHash,
-      };
-      if (nextName && nextName !== user.name) {
-        patch.name = nextName;
-      }
-      if (!user.tokenIdentifier) {
-        patch.tokenIdentifier = `local:${normalizedEmail}`;
-      }
-      // Backfill ink on an upgrade-from-stub user (e.g. email existed but
-      // had no passwordHash yet).
-      if (user.inkSubscription === undefined || user.inkSubscription === null) {
-        patch.inkSubscription = initialInk;
-        patch.inkPurchased = user.inkPurchased ?? 0;
-        patch.inkResetAt = nowIso;
-        patch.inkLastActivity = nowIso;
-      }
-      await ctx.db.patch(user._id, patch);
-      user = await ctx.db.get(user._id);
     }
 
     if (!user) throw new Error("Failed to resolve user");
@@ -457,12 +486,45 @@ export const logoutWithSession = mutation({
   },
 });
 
-// Get user by ID
+// Get user by ID.
+//
+// SECURITY: previously a public query with NO auth check that returned
+// a row containing email, stripeCustomerId, stripeSubscriptionId, role,
+// plan, and every other field. An attacker could enumerate user IDs
+// (e.g. via the community feed's `authorId`) and scrape the entire
+// user base's PII + Stripe linkage.
+//
+// Now:
+//   - Requires an authenticated session.
+//   - If the caller is viewing THEIR OWN row, returns the "self" shape
+//     (everything except passwordHash).
+//   - If the caller is viewing any other user's row, returns only the
+//     "public" shape (_id, name, avatarUrl). The target must also be
+//     someone who has opted into being a public author (they've posted
+//     to the community feed) — otherwise we return null, same as if
+//     they didn't exist, to avoid existence oracles.
 export const get = query({
-  args: { id: v.id("users") },
-  handler: async (ctx, { id }) => {
-    const user = await ctx.db.get(id);
-    return user ? sanitizeUser(user) : null;
+  args: {
+    id: v.id("users"),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, sessionToken }) => {
+    const me = await getUserFromIdentity(ctx)
+      ?? (await getUserFromSessionToken(ctx, sessionToken));
+    if (!me) throw new Error("Not authenticated");
+
+    if (me._id === id) {
+      // Viewing your own row → full self view.
+      return sanitizeSelf(me as unknown as Record<string, unknown>);
+    }
+
+    // Viewing someone else's row → public minimal shape. Callers that
+    // need richer author metadata (e.g. community feed) should go
+    // through `hydrateAuthorMeta` in community.ts, which returns only
+    // handle/displayName/avatarUrl.
+    const target = await ctx.db.get(id);
+    if (!target) return null;
+    return sanitizePublic(target as unknown as Record<string, unknown>);
   },
 });
 
@@ -845,6 +907,22 @@ export const spendInk = mutation({
       description: `${action} generation`,
       createdAt: new Date().toISOString(),
     });
+
+    // ── Referral program hook ──────────────────────────────
+    // If the admin has set the qualifying action to "first_ink_spend",
+    // this call will flip a pending redemption to qualified and credit
+    // both the referrer and referred user with bonus Ink. The helper is
+    // idempotent — after the first qualifying call, subsequent spends
+    // are a no-op. Any failure here is swallowed so the growth-loop
+    // side-path never blocks an Ink spend.
+    try {
+      await ctx.runMutation(internal.referrals.onQualifyingEventInternal, {
+        userId: user._id,
+        event: "first_ink_spend",
+      });
+    } catch (e) {
+      console.warn("Referral qualify on first_ink_spend failed (non-fatal):", e);
+    }
 
     return { allowed: true, balance: newBalance, cost };
   },

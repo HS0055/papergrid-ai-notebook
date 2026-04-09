@@ -28,6 +28,7 @@ import { TabBar, type TabId } from './ios/TabBar';
 import { BottomSheet } from './ios/BottomSheet';
 import { isNativeApp } from '../utils/platform';
 import { coverColorToHex, darkenHex } from '../utils/coverColors';
+import { normalizeExportColors } from '../utils/normalizeExportColors';
 import { useKeyboardHandler } from '../hooks/useKeyboardHandler';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
@@ -512,6 +513,8 @@ export const Dashboard: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
@@ -829,6 +832,14 @@ export const Dashboard: React.FC = () => {
     // (e.g. after the Convex outage), skip the debounce and fire the
     // sync on the next tick so stale cloud state can't race the user
     // closing the tab.
+    //
+    // BUG HISTORY: previously the `delay` variable was computed but
+    // never used — the setTimeout at the bottom of this block
+    // hardcoded `3000`, so the immediate-push-up recovery path never
+    // took effect. Users who hit the "cloud is behind local" branch
+    // in the loader still waited the full 3s debounce, which made
+    // the whole safeguard a no-op. Now the computed `delay` is
+    // actually passed to setTimeout below.
     const delay = needsPushUpRef.current ? 0 : 3000;
     needsPushUpRef.current = false;
     syncTimerRef.current = setTimeout(async () => {
@@ -867,7 +878,7 @@ export const Dashboard: React.FC = () => {
           return result?.id ?? prev;
         });
       }
-    }, 3000);
+    }, delay);
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
@@ -1276,21 +1287,186 @@ export const Dashboard: React.FC = () => {
     }));
   };
 
-  const handleExportPdf = () => {
-    // Show the "how to get a clean PDF" tip BEFORE opening the print
-    // dialog so the user sees it first. Chrome and Safari both ship
-    // with "Headers and footers" enabled by default — that's what
-    // renders the URL / date / 1/N at the edges of the PDF. There's
-    // no CSS way to force-disable it, so the best we can do is tell
-    // the user to uncheck it once. After that, their browser
-    // remembers the preference for this site.
-    addToast(
-      'Print dialog opening. In "More settings", uncheck "Headers and footers" for a clean PDF.',
-      'success',
-    );
-    // Small delay so the toast is readable before the native dialog
-    // steals focus from the page.
-    setTimeout(() => window.print(), 120);
+  const handleExportPdf = async () => {
+    // Programmatic PDF export via html-to-image + jsPDF.
+    //
+    // Why NOT html2pdf.js (previous attempt)?
+    //   html2pdf.js uses html2canvas internally, and html2canvas has a
+    //   hard blocker: it CANNOT parse the `oklab()` / `oklch()` CSS
+    //   color functions that Tailwind v4 uses throughout its default
+    //   palette. Every `.text-gray-700`, `.bg-rose-50`, etc resolved
+    //   to `oklch(...)` at runtime, and html2canvas threw
+    //   "Attempting to parse an unsupported color function 'oklab'"
+    //   the moment it walked into any styled element.
+    //
+    // Why NOT window.print()?
+    //   Browser print dialogs require the user to uncheck "Headers and
+    //   footers" and enable "Background graphics" — per-device
+    //   preferences we can't force from CSS.
+    //
+    // Why html-to-image?
+    //   It uses a different rasterization strategy that correctly
+    //   handles modern CSS color functions (oklab, oklch, lab, lch,
+    //   color()). Drop-in replacement for html2canvas with a cleaner
+    //   API and active maintenance.
+    //
+    // Why manual jsPDF composition?
+    //   html-to-image only rasterizes — it doesn't wrap in PDF. We
+    //   rasterize each [data-pdf-export-page] section separately,
+    //   then add each PNG as a new page in a jsPDF document. This
+    //   gives us per-page control and clean A4 pagination.
+    //
+    // Flow
+    //   1. Set isExportingPdf=true → renders the loading modal overlay
+    //      that hides the dashboard and blocks user input.
+    //   2. Add body.papera-exporting class → activates the off-screen
+    //      export tree at left: -99999px.
+    //   3. Dynamic import html-to-image + jsPDF (~400KB combined,
+    //      only loaded on first export).
+    //   4. Wait two animation frames so layout settles.
+    //   5. For each <section data-pdf-export-page>, rasterize to PNG
+    //      via toPng(). Update progress state between pages.
+    //   6. Compose all PNGs into a jsPDF document at A4 dimensions.
+    //   7. Save the PDF → browser download.
+    //   8. Always clean up: remove body class, reset state, clear
+    //      progress, even on error.
+
+    if (!activeNotebook) return;
+    if (activeNotebook.pages.length === 0) {
+      addToast('Add at least one page before exporting.', 'error');
+      return;
+    }
+
+    setIsExportingPdf(true);
+    setExportProgress({ current: 0, total: activeNotebook.pages.length + 1 });
+    document.body.classList.add('papera-exporting');
+
+    // Declared outside the try so the `finally` block can always
+    // restore inline color overrides, even if rasterization throws.
+    let restoreColors: (() => void) | null = null;
+
+    try {
+      // Dynamic imports — the ~400KB of PDF libraries only load on
+      // first export, keeping the dashboard initial bundle small.
+      const [{ toPng }, { jsPDF }] = await Promise.all([
+        import('html-to-image'),
+        import('jspdf'),
+      ]);
+
+      // Two animation frames so flex layout, paper textures, and any
+      // GSAP-driven transforms settle before the snapshot. html-to-image
+      // reads computed styles synchronously so the DOM must be in its
+      // final visual state before we call toPng().
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const exportRoot = document.querySelector<HTMLElement>(
+        '[data-pdf-export-root]',
+      );
+      if (!exportRoot) {
+        throw new Error('Export root not found in DOM');
+      }
+
+      // Proactively replace every `oklab()` / `oklch()` computed color
+      // inside the export tree with an `rgb(...)` equivalent via an
+      // off-screen canvas. This is belt-and-braces: html-to-image
+      // should handle modern colors, but its foreignObject → SVG →
+      // canvas path trips on them in some Chrome builds. Normalizing
+      // first guarantees the snapshot can't fail for color reasons.
+      // The returned `restoreColors` callback undoes every inline
+      // override so the dashboard UI isn't mutated after export.
+      // Assigned to the outer-scope variable so `finally` can call it.
+      restoreColors = normalizeExportColors(exportRoot);
+
+      const pageSections = Array.from(
+        exportRoot.querySelectorAll<HTMLElement>('[data-pdf-export-page]'),
+      );
+      if (pageSections.length === 0) {
+        throw new Error('No pages to export');
+      }
+
+      // A4 dimensions in points for jsPDF (595.28 × 841.89 pt).
+      // Using points (pt) is more reliable than mm across jsPDF
+      // versions and avoids float-rounding errors on page size.
+      const pdf = new jsPDF({
+        unit: 'pt',
+        format: 'a4',
+        orientation: 'portrait',
+        compress: true,
+      });
+      const pdfWidthPt = pdf.internal.pageSize.getWidth();
+      const pdfHeightPt = pdf.internal.pageSize.getHeight();
+
+      for (let i = 0; i < pageSections.length; i++) {
+        const section = pageSections[i];
+        setExportProgress({ current: i + 1, total: pageSections.length });
+
+        // pixelRatio: 2 gives retina-quality raster on high-DPI
+        // displays without blowing up file size for 4K monitors.
+        // We force backgroundColor on the snapshot to avoid
+        // transparent PNGs that render as black in the PDF.
+        const dataUrl = await toPng(section, {
+          pixelRatio: 2,
+          cacheBust: true,
+          backgroundColor: '#ffffff',
+          // Filter out any stray nodes that shouldn't be in the PDF
+          // (e.g. React devtools hooks, stale modals).
+          filter: (node) => {
+            if (!(node instanceof HTMLElement)) return true;
+            const skip = node.getAttribute('data-no-export');
+            return skip !== 'true';
+          },
+        });
+
+        if (i > 0) pdf.addPage();
+        // Fit the snapshot inside the page — same width, proportional
+        // height. If the snapshot is taller than a page it gets
+        // clipped; callers should keep each section under one A4
+        // sheet's worth of content (which our CSS enforces via
+        // min-height constraints).
+        pdf.addImage(
+          dataUrl,
+          'PNG',
+          0,
+          0,
+          pdfWidthPt,
+          pdfHeightPt,
+          undefined,
+          'FAST',
+        );
+      }
+
+      const safeFilename =
+        (activeNotebook.title?.trim() || 'notebook')
+          .replace(/[^\w\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .toLowerCase() + '.pdf';
+
+      pdf.save(safeFilename);
+
+      addToast('PDF downloaded.', 'success');
+    } catch (error) {
+      console.error('PDF export failed:', error);
+      const message =
+        error instanceof Error ? error.message : 'PDF export failed';
+      addToast(message, 'error');
+    } finally {
+      // Always clean up regardless of outcome. The dashboard should
+      // never be left in "exporting" mode with a frozen modal or with
+      // inline color overrides stuck on hundreds of elements.
+      if (restoreColors) {
+        try {
+          restoreColors();
+        } catch (restoreError) {
+          // Swallow — failing to restore would just leave a few
+          // inline rgb(...) values on the DOM which is harmless.
+          console.warn('Failed to restore colors after export:', restoreError);
+        }
+      }
+      document.body.classList.remove('papera-exporting');
+      setIsExportingPdf(false);
+      setExportProgress(null);
+    }
   };
 
   // Undo handler for block deletion
@@ -2190,6 +2366,61 @@ export const Dashboard: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* PDF Export Loading Modal — covers the screen while the
+          off-screen export tree is rasterized to a PDF. The user
+          sees ONLY this modal, never the raw export tree being
+          rendered. Progress updates per-page so large notebooks
+          feel responsive. */}
+      {isExportingPdf && (
+        <div
+          data-no-export="true"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-live="polite"
+          aria-label="Exporting PDF"
+        >
+          <div className="max-w-sm w-full mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden">
+            {/* Top gradient accent */}
+            <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-rose-500" />
+            <div className="px-8 py-8 text-center">
+              {/* Animated spinner */}
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-indigo-50 mb-5">
+                <div className="w-7 h-7 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+              </div>
+              <h3 className="font-serif text-2xl font-bold text-gray-900 mb-2">
+                Preparing your PDF
+              </h3>
+              <p className="text-sm text-gray-500 mb-5 leading-relaxed">
+                Rendering {activeNotebook?.title?.trim() || 'your notebook'} at
+                print quality. This takes a few seconds.
+              </p>
+              {/* Progress bar */}
+              {exportProgress && exportProgress.total > 0 && (
+                <>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-200 ease-out"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round(
+                            (exportProgress.current / exportProgress.total) * 100,
+                          ),
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 font-medium">
+                    Page {exportProgress.current} of {exportProgress.total}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* AI Cover Generation Modal */}
       <CoverGenModal
         isOpen={showCoverModal}

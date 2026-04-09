@@ -371,10 +371,17 @@ export const listFeed = query({
         )
       : [];
 
+    // Strip the raw `authorId` before returning. An internal user id
+    // has no business appearing in the public feed — it enables
+    // enumeration attacks (iterate the feed, pull every authorId,
+    // then call users.get on each to hydrate PII). Callers who need
+    // author metadata get it through `mapAuthorMeta` (handle,
+    // displayName, avatarUrl), which is safe to expose publicly.
     const out = rows.map((post, i) => {
       const authorMeta = authorMap.get(post.authorId as unknown as string);
+      const { authorId: _dropAuthorId, ...publicPost } = post;
       return {
-        ...post,
+        ...publicPost,
         ...mapAuthorMeta(authorMeta),
         likedByMe: viewer ? !!likeChecks[i] : false,
       };
