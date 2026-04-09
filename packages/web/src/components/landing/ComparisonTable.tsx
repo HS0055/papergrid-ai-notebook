@@ -305,9 +305,67 @@ export const ComparisonTable: React.FC = () => {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Mobile cards */}
+        <div className="md:hidden space-y-4">
+          {ROWS.map((row, i) => (
+            <div
+              key={i}
+              className="comparison-row rounded-3xl border p-4"
+              style={{ background: '#fff', borderColor: 'rgba(0,0,0,0.08)' }}
+            >
+              <div className="flex items-start gap-2 mb-4">
+                <div className="text-sm font-semibold leading-snug flex-1" style={{ color: 'var(--color-ink)' }}>
+                  {row.feature}
+                </div>
+                {row.note && (
+                  <div
+                    className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full"
+                    style={{ background: 'rgba(79,70,229,0.08)', color: 'var(--color-indigo-brand)' }}
+                  >
+                    <Info size={12} />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+                <div className="rounded-2xl px-3 py-3" style={{ background: 'rgba(79,70,229,0.06)' }}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--color-indigo-brand)' }}>
+                    Papera
+                  </div>
+                  <div>{renderCell(row.papera, true)}</div>
+                </div>
+                <div className="rounded-2xl px-3 py-3" style={{ background: '#f8fafc' }}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
+                    Goodnotes
+                  </div>
+                  <div>{renderCell(row.goodnotes, false)}</div>
+                </div>
+                <div className="rounded-2xl px-3 py-3" style={{ background: '#f8fafc' }}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
+                    Notability
+                  </div>
+                  <div>{renderCell(row.notability, false)}</div>
+                </div>
+                <div className="rounded-2xl px-3 py-3" style={{ background: '#f8fafc' }}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
+                    Notion
+                  </div>
+                  <div>{renderCell(row.notion, false)}</div>
+                </div>
+              </div>
+
+              {row.note && (
+                <p className="mt-3 text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                  {row.note}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop table */}
         <div
-          className="rounded-3xl overflow-hidden border"
+          className="hidden md:block rounded-3xl overflow-hidden border"
           style={{ background: '#fff', borderColor: 'rgba(0,0,0,0.08)' }}
         >
           {/* Header row */}

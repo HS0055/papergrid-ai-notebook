@@ -82,12 +82,11 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     emissiveIntensity: 0.35,
   }), []);
 
-  // Keep the cover text texture high-res even on mobile. The text plane is
-  // small, so this gives a sharp title/subtitle without bringing back the
-  // heavier full-cover material cost.
+  // Keep the main title on its own high-res texture so the wordmark stays
+  // crisp without reintroducing a heavier full-cover material.
   const titleMat = useMemo(() => {
     const w = isMobile ? 2048 : 4096;
-    const h = Math.round(w * 0.5);
+    const h = Math.round(w * 0.22);
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -97,29 +96,8 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#d4a574';
-
-    ctx.font = `bold italic ${Math.round(h * 0.34)}px "Playfair Display", Georgia, serif`;
-    ctx.fillText('Papera', w / 2, h * 0.34);
-
-    ctx.font = `${Math.round(h * (isMobile ? 0.085 : 0.07))}px "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-    ctx.fillStyle = isMobile ? '#d7ae7d' : '#c4956a';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    if (isMobile) {
-      ctx.fillText('THE NOTEBOOK', w / 2, h * 0.62);
-      ctx.fillText('THAT THINKS WITH YOU', w / 2, h * 0.72);
-    } else {
-      ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', w / 2, h * 0.66);
-    }
-
-    ctx.strokeStyle = isMobile ? '#d7ae7d' : '#c4956a';
-    ctx.lineWidth = Math.max(2, Math.round(h * (isMobile ? 0.005 : 0.004)));
-    const lineY = isMobile ? h * 0.84 : h * 0.79;
-    const lineHalf = w * (isMobile ? 0.22 : 0.24);
-    ctx.beginPath();
-    ctx.moveTo(w / 2 - lineHalf, lineY);
-    ctx.lineTo(w / 2 + lineHalf, lineY);
-    ctx.stroke();
+    ctx.font = `bold italic ${Math.round(h * 0.72)}px "Playfair Display", Georgia, serif`;
+    ctx.fillText('Papera', w / 2, h * 0.56);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -136,7 +114,59 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
       roughness: 0.1,
       metalness: 0.88,
       emissive: '#d4a574',
-      emissiveIntensity: 0.3,
+      emissiveIntensity: 0.34,
+    });
+  }, [isMobile]);
+
+  // Subtitle gets its own texture and plane so it is not starved of pixels on
+  // mobile. This is where the readability win comes from.
+  const subtitleMat = useMemo(() => {
+    const w = isMobile ? 2048 : 3072;
+    const h = Math.round(w * (isMobile ? 0.28 : 0.13));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, w, h);
+
+    const subtitleColor = isMobile ? '#e8c89d' : '#d7ae7d';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = subtitleColor;
+    ctx.strokeStyle = subtitleColor;
+    ctx.lineWidth = Math.max(2, Math.round(h * (isMobile ? 0.01 : 0.012)));
+    ctx.font = `${Math.round(h * (isMobile ? 0.24 : 0.29))}px "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+
+    if (isMobile) {
+      ctx.fillText('THE NOTEBOOK', w / 2, h * 0.3);
+      ctx.fillText('THAT THINKS WITH YOU', w / 2, h * 0.62);
+    } else {
+      ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', w / 2, h * 0.45);
+    }
+
+    const lineY = isMobile ? h * 0.88 : h * 0.8;
+    const lineHalf = w * (isMobile ? 0.24 : 0.18);
+    ctx.beginPath();
+    ctx.moveTo(w / 2 - lineHalf, lineY);
+    ctx.lineTo(w / 2 + lineHalf, lineY);
+    ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
+    tex.anisotropy = 16;
+    tex.needsUpdate = true;
+
+    return new THREE.MeshStandardMaterial({
+      map: tex,
+      transparent: true,
+      alphaTest: 0.02,
+      roughness: 0.18,
+      metalness: 0.72,
+      emissive: '#d4a574',
+      emissiveIntensity: 0.26,
     });
   }, [isMobile]);
 
@@ -175,27 +205,37 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     openRef.current = currentOpen.current;
 
     const open = currentOpen.current;
-    const glowStrength = hovered ? Math.max(0, 1 - open * 0.7) : 0;
+    const idleTime = state.clock.elapsedTime;
+    const mobileRestGlow = isMobile ? (0.18 + (Math.sin(idleTime * 1.7) + 1) * 0.04) : 0;
+    const glowStrength = isMobile
+      ? Math.max(mobileRestGlow, hovered ? 0.92 : 0.24) * Math.max(0.5, 1 - open * 0.45)
+      : (hovered ? Math.max(0, 1 - open * 0.7) : 0);
 
     titleMat.emissiveIntensity = THREE.MathUtils.lerp(
       titleMat.emissiveIntensity,
-      0.3 + glowStrength * 0.42,
+      0.34 + glowStrength * 0.38,
+      lerpFactor,
+    );
+    subtitleMat.emissiveIntensity = THREE.MathUtils.lerp(
+      subtitleMat.emissiveIntensity,
+      0.26 + glowStrength * 0.34,
       lerpFactor,
     );
 
-    // ── Cursor tilt (fades as book opens, disabled on mobile) ──
+    const rawCursorX = cursorRef?.current?.x ?? 0;
+    const rawCursorY = cursorRef?.current?.y ?? 0;
+    const cursorFollow = isMobile ? (1 - Math.pow(0.02, delta)) : lerpFactor;
+    currentCursorX.current = THREE.MathUtils.lerp(currentCursorX.current, rawCursorX, cursorFollow);
+    currentCursorY.current = THREE.MathUtils.lerp(currentCursorY.current, rawCursorY, cursorFollow);
+
+    // ── Cursor/touch tilt (desktop hover + mobile touch) ──
     let cursorTiltX = 0;
     let cursorTiltY = 0;
-    if (!isMobile) {
-      const rawCursorX = cursorRef?.current?.x ?? 0;
-      const rawCursorY = cursorRef?.current?.y ?? 0;
-      currentCursorX.current = THREE.MathUtils.lerp(currentCursorX.current, rawCursorX, lerpFactor);
-      currentCursorY.current = THREE.MathUtils.lerp(currentCursorY.current, rawCursorY, lerpFactor);
-
-      const cursorWeight = Math.max(0, 1 - open * 2); // fades by 50% open
-      cursorTiltX = currentCursorY.current * 0.08 * cursorWeight;
-      cursorTiltY = currentCursorX.current * 0.12 * cursorWeight;
-    }
+    const cursorWeight = isMobile
+      ? (hovered ? 0.34 : 0.14) * Math.max(0.5, 1 - open)
+      : Math.max(0, 1 - open * 2);
+    cursorTiltX = currentCursorY.current * (isMobile ? 0.04 : 0.08) * cursorWeight;
+    cursorTiltY = currentCursorX.current * (isMobile ? 0.08 : 0.12) * cursorWeight;
 
     goldMat.emissiveIntensity = THREE.MathUtils.lerp(
       goldMat.emissiveIntensity,
@@ -211,23 +251,23 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     if (titleGlowRef.current) {
       titleGlowRef.current.intensity = THREE.MathUtils.lerp(
         titleGlowRef.current.intensity,
-        0.2 + glowStrength * 1.9,
+        0.28 + glowStrength * 2.05,
         lerpFactor,
       );
       titleGlowRef.current.position.x = THREE.MathUtils.lerp(
         titleGlowRef.current.position.x,
-        hw + currentCursorX.current * 0.32,
+        hw + currentCursorX.current * (isMobile ? 0.42 : 0.32),
         lerpFactor,
       );
       titleGlowRef.current.position.y = THREE.MathUtils.lerp(
         titleGlowRef.current.position.y,
-        0.34 + currentCursorY.current * 0.18,
+        0.28 + currentCursorY.current * (isMobile ? 0.24 : 0.18),
         lerpFactor,
       );
     }
 
     // Hover scale
-    const targetHoverScale = hovered ? 1.06 : 1.0;
+    const targetHoverScale = hovered ? (isMobile ? 1.04 : 1.06) : 1.0;
     currentHoverScale.current = THREE.MathUtils.lerp(currentHoverScale.current, targetHoverScale, lerpFactor);
 
     // Front cover rotation — smooth ease-out curve for satisfying open feel
@@ -240,7 +280,6 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     frontCoverRef.current.rotation.y = -openEased * Math.PI * 0.52;
 
     // Idle sway — fades out as book opens for cleaner motion
-    const idleTime = state.clock.elapsedTime;
     const idleWeight = Math.max(0, 1 - open * 3); // fades by 33% open
     const idleSway = Math.sin(idleTime * 0.15) * 0.04 * idleWeight;
 
@@ -364,7 +403,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
             intensity={0.2}
             distance={3}
             decay={2}
-            position={[hw, 0.34, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.24]}
+            position={[hw, 0.28, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.24]}
           />
 
           <mesh
@@ -377,10 +416,17 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
           </mesh>
 
           <mesh
-            position={[hw, 0.3, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.002]}
+            position={[hw, 0.44, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.002]}
             material={titleMat}
           >
-            <planeGeometry args={[BOOK_WIDTH * 0.75, BOOK_WIDTH * 0.38]} />
+            <planeGeometry args={[BOOK_WIDTH * 0.72, BOOK_WIDTH * 0.16]} />
+          </mesh>
+
+          <mesh
+            position={[hw, isMobile ? -0.01 : -0.08, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.003]}
+            material={subtitleMat}
+          >
+            <planeGeometry args={[BOOK_WIDTH * 0.8, BOOK_WIDTH * (isMobile ? 0.22 : 0.1)]} />
           </mesh>
 
           {/* Right page (inside front cover - dotted pattern) */}

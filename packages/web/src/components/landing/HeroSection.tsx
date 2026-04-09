@@ -24,6 +24,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
   const pinContainerRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
   const isMobile = useIsMobile();
+  const mobileHoverTimeoutRef = useRef<number | null>(null);
 
   // Shared mutable ref — 3D scene reads this in useFrame, no React re-render needed
   const scrollRef = useRef({ progress: 0 });
@@ -33,6 +34,34 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
   const phase1Ref = useRef<HTMLDivElement>(null);
   const phase2Ref = useRef<HTMLDivElement>(null);
   const phase3Ref = useRef<HTMLDivElement>(null);
+
+  const clearMobileHoverTimeout = () => {
+    if (mobileHoverTimeoutRef.current !== null) {
+      window.clearTimeout(mobileHoverTimeoutRef.current);
+      mobileHoverTimeoutRef.current = null;
+    }
+  };
+
+  const scheduleMobileHoverReset = () => {
+    clearMobileHoverTimeout();
+    mobileHoverTimeoutRef.current = window.setTimeout(() => {
+      setHovered(false);
+      cursorRef.current.x = 0;
+      cursorRef.current.y = 0;
+      mobileHoverTimeoutRef.current = null;
+    }, 1400);
+  };
+
+  const updateTouchCursor = (touch: React.Touch | Touch, rect: DOMRect) => {
+    cursorRef.current.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+    cursorRef.current.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+  };
+
+  const engageMobileHover = (touch: React.Touch, rect: DOMRect) => {
+    updateTouchCursor(touch, rect);
+    setHovered(true);
+    scheduleMobileHoverReset();
+  };
 
   useEffect(() => {
     if (!sectionRef.current || !pinContainerRef.current) return;
@@ -95,6 +124,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     };
   }, [isMobile]);
 
+  useEffect(() => () => clearMobileHoverTimeout(), []);
+
   return (
     <section
       ref={sectionRef}
@@ -116,6 +147,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           cursorRef.current.x = 0;
           cursorRef.current.y = 0;
         }}
+        onTouchStart={isMobile ? (e) => {
+          const touch = e.touches[0];
+          if (!touch) return;
+          engageMobileHover(touch, e.currentTarget.getBoundingClientRect());
+        } : undefined}
+        onTouchMove={isMobile ? (e) => {
+          const touch = e.touches[0];
+          if (!touch) return;
+          engageMobileHover(touch, e.currentTarget.getBoundingClientRect());
+        } : undefined}
+        onTouchEnd={isMobile ? () => {
+          scheduleMobileHoverReset();
+        } : undefined}
+        onTouchCancel={isMobile ? () => {
+          scheduleMobileHoverReset();
+        } : undefined}
       >
         {/* Ambient glow blobs — centered to frame notebook */}
         {!isMobile && (

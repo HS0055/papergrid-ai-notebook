@@ -93,19 +93,53 @@ export const DemoVideoSection: React.FC<DemoVideoSectionProps> = ({
     return () => ctx.revert();
   }, []);
 
+  const playVideo = async (withSound: boolean) => {
+    if (!videoRef.current) return;
+
+    const video = videoRef.current;
+    const nextMuted = !withSound;
+
+    video.muted = nextMuted;
+    video.defaultMuted = nextMuted;
+    video.volume = 1;
+    setIsMuted(nextMuted);
+
+    try {
+      await video.play();
+    } catch {
+      if (!withSound) return;
+      video.muted = true;
+      video.defaultMuted = true;
+      setIsMuted(true);
+      await video.play().catch(() => undefined);
+    }
+  };
+
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
     } else {
-      void videoRef.current.play();
+      void playVideo(!isMuted);
     }
   };
 
-  const toggleMute = () => {
+  const toggleMute = async () => {
     if (!videoRef.current) return;
-    videoRef.current.muted = !videoRef.current.muted;
-    setIsMuted(videoRef.current.muted);
+
+    const video = videoRef.current;
+    const nextMuted = !video.muted;
+    video.muted = nextMuted;
+    video.defaultMuted = nextMuted;
+    if (!nextMuted) {
+      video.volume = 1;
+      try {
+        await video.play();
+      } catch {
+        // Ignore playback failures and leave the control visible.
+      }
+    }
+    setIsMuted(nextMuted);
   };
 
   const requestFullscreen = () => {
@@ -205,48 +239,83 @@ export const DemoVideoSection: React.FC<DemoVideoSectionProps> = ({
                   ref={videoRef}
                   src={videoSrc}
                   poster={posterSrc}
+                  preload="metadata"
                   playsInline
                   muted={isMuted}
                   onLoadedData={() => setHasLoaded(true)}
                   onLoadedMetadata={() => {
                     if (!videoRef.current) return;
                     videoRef.current.muted = isMuted;
+                    videoRef.current.defaultMuted = isMuted;
+                  }}
+                  onVolumeChange={() => {
+                    if (!videoRef.current) return;
+                    setIsMuted(videoRef.current.muted);
                   }}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
                   className="w-full h-full object-cover"
                 />
 
                 <button
                   onClick={toggleMute}
-                  className="absolute right-4 top-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-white transition-colors"
+                  className="absolute left-4 right-4 top-4 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left text-white transition-colors sm:left-auto sm:right-4 sm:w-auto sm:justify-start sm:rounded-full sm:px-3 sm:py-2"
                   style={{
                     background: 'rgba(15,17,26,0.72)',
                     border: '1px solid rgba(255,255,255,0.12)',
                     backdropFilter: 'blur(10px)',
                   }}
                 >
-                  {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-                  <span>{isMuted ? 'Sound off' : 'Sound on'}</span>
+                  <span className="inline-flex items-center gap-2 text-xs font-semibold sm:text-[13px]">
+                    {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                    {isMuted ? 'Voice included · Tap for sound' : 'Sound on'}
+                  </span>
+                  <span
+                    className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+                    style={{ color: 'rgba(165,180,252,0.9)' }}
+                  >
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </span>
                 </button>
 
                 {/* Custom play overlay */}
                 {!isPlaying && (
-                  <button
-                    onClick={togglePlay}
-                    className="absolute inset-0 flex items-center justify-center group"
-                    style={{ background: 'rgba(0,0,0,0.3)' }}
+                  <div
+                    className="absolute inset-0 flex items-center justify-center px-5"
+                    style={{ background: 'rgba(0,0,0,0.34)' }}
                   >
-                    <div
-                      className="flex items-center justify-center w-24 h-24 rounded-full transition-all group-hover:scale-110"
-                      style={{
-                        background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-                        boxShadow: '0 20px 60px rgba(79,70,229,0.5)',
-                      }}
-                    >
-                      <Play size={32} fill="#fff" stroke="#fff" strokeWidth={1} style={{ marginLeft: 4 }} />
+                    <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+                      <div className="flex w-full flex-col items-center gap-3">
+                        <button
+                          onClick={() => void playVideo(true)}
+                          className="inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl px-6 py-4 text-base font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                          style={{
+                            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                            boxShadow: '0 20px 60px rgba(79,70,229,0.45)',
+                          }}
+                        >
+                          <Play size={20} fill="#fff" stroke="#fff" strokeWidth={1} />
+                          Play with sound
+                        </button>
+                        <button
+                          onClick={() => void playVideo(false)}
+                          className="inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/12 active:bg-white/16"
+                          style={{
+                            background: 'rgba(15,17,26,0.72)',
+                            border: '1px solid rgba(255,255,255,0.14)',
+                            backdropFilter: 'blur(10px)',
+                          }}
+                        >
+                          <VolumeX size={16} />
+                          Play muted
+                        </button>
+                      </div>
+                      <p className="max-w-xs text-xs font-medium leading-relaxed" style={{ color: 'rgba(255,255,255,0.78)' }}>
+                        Voice walkthrough included. Start with sound, or preview silently and toggle audio anytime.
+                      </p>
                     </div>
-                  </button>
+                  </div>
                 )}
 
                 {/* Controls bar */}
