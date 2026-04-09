@@ -1345,6 +1345,11 @@ export const Dashboard: React.FC = () => {
     // restore inline color overrides, even if rasterization throws.
     let restoreColors: (() => void) | null = null;
 
+    // Textareas we forced to a fixed height during export. Restored
+    // in `finally` so the live dashboard isn't left with stuck
+    // inline heights after a successful OR failed export.
+    const lockedTextareas: Array<{ el: HTMLTextAreaElement; prev: string }> = [];
+
     try {
       // Dynamic imports — the ~400KB of PDF libraries only load on
       // first export, keeping the dashboard initial bundle small.
@@ -1360,15 +1365,31 @@ export const Dashboard: React.FC = () => {
         import('jspdf'),
       ]);
 
+      // Wait for every @font-face (Playfair Display on the cover,
+      // Inter for body text, etc.) to finish loading. Without this,
+      // the cold-cache path on Vercel rasterizes the first cover
+      // page with Georgia metrics, so the title word-wraps to a
+      // different line count than on-screen — visible as a cropped
+      // or shifted cover in the downloaded PDF.
+      if (document.fonts && typeof document.fonts.ready?.then === 'function') {
+        try {
+          await document.fonts.ready;
+        } catch {
+          // Non-fatal: continue with whatever fonts are loaded.
+        }
+      }
+
       // Two animation frames + a short timeout so flex layout, paper
       // textures, and any GSAP-driven transforms settle before the
       // snapshot. html-to-image reads computed styles synchronously
       // so the DOM must be in its final visual state before toJpeg.
-      // The setTimeout gives Vercel/Safari extra time to apply the
-      // `body.papera-exporting` class's layout rules.
+      // 300ms (up from 100ms) because production React batches
+      // effects differently than dev StrictMode's double-pass — some
+      // NotebookView measurement effects were still running when the
+      // snapshot loop started, producing inconsistent page heights.
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const exportRoot = document.querySelector<HTMLElement>(
         '[data-pdf-export-root]',
@@ -1446,6 +1467,29 @@ export const Dashboard: React.FC = () => {
         ),
       );
 
+      // ── Lock textarea heights ──
+      // In production, React effects flush after the snapshot loop
+      // begins, so auto-grow textareas can collapse back to their
+      // CSS minimum between pages — user text gets clipped on "bad"
+      // pages while "good" pages (where the effect happened to run
+      // in time) look fine. Forcing inline `height: scrollHeight`
+      // freezes every textarea at its full content height so the
+      // snapshot captures exactly what's on-screen, every time.
+      const exportTextareas = Array.from(
+        exportRoot.querySelectorAll<HTMLTextAreaElement>('textarea'),
+      );
+      for (const ta of exportTextareas) {
+        const prev = ta.style.height;
+        // scrollHeight reads the intrinsic content height. The
+        // earlier `void exportRoot.offsetHeight` reflow plus the
+        // 300ms settle delay guarantee this value is stable.
+        const target = Math.max(ta.scrollHeight, ta.offsetHeight);
+        if (target > 0) {
+          ta.style.height = `${target}px`;
+          lockedTextareas.push({ el: ta, prev });
+        }
+      }
+
       const pageSections = Array.from(
         exportRoot.querySelectorAll<HTMLElement>('[data-pdf-export-page]'),
       );
@@ -1474,13 +1518,19 @@ export const Dashboard: React.FC = () => {
         const section = pageSections[i];
         setExportProgress({ current: i + 1, total: pageSections.length });
 
-        // Force reflow and measure the section. If the layout hasn't
-        // settled (transient 0x0 state on production builds), fall
-        // back to the explicit A4 sheet size.
+        // Force reflow so computed styles reflect the final layout.
         void section.offsetHeight;
-        const rect = section.getBoundingClientRect();
-        const snapWidth = Math.max(A4_WIDTH_PX, Math.ceil(rect.width) || 0);
-        const snapHeight = Math.max(A4_HEIGHT_PX, Math.ceil(rect.height) || 0);
+
+        // Always snapshot at EXACT A4 dimensions. The CSS now caps
+        // every [data-pdf-export-frame] at 794×1123 with
+        // `overflow: hidden`, so the bitmap is always A4-shaped and
+        // jsPDF's addImage can paint it into the A4 sheet 1:1 with
+        // no stretching. The previous `Math.max(A4, rect)` fallback
+        // let pages with tall content capture at 794×1400+ which
+        // jsPDF then squished into A4, causing the font/texture
+        // distortion visible in the "bad page" screenshots.
+        const snapWidth = A4_WIDTH_PX;
+        const snapHeight = A4_HEIGHT_PX;
 
         // pixelRatio: 2 gives retina-quality raster on high-DPI
         // displays without blowing up file size for 4K monitors.
@@ -1530,8 +1580,7 @@ export const Dashboard: React.FC = () => {
           throw new Error(
             `Snapshot for page ${i + 1} is not a valid JPEG ` +
               `(got: ${dataUrl?.slice(0, 32) || 'empty'}, ` +
-              `section: ${snapWidth}x${snapHeight}, ` +
-              `rect: ${Math.ceil(rect.width)}x${Math.ceil(rect.height)})`,
+              `section: ${snapWidth}x${snapHeight})`,
           );
         }
 
@@ -1579,6 +1628,12 @@ export const Dashboard: React.FC = () => {
           // inline rgb(...) values on the DOM which is harmless.
           console.warn('Failed to restore colors after export:', restoreError);
         }
+      }
+      // Restore any textarea heights we forced for the snapshot.
+      // React will also reset these on the next render, but being
+      // explicit avoids a flicker if the user exports twice in a row.
+      for (const { el, prev } of lockedTextareas) {
+        el.style.height = prev;
       }
       document.body.classList.remove('papera-exporting');
       setIsExportingPdf(false);

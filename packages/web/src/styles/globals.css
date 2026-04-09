@@ -834,29 +834,88 @@
 }
 
 /* ========================================
-   PRINT STYLES
-   ======================================== */
+   PRINT STYLES — PDF EXPORT
+   ========================================
+   The export tree is defined in Dashboard.tsx as <ExportNotebookDocument>
+   and marked with [data-pdf-export-root]. On screen it is fully hidden
+   via `display: none` below.
+
+   Two activation paths share the same rules:
+
+     1. `body.papera-exporting` — added by handleExportPdf BEFORE
+        calling html2pdf.js. The export tree becomes visible in a
+        fixed, off-screen container that html2canvas can snapshot.
+        Produces a clean PDF with NO browser chrome, NO checkbox
+        friction for the user. This is the primary path.
+
+     2. `@media print` — fallback for users who hit Cmd/Ctrl+P
+        directly or prefer the native dialog. Works but requires the
+        user to uncheck "Headers and footers" and enable "Background
+        graphics" in the browser print dialog. */
 
 [data-pdf-export-root] {
   display: none;
 }
 
+/* Path 1: programmatic export via html-to-image + jsPDF.
+ *
+ * We position the export tree OFF-SCREEN so the user never sees it
+ * during the export. html-to-image serializes the DOM by element, so
+ * the element doesn't need to be in the viewport — only in the
+ * layout tree with non-zero dimensions. `left: -99999px` is the
+ * canonical way to do this without affecting accessibility tooling
+ * or triggering a layout reflow of the visible dashboard. */
+body.papera-exporting [data-pdf-export-root] {
+  display: block !important;
+  position: absolute;
+  left: -99999px;
+  top: 0;
+  width: 794px; /* ~A4 width at 96 DPI — matches html-to-image snapshot width */
+  background: white;
+  pointer-events: none;
+  /* NOTE: no `visibility: hidden` — html-to-image can't serialize
+     elements that are visibility:hidden or display:none. They have
+     to be laid out with real dimensions. The off-screen positioning
+     is the trick. */
+}
+
+/* Both paths share every rule below via the combined selector at
+   each declaration, so maintenance stays in one place. */
+
 @media print {
   @page {
-    size: auto;
-    margin: 10mm;
+    /* A4 is the global default; browsers that prefer Letter will
+       adjust to local paper size. `margin: 0` removes the browser's
+       own padding so our content can run edge-to-edge. We add our
+       own internal padding on [data-pdf-export-frame] below. */
+    size: A4;
+    margin: 0;
   }
 
-  [data-dashboard-shell] {
+  /* Hide every non-export piece of the dashboard, including toast
+     containers, floating CTAs, modals, and sidebar. */
+  [data-dashboard-shell],
+  [data-floating-cta-bar] {
     display: none !important;
   }
 
-  body, html {
+  html,
+  body {
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
   }
 
+  /* Force ALL backgrounds and colors to print exactly — otherwise
+     Chrome/Safari flatten gradients and paper textures to white. */
+  *,
+  *::before,
+  *::after {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Activate the export tree (hidden on screen, shown in print). */
   [data-pdf-export-root] {
     display: block !important;
     background: white !important;
@@ -864,8 +923,12 @@
 
   [data-pdf-export-page] {
     display: block;
+    /* Each <section> prints on its own sheet. `break-after: page`
+       is the modern rule; `page-break-after` is the older alias
+       kept for WebKit print engines. */
     break-after: page;
     page-break-after: always;
+    break-inside: avoid;
   }
 
   [data-pdf-export-page]:last-child {
@@ -875,22 +938,34 @@
 
   [data-pdf-export-frame] {
     position: relative;
-    min-height: calc(100vh - 20mm);
-    background: white !important;
-    color: #111827 !important;
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    border-radius: 28px;
-    overflow: hidden;
+    /* Each printed page fills the printable area. We use min-height
+       rather than fixed height so tall notebook pages can flow to
+       additional sheets naturally. */
+    min-height: 100vh;
+    /* Internal padding replaces the @page margin we dropped above.
+       15mm top/bottom + 12mm sides is a typical book-print safe area. */
+    padding: 15mm 12mm;
+    box-sizing: border-box;
+    color: #111827;
+    /* IMPORTANT: NO `background: white !important` here. The previous
+       version had it and it overrode the inline cover gradient set
+       via React props, AND stomped on the paper textures nested
+       inside NotebookView. */
   }
 
+  /* ── Cover page ─────────────────────────────────────── */
   [data-pdf-export-cover-card="true"] {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 28mm 20mm 20mm;
-    background:
-      radial-gradient(circle at top, rgba(99, 102, 241, 0.12), transparent 34%),
-      linear-gradient(180deg, #ffffff 0%, #eef2ff 100%);
+    gap: 20mm;
+    padding: 28mm 22mm;
+    min-height: 100vh;
+    color: #ffffff;
+    /* Cover receives its gradient background via inline style from
+       React (ExportNotebookDocument uses coverColorToHex on the
+       notebook's coverColor). Don't declare background here or it
+       will clobber the inline style. */
   }
 
   [data-pdf-export-cover-brand] {
@@ -898,98 +973,152 @@
     justify-content: flex-start;
   }
 
+  /* Force the Logo to render white on the colored cover. */
+  [data-pdf-export-cover-card="true"] [data-pdf-export-cover-brand] * {
+    color: #ffffff !important;
+  }
+
   [data-pdf-export-cover-body] {
     display: flex;
     flex: 1;
     flex-direction: column;
     justify-content: center;
-    gap: 10px;
+    gap: 12px;
   }
 
   [data-pdf-export-eyebrow] {
     margin: 0;
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: #4f46e5;
+    color: rgba(255, 255, 255, 0.7);
   }
 
   [data-pdf-export-title] {
     margin: 0;
-    font-size: 32px;
-    line-height: 1.1;
-    color: #111827;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 56px;
+    line-height: 1.05;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.02em;
   }
 
   [data-pdf-export-subtitle] {
     margin: 0;
     font-size: 14px;
-    color: #475569;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  [data-pdf-export-cover-footer] {
+    display: flex;
+    justify-content: flex-end;
   }
 
   [data-pdf-export-cover-watermark] {
-    align-self: flex-end;
-    font-size: 12px;
-    color: rgba(79, 70, 229, 0.72);
-    letter-spacing: 0.08em;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: 0.18em;
     text-transform: uppercase;
   }
 
+  /* ── Content page header (branded only) ────────────── */
   [data-pdf-export-header] {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 14px 18px;
+    gap: 10px;
+    padding: 0 0 10px;
+    margin-bottom: 10px;
     border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    color: #334155;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    text-transform: uppercase;
   }
 
+  /* ── Content page body ─────────────────────────────── */
   [data-pdf-export-notebook] {
-    padding: 12px;
+    /* Explicit min-height so NotebookView's `flex-1 min-h-0` children
+       can actually resolve to a non-zero size. Without this the page
+       body collapsed and showed as an empty gray rectangle. */
+    min-height: calc(100vh - 55mm);
+    display: flex;
+    flex-direction: column;
   }
 
+  /* NotebookView's internal scroll container shouldn't cap height
+     in print — we want content to flow to as many pages as needed. */
   [data-pdf-export-notebook] [data-scroll-container] {
     overflow: visible !important;
     padding-bottom: 0 !important;
     max-height: none !important;
+    min-height: inherit;
+    flex: 1 1 auto;
   }
 
-  [data-pdf-export-notebook] button {
+  /* Keep the paper textures (lines, grid, dots, music, etc.)
+     rendering on printed pages. An earlier rule forced
+     `background: white` on the frame which cascaded down and killed
+     these. */
+  [data-pdf-export-notebook] .paper-lines,
+  [data-pdf-export-notebook] .paper-grid,
+  [data-pdf-export-notebook] .paper-dots,
+  [data-pdf-export-notebook] .paper-music,
+  [data-pdf-export-notebook] .paper-isometric,
+  [data-pdf-export-notebook] .paper-hex,
+  [data-pdf-export-notebook] [class*="paper-"] {
+    background-color: #fdfbf7 !important;
+  }
+
+  /* Hide all interactive chrome: buttons, drag handles, toolbars. */
+  [data-pdf-export-notebook] button,
+  [data-pdf-export-notebook] [data-testid="drag-handle"],
+  [data-pdf-export-notebook] [aria-label*="drag"] {
     display: none !important;
   }
 
+  /* Render text inputs and textareas as plain text (no borders, no
+     focus rings). */
   [data-pdf-export-notebook] input,
   [data-pdf-export-notebook] textarea {
     background: transparent !important;
     box-shadow: none !important;
+    border: none !important;
     color: #111827 !important;
   }
 
   [data-pdf-export-notebook] textarea {
     overflow: visible !important;
+    resize: none !important;
   }
 
+  /* ── Content page footer ───────────────────────────── */
   [data-pdf-export-footer] {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 18px 16px;
+    padding-top: 10px;
+    margin-top: 10px;
     border-top: 1px solid rgba(15, 23, 42, 0.08);
-    font-size: 11px;
-    color: #64748b;
+    font-size: 10px;
+    font-weight: 500;
+    color: #94a3b8;
+    letter-spacing: 0.04em;
   }
 
+  /* ── Watermark (free plan) ─────────────────────────── */
   [data-pdf-export-watermark] {
-    position: absolute;
-    inset: auto 18px 52px auto;
-    font-size: 11px;
-    color: rgba(79, 70, 229, 0.55);
-    letter-spacing: 0.08em;
+    position: fixed;
+    bottom: 6mm;
+    right: 12mm;
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(79, 70, 229, 0.4);
+    letter-spacing: 0.18em;
     text-transform: uppercase;
   }
 
@@ -999,11 +1128,191 @@
     box-shadow: none !important;
     border-radius: 0 !important;
   }
+}
 
-  * {
-    print-color-adjust: exact !important;
-    -webkit-print-color-adjust: exact !important;
-  }
+/* ========================================
+   PDF EXPORT via html2pdf.js (body.papera-exporting)
+   ========================================
+   Mirrors the @media print rules above so html2pdf can render the
+   export tree with the same layout and styling. html2canvas
+   (html2pdf's rasterizer) snapshots whatever is currently visible
+   in the DOM, so we temporarily attach `body.papera-exporting` and
+   position the export root on top of everything while the snapshot
+   runs, then clean up.
+
+   Everything in this block is deliberately duplicated from
+   @media print above. Changing one should change the other. */
+
+body.papera-exporting [data-pdf-export-page] {
+  display: block;
+  /* No page-break in on-screen render — html2pdf handles pagination
+     via its pagebreak option, not CSS page breaks. */
+  page-break-after: auto;
+}
+
+body.papera-exporting [data-pdf-export-frame] {
+  position: relative;
+  /* Fixed sheet dimensions in px for html-to-image consistency.
+     A4 = 210×297 mm = 794×1123 px at 96 DPI.
+     `height` (not `min-height`) + `overflow: hidden` guarantees
+     every snapshot is EXACTLY A4-shaped. Without this cap, pages
+     with tall content grew beyond 1123px and jsPDF's addImage
+     stretched the raster into A4, distorting fonts and textures. */
+  width: 794px;
+  height: 1123px;
+  overflow: hidden;
+  padding: 56px 45px; /* ~15mm top/bottom, ~12mm sides */
+  margin: 0 0 40px;
+  box-sizing: border-box;
+  color: #111827;
+  background: white;
+}
+
+body.papera-exporting [data-pdf-export-cover-card="true"] {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 72px;
+  padding: 106px 83px; /* ~28mm top/bottom, ~22mm sides */
+  width: 794px;
+  height: 1123px;
+  overflow: hidden;
+  color: #ffffff;
+  margin: 0 0 40px;
+  box-sizing: border-box;
+}
+
+body.papera-exporting [data-pdf-export-cover-brand] {
+  display: flex;
+  justify-content: flex-start;
+}
+
+body.papera-exporting [data-pdf-export-cover-card="true"] [data-pdf-export-cover-brand] * {
+  color: #ffffff !important;
+}
+
+body.papera-exporting [data-pdf-export-cover-body] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+body.papera-exporting [data-pdf-export-eyebrow] {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+body.papera-exporting [data-pdf-export-title] {
+  margin: 0;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 56px;
+  line-height: 1.05;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+body.papera-exporting [data-pdf-export-subtitle] {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+body.papera-exporting [data-pdf-export-cover-footer] {
+  display: flex;
+  justify-content: flex-end;
+}
+
+body.papera-exporting [data-pdf-export-cover-watermark] {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+body.papera-exporting [data-pdf-export-header] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+body.papera-exporting [data-pdf-export-notebook] {
+  /* A4 height (1123px) − frame padding (~120px total) − header/footer
+     bars (~80px combined) = ~920px of breathing room for the notebook.
+     Fixed `height` + `overflow: hidden` prevents any block tree from
+     pushing the frame past A4. Anything that doesn't fit is clipped
+     (matches on-screen scroll-capped behavior). */
+  height: 920px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body.papera-exporting [data-pdf-export-notebook] [data-scroll-container] {
+  overflow: visible !important;
+  padding-bottom: 0 !important;
+  max-height: none !important;
+  min-height: inherit;
+  flex: 1 1 auto;
+}
+
+body.papera-exporting [data-pdf-export-notebook] button,
+body.papera-exporting [data-pdf-export-notebook] [data-testid="drag-handle"],
+body.papera-exporting [data-pdf-export-notebook] [aria-label*="drag"] {
+  display: none !important;
+}
+
+body.papera-exporting [data-pdf-export-notebook] input,
+body.papera-exporting [data-pdf-export-notebook] textarea {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  color: #111827 !important;
+}
+
+body.papera-exporting [data-pdf-export-notebook] textarea {
+  overflow: visible !important;
+  resize: none !important;
+}
+
+body.papera-exporting [data-pdf-export-footer] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+  letter-spacing: 0.04em;
+}
+
+body.papera-exporting [data-pdf-export-watermark] {
+  position: absolute;
+  bottom: 8mm;
+  right: 12mm;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(79, 70, 229, 0.4);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 /* ========================================
