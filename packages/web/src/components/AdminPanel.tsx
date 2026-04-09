@@ -208,46 +208,26 @@ export function AdminPanel() {
     );
   }
 
-  const handleBootstrap = async () => {
-    try {
-      setActionLoading('bootstrap');
-      const res = await fetch(`${API_BASE}/api/admin/bootstrap`, {
-        method: 'POST',
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Bootstrap failed');
-      // Retry loading admin panel
-      setError(null);
-      fetchUsers();
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Bootstrap failed');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   if (error) {
+    // Access-Denied screen. We DELIBERATELY do NOT expose any
+    // "become admin" affordance here — admin promotion is CLI-only via
+    // `npx convex run users:promoteByEmailInternal --email ...`. The
+    // previous "Become First Admin" button was misleading security
+    // theater: the server endpoint is already gated by the
+    // ADMIN_BOOTSTRAP_TOKEN header (which the browser never sends), so
+    // clicking it always failed — but it signalled to visitors that a
+    // privilege-escalation path existed. Removed to avoid any doubt.
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-sm border p-8 max-w-md text-center">
           <div className="text-red-500 text-lg font-medium mb-2">Access Denied</div>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={handleBootstrap}
-              disabled={actionLoading === 'bootstrap'}
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
-            >
-              {actionLoading === 'bootstrap' ? 'Promoting...' : 'Become First Admin'}
-            </button>
-            <button
-              onClick={() => navigate('/app')}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Back to App
-            </button>
-          </div>
+          <p className="text-gray-600 mb-4">You do not have permission to view this page.</p>
+          <button
+            onClick={() => navigate('/app')}
+            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Back to App
+          </button>
         </div>
       </div>
     );

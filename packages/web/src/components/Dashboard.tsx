@@ -27,6 +27,7 @@ import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
 import { TabBar, type TabId } from './ios/TabBar';
 import { BottomSheet } from './ios/BottomSheet';
 import { isNativeApp } from '../utils/platform';
+import { coverColorToHex, darkenHex } from '../utils/coverColors';
 import { useKeyboardHandler } from '../hooks/useKeyboardHandler';
 
 // Lazy-load 3D components (Three.js chunk loads on demand)
@@ -368,59 +369,101 @@ const ExportNotebookDocument: React.FC<ExportNotebookDocumentProps> = ({
   const noopUpdatePage = useCallback((_updatedPage: NotebookPage) => {}, []);
   const coverTitle = notebook.title?.trim() || 'Untitled Notebook';
   const pageCount = notebook.pages.length;
+  const exportDate = new Date().toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  // Resolve the notebook's cover color to an inline gradient so the
+  // printed cover page matches the on-screen notebook identity. `coverColor`
+  // is stored as a Tailwind class name like `bg-indigo-900`; we map it
+  // through `coverColorToHex` because @media print can't reference
+  // Tailwind utility classes set at runtime reliably.
+  const coverHex = coverColorToHex(notebook.coverColor || 'bg-indigo-900');
+  const coverDarkHex = darkenHex(coverHex, 0.65);
 
   return (
-    <div data-pdf-export-root aria-hidden="true">
+    // NOTE: no aria-hidden — the export tree IS the content readable
+    // in the exported PDF. We hide it from on-screen users via
+    // `display: none` in globals.css instead.
+    <div data-pdf-export-root>
+      {/* ── Cover page ───────────────────────────────────── */}
       <section data-pdf-export-page data-pdf-export-cover="true">
-        <div data-pdf-export-frame data-pdf-export-cover-card="true">
+        <div
+          data-pdf-export-frame
+          data-pdf-export-cover-card="true"
+          style={{
+            backgroundImage: `linear-gradient(155deg, ${coverHex} 0%, ${coverDarkHex} 100%)`,
+          }}
+        >
           {branded ? (
             <div data-pdf-export-cover-brand>
-              <Logo variant="light" size={36} />
+              <Logo variant="dark" size={40} />
             </div>
           ) : null}
+
           <div data-pdf-export-cover-body>
-            <p data-pdf-export-eyebrow>Notebook Export</p>
+            <p data-pdf-export-eyebrow>Notebook</p>
             <h1 data-pdf-export-title>{coverTitle}</h1>
             <p data-pdf-export-subtitle>
-              {pageCount} {pageCount === 1 ? 'page' : 'pages'} together as one PDF
+              {pageCount} {pageCount === 1 ? 'page' : 'pages'} · Exported {exportDate}
             </p>
           </div>
-          {watermarked ? (
-            <div data-pdf-export-cover-watermark>Created with Papera</div>
-          ) : null}
+
+          <div data-pdf-export-cover-footer>
+            {watermarked ? (
+              <span data-pdf-export-cover-watermark>Created with Papera</span>
+            ) : null}
+          </div>
         </div>
       </section>
 
-      {notebook.pages.map((page, index) => (
-        <section key={page.id} data-pdf-export-page>
-          <div data-pdf-export-frame>
-            {branded ? (
-              <div data-pdf-export-header>
-                <Logo variant="light" size={22} />
-                <span>{coverTitle}</span>
+      {/* ── Content pages ────────────────────────────────── */}
+      {notebook.pages.map((page, index) => {
+        const rawTitle = page.title?.trim();
+        const pageLabel = `Page ${index + 1} of ${pageCount}`;
+        // Only show a meaningful left footer label. When the title is
+        // empty or already matches the default "Page N" string, fall
+        // back to the notebook's cover title so the footer doesn't
+        // repeat the page number twice (the previous bug showed
+        // "Page 1" on the left and "Page 1 of 1" on the right).
+        const defaultPageName = `Page ${index + 1}`.toLowerCase();
+        const leftLabel =
+          rawTitle && rawTitle.toLowerCase() !== defaultPageName
+            ? rawTitle
+            : coverTitle;
+        return (
+          <section key={page.id} data-pdf-export-page>
+            <div data-pdf-export-frame>
+              {branded ? (
+                <div data-pdf-export-header>
+                  <Logo variant="light" size={20} />
+                  <span>{coverTitle}</span>
+                </div>
+              ) : null}
+
+              <div data-pdf-export-notebook>
+                <NotebookView
+                  page={page}
+                  onUpdatePage={noopUpdatePage}
+                  allPages={notebook.pages}
+                  hideChrome
+                />
               </div>
-            ) : null}
 
-            <div data-pdf-export-notebook>
-              <NotebookView
-                page={page}
-                onUpdatePage={noopUpdatePage}
-                allPages={notebook.pages}
-                hideChrome
-              />
+              <div data-pdf-export-footer>
+                <span>{leftLabel}</span>
+                <span>{pageLabel}</span>
+              </div>
+
+              {watermarked ? (
+                <div data-pdf-export-watermark>Created with Papera</div>
+              ) : null}
             </div>
-
-            <div data-pdf-export-footer>
-              <span>{page.title?.trim() || `Page ${index + 1}`}</span>
-              <span>Page {index + 1} of {pageCount}</span>
-            </div>
-
-            {watermarked ? (
-              <div data-pdf-export-watermark>Created with Papera</div>
-            ) : null}
-          </div>
-        </section>
-      ))}
+          </section>
+        );
+      })}
     </div>
   );
 };
@@ -1234,8 +1277,20 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleExportPdf = () => {
-    window.print();
-    addToast('Print dialog opened. Choose Save as PDF.', 'success');
+    // Show the "how to get a clean PDF" tip BEFORE opening the print
+    // dialog so the user sees it first. Chrome and Safari both ship
+    // with "Headers and footers" enabled by default — that's what
+    // renders the URL / date / 1/N at the edges of the PDF. There's
+    // no CSS way to force-disable it, so the best we can do is tell
+    // the user to uncheck it once. After that, their browser
+    // remembers the preference for this site.
+    addToast(
+      'Print dialog opening. In "More settings", uncheck "Headers and footers" for a clean PDF.',
+      'success',
+    );
+    // Small delay so the toast is readable before the native dialog
+    // steals focus from the page.
+    setTimeout(() => window.print(), 120);
   };
 
   // Undo handler for block deletion

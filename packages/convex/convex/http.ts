@@ -2216,79 +2216,25 @@ http.route({
 
 // ── Admin endpoints ──────────────────────────────────────
 
-// Bootstrap first admin (one-time, only works when no admin exists).
+// NOTE: The previous POST /api/admin/bootstrap route has been removed.
 //
-// Gate: the request MUST carry an `X-Bootstrap-Token` header whose value
-// matches `process.env.ADMIN_BOOTSTRAP_TOKEN`. Without this header, the
-// mutation cannot be triggered — previously anyone could race to claim
-// admin on a fresh deploy.
-http.route({
-  path: "/api/admin/bootstrap",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const corsHeaders = makeCorsHeaders(request);
-    try {
-      const expectedToken = process.env.ADMIN_BOOTSTRAP_TOKEN;
-      if (!expectedToken) {
-        return new Response(
-          JSON.stringify({ error: "Admin bootstrap is disabled (ADMIN_BOOTSTRAP_TOKEN unset)" }),
-          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      const providedToken = request.headers.get("x-bootstrap-token") ?? "";
-      // Constant-time comparison to prevent timing oracles.
-      if (providedToken.length !== expectedToken.length) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      let diff = 0;
-      for (let i = 0; i < providedToken.length; i++) {
-        diff |= providedToken.charCodeAt(i) ^ expectedToken.charCodeAt(i);
-      }
-      if (diff !== 0) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Identify the calling user via session token, then promote them
-      // through the internal mutation.
-      const sessionToken = getSessionTokenFromRequest(request) ?? undefined;
-      if (!sessionToken) {
-        return new Response(JSON.stringify({ error: "Not authenticated" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const me = await ctx.runQuery(api.users.getCurrentUser, { sessionToken });
-      if (!me) {
-        return new Response(JSON.stringify({ error: "Not authenticated" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const result = await ctx.runMutation(internal.users.bootstrapAdminInternal, {
-        userId: (me as any)._id,
-      });
-      return new Response(JSON.stringify(result), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } catch (error: any) {
-      const message = extractErrorMessage(error, "Bootstrap failed");
-      const status = message.includes("Forbidden") ? 403 : message.includes("Not authenticated") ? 401 : 500;
-      return new Response(JSON.stringify({ error: message }), {
-        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-  }),
-});
-
-http.route({
-  path: "/api/admin/bootstrap",
-  method: "OPTIONS",
-  handler: httpAction(async (_ctx, request) => {
-    return new Response(null, { status: 204, headers: makeCorsHeaders(request) });
-  }),
-});
+// Admin promotion is now CLI-only to eliminate any attack surface:
+//   npx convex run users:promoteByEmailInternal --email "you@domain.com"
+//
+// Why this route was removed:
+//   1. The AdminPanel error page exposed a "Become First Admin" button
+//      that pointed at this endpoint. Even though the server required a
+//      matching `X-Bootstrap-Token` header (so the button never actually
+//      worked from a browser), its presence in the UI signalled a
+//      privilege-escalation path to anyone visiting /admin.
+//   2. A CLI-only flow is strictly safer: `promoteByEmailInternal` is
+//      an `internalMutation` so it can't be invoked over HTTP at all,
+//      and it can't be accessed without direct access to the Convex
+//      deploy keys.
+//   3. The legacy dual-layer gate (ADMIN_BOOTSTRAP_TOKEN env var +
+//      "no admin exists yet" guard in bootstrapAdminInternal) was fine
+//      as defence-in-depth, but it's still one extra HTTP endpoint to
+//      keep audited/rotated. Deleting it is cheaper than defending it.
 
 http.route({
   path: "/api/admin/users",
