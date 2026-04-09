@@ -25,6 +25,7 @@ import type * as referenceLayouts from "../referenceLayouts.js";
 import type * as referrals from "../referrals.js";
 import type * as referralsHttp from "../referralsHttp.js";
 import type * as siteConfig from "../siteConfig.js";
+import type * as stripeSync from "../stripeSync.js";
 import type * as stripeWebhook from "../stripeWebhook.js";
 import type * as users from "../users.js";
 import type * as waitlist from "../waitlist.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   referrals: typeof referrals;
   referralsHttp: typeof referralsHttp;
   siteConfig: typeof siteConfig;
+  stripeSync: typeof stripeSync;
   stripeWebhook: typeof stripeWebhook;
   users: typeof users;
   waitlist: typeof waitlist;

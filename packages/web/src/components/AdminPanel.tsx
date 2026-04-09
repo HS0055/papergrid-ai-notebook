@@ -8,6 +8,7 @@ import { InkCostsEditor } from './admin/InkCostsEditor';
 import { WaitlistViewer } from './admin/WaitlistViewer';
 import { AffiliatesAdmin } from './admin/AffiliatesAdmin';
 import { ReferralsAdmin } from './admin/ReferralsAdmin';
+import { CommunityAdmin } from './admin/CommunityAdmin';
 
 type AdminTab =
   | 'users'
@@ -15,6 +16,7 @@ type AdminTab =
   | 'pricing'
   | 'ink-costs'
   | 'roadmap'
+  | 'community'
   | 'waitlist'
   | 'affiliates'
   | 'referrals';
@@ -25,6 +27,7 @@ const TAB_ORDER: Array<{ id: AdminTab; label: string; subtitle: string }> = [
   { id: 'pricing', label: 'Pricing', subtitle: 'Landing page display' },
   { id: 'ink-costs', label: 'Ink Costs', subtitle: 'Cost per action' },
   { id: 'roadmap', label: 'Roadmap', subtitle: 'What ships next' },
+  { id: 'community', label: 'Community', subtitle: 'Replies + news' },
   { id: 'waitlist', label: 'Waitlist', subtitle: 'iOS early access' },
   { id: 'affiliates', label: 'Affiliates', subtitle: 'Apps + payouts' },
   { id: 'referrals', label: 'Referrals', subtitle: 'User growth loop' },
@@ -344,6 +347,12 @@ export function AdminPanel() {
         {activeTab === 'roadmap' && (
           <div>
             <RoadmapEditor />
+          </div>
+        )}
+
+        {activeTab === 'community' && (
+          <div>
+            <CommunityAdmin />
           </div>
         )}
 

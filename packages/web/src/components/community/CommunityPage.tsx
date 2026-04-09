@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Loader2, X, Send, ChevronUp, MessageCircle,
   Lightbulb, Bug, MessageSquare, Megaphone, Sparkles, Circle, Check,
-  CheckCircle2, Clock, XCircle,
+  CheckCircle2, Clock, XCircle, Pin, ShieldCheck,
 } from 'lucide-react';
 import { api as apiClient, getSessionToken } from '../../services/apiClient';
 import { useAuth } from '../../hooks/useAuth';
@@ -16,7 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 //  • Users vote on feature requests ("Feature Requests" tab)
 //  • Users post bugs ("Bugs" tab)
 //  • Users leave free-form feedback ("Feedback" tab)
-//  • Admins post changelog entries ("Updates" tab) — admin-only
+//  • Admins post changelog entries ("News" tab) — admin-only
 //
 // The vote count is the existing likeCount under the hood so the whole
 // like/comment infrastructure still powers it; we just rename the UI
@@ -40,9 +40,11 @@ interface FeedPost {
   kind?: Kind | 'discussion';
   roadmapStatus?: 'open' | 'planned' | 'in_progress' | 'shipped' | 'declined';
   createdAt: string;
+  pinnedAt?: string;
   authorHandle?: string;
   authorDisplayName?: string;
   authorAvatarUrl?: string;
+  authorRole?: 'user' | 'admin';
   likedByMe?: boolean;
 }
 
@@ -59,9 +61,11 @@ interface Comment {
   body: string;
   likeCount: number;
   createdAt: string;
+  parentCommentId?: string;
   authorHandle?: string;
   authorDisplayName?: string;
   authorAvatarUrl?: string;
+  authorRole?: 'user' | 'admin';
 }
 
 const KINDS: Array<{
@@ -90,9 +94,9 @@ const KINDS: Array<{
   },
   {
     id: 'announcement',
-    label: 'Updates',
+    label: 'News',
     icon: <Megaphone size={16} />,
-    description: 'What we just shipped. Posted by the team.',
+    description: 'Shipping notes, launches, and official product news.',
   },
 ];
 
@@ -121,6 +125,37 @@ const timeAgo = (iso: string): string => {
   return new Date(iso).toLocaleDateString();
 };
 
+const sortAnnouncements = (feed: FeedPost[]): FeedPost[] =>
+  [...feed].sort((a, b) => {
+    const aPinned = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+    const bPinned = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+interface PostResponse {
+  post: Omit<FeedPost, 'authorDisplayName' | 'authorAvatarUrl' | 'authorHandle' | 'likedByMe' | 'authorRole'>;
+  author: {
+    handle?: string;
+    displayName?: string;
+    avatarUrl?: string;
+  } | null;
+  authorRole?: 'user' | 'admin';
+  likedByMe: boolean;
+}
+
+const hydratePost = (payload: PostResponse | null): FeedPost | null => {
+  if (!payload) return null;
+  return {
+    ...payload.post,
+    authorHandle: payload.author?.handle,
+    authorDisplayName: payload.author?.displayName,
+    authorAvatarUrl: payload.author?.avatarUrl,
+    authorRole: payload.authorRole,
+    likedByMe: payload.likedByMe,
+  };
+};
+
 export const CommunityPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
@@ -133,18 +168,43 @@ export const CommunityPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [activePostId, setActivePostId] = useState<string | null>(null);
+  const feedRequestIdRef = useRef(0);
+  const feedAbortRef = useRef<AbortController | null>(null);
+
+  const mergePostIntoFeed = useCallback((incoming: FeedPost) => {
+    if (incoming.kind !== kind) return;
+    setPosts((prev) => {
+      const next = [incoming, ...prev.filter((post) => post._id !== incoming._id)];
+      const ordered = kind === 'announcement' ? sortAnnouncements(next) : next;
+      return ordered.slice(0, 30);
+    });
+  }, [kind]);
+
+  const patchPostInFeed = useCallback((postId: string, updater: (post: FeedPost) => FeedPost) => {
+    setPosts((prev) =>
+      prev.map((post) => (post._id === postId ? updater(post) : post)),
+    );
+  }, []);
 
   const loadFeed = useCallback(async () => {
+    feedAbortRef.current?.abort();
+    const controller = new AbortController();
+    feedAbortRef.current = controller;
+    const requestId = ++feedRequestIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const data = await apiClient.get<FeedResponse>(
         `/api/community/feed?sort=${sort}&kind=${kind}&limit=30`,
+        { signal: controller.signal },
       );
-      setPosts(data.page);
+      if (controller.signal.aborted || requestId !== feedRequestIdRef.current) return;
+      setPosts(kind === 'announcement' ? sortAnnouncements(data.page) : data.page);
     } catch (err) {
+      if ((err as Error)?.name === 'AbortError' || requestId !== feedRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load feed');
     } finally {
+      if (requestId !== feedRequestIdRef.current) return;
       setLoading(false);
     }
   }, [sort, kind]);
@@ -153,48 +213,43 @@ export const CommunityPage: React.FC = () => {
     loadFeed();
   }, [loadFeed]);
 
+  useEffect(() => () => {
+    feedAbortRef.current?.abort();
+  }, []);
+
   const toggleVote = async (postId: string) => {
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
-    setPosts((prev) =>
-      prev.map((p) =>
-        p._id === postId
-          ? {
-              ...p,
-              likedByMe: !p.likedByMe,
-              likeCount: p.likeCount + (p.likedByMe ? -1 : 1),
-            }
-          : p,
-      ),
-    );
+    const applyVoteDelta = (post: FeedPost): FeedPost => ({
+      ...post,
+      likedByMe: !post.likedByMe,
+      likeCount: Math.max(0, post.likeCount + (post.likedByMe ? -1 : 1)),
+    });
+    patchPostInFeed(postId, applyVoteDelta);
     try {
       await apiClient.post('/api/community/like-post', { postId });
     } catch (err) {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p._id === postId
-            ? {
-                ...p,
-                likedByMe: !p.likedByMe,
-                likeCount: p.likeCount + (p.likedByMe ? -1 : 1),
-              }
-            : p,
-        ),
-      );
+      patchPostInFeed(postId, applyVoteDelta);
       setError(err instanceof Error ? err.message : 'Failed to vote');
     }
   };
 
-  const handlePostCreated = (id: string) => {
+  const handlePostCreated = (id: string, createdPost: FeedPost | null) => {
     setComposerOpen(false);
-    loadFeed();
+    if (createdPost) {
+      mergePostIntoFeed(createdPost);
+    } else {
+      void loadFeed();
+    }
     setActivePostId(id);
   };
 
   const activeKind = KINDS.find((k) => k.id === kind)!;
   const canCompose = isAuthenticated && (kind !== 'announcement' || isAdmin);
+  const spotlightPost = kind === 'announcement' ? posts[0] ?? null : null;
+  const listPosts = kind === 'announcement' && spotlightPost ? posts.slice(1) : posts;
 
   return (
     <div className="min-h-screen bg-[#f0f2f5]">
@@ -219,7 +274,7 @@ export const CommunityPage: React.FC = () => {
             >
               <Plus size={16} />
               <span className="hidden sm:inline">
-                {kind === 'announcement' ? 'New update' : 'New post'}
+                {kind === 'announcement' ? 'Publish news' : 'New post'}
               </span>
             </button>
           )}
@@ -282,8 +337,17 @@ export const CommunityPage: React.FC = () => {
           />
         )}
 
+        {!loading && kind === 'announcement' && spotlightPost && (
+          <AnnouncementSpotlight
+            post={spotlightPost}
+            isAdmin={isAdmin}
+            onCompose={() => setComposerOpen(true)}
+            onOpen={() => setActivePostId(spotlightPost._id)}
+          />
+        )}
+
         <div className="space-y-2">
-          {posts.map((post) => (
+          {listPosts.map((post) => (
             <PostCard
               key={post._id}
               post={post}
@@ -306,6 +370,7 @@ export const CommunityPage: React.FC = () => {
       {activePostId && (
         <PostDetailModal
           postId={activePostId}
+          initialPost={posts.find((post) => post._id === activePostId) ?? null}
           isAdmin={isAdmin}
           onClose={() => setActivePostId(null)}
           onVoteToggle={() => toggleVote(activePostId)}
@@ -332,7 +397,7 @@ const EmptyState: React.FC<{
         ? { title: 'Zero bugs reported', sub: 'If you spot something, tell us.' }
         : kind === 'feedback'
           ? { title: 'No feedback yet', sub: "Tell us what's working and what's not." }
-          : { title: 'No updates yet', sub: 'Team updates will show up here.' };
+          : { title: 'No news yet', sub: 'Official product updates will land here.' };
   return (
     <div className="py-16 text-center">
       <h2 className="font-serif text-xl font-bold text-slate-800 mb-1">{copy.title}</h2>
@@ -342,7 +407,7 @@ const EmptyState: React.FC<{
           onClick={onCompose}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-600 text-white text-sm font-semibold shadow-sm hover:bg-indigo-700 transition-colors"
         >
-          <Plus size={16} /> {kind === 'announcement' ? 'Post first update' : 'Post first one'}
+          <Plus size={16} /> {kind === 'announcement' ? 'Publish first news post' : 'Post first one'}
         </button>
       ) : !isAuthenticated ? (
         <button
@@ -356,6 +421,60 @@ const EmptyState: React.FC<{
   );
 };
 
+const AnnouncementSpotlight: React.FC<{
+  post: FeedPost;
+  isAdmin: boolean;
+  onCompose: () => void;
+  onOpen: () => void;
+}> = ({ post, isAdmin, onCompose, onOpen }) => (
+  <section className="mb-5 overflow-hidden rounded-[28px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(79,70,229,0.18),_transparent_42%),linear-gradient(135deg,#0f172a_0%,#111827_45%,#1e1b4b_100%)] text-white shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
+    <div className="px-6 py-6 sm:px-8 sm:py-8">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/12 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-indigo-100">
+            <Megaphone size={12} /> Community News
+          </span>
+          {post.pinnedAt && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/14 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-100">
+              <Pin size={12} /> Pinned
+            </span>
+          )}
+        </div>
+        {isAdmin && (
+          <button
+            onClick={onCompose}
+            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/16"
+          >
+            <Plus size={15} />
+            Publish news
+          </button>
+        )}
+      </div>
+
+      <button onClick={onOpen} className="block w-full text-left">
+        <h2 className="max-w-2xl font-serif text-3xl font-bold leading-tight sm:text-[2.5rem]">
+          {post.title}
+        </h2>
+        <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-6 text-slate-200/92 sm:text-base">
+          {post.body}
+        </p>
+      </button>
+
+      <div className="mt-6 flex flex-wrap items-center gap-3 text-xs text-slate-200/80">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1">
+          <ShieldCheck size={12} />
+          {post.authorDisplayName || post.authorHandle || 'PaperGrid team'}
+        </span>
+        <span>{timeAgo(post.createdAt)}</span>
+        <span className="inline-flex items-center gap-1">
+          <MessageCircle size={12} />
+          {post.commentCount} comments
+        </span>
+      </div>
+    </div>
+  </section>
+);
+
 // ────────── PostCard ──────────
 interface PostCardProps {
   post: FeedPost;
@@ -367,7 +486,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, onVote, onOpen }) => {
   const isAnnouncement = post.kind === 'announcement';
   const roadmap = post.roadmapStatus ? ROADMAP_STATUS[post.roadmapStatus] : null;
   return (
-    <article className="bg-white rounded-2xl border border-black/5 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+    <article
+      className={`rounded-2xl border shadow-sm transition-shadow overflow-hidden ${
+        isAnnouncement
+          ? 'border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#eef2ff_100%)] hover:shadow-lg'
+          : 'bg-white border-black/5 hover:shadow-md'
+      }`}
+    >
       <div className="flex gap-3 p-4">
         {/* Vote column */}
         <button
@@ -399,9 +524,16 @@ const PostCard: React.FC<PostCardProps> = ({ post, onVote, onOpen }) => {
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h3 className="font-serif text-base font-bold text-slate-900 leading-tight">{post.title}</h3>
             {isAnnouncement && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
-                <Megaphone size={10} /> Update
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
+                  <Megaphone size={10} /> News
+                </span>
+                {post.pinnedAt && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider">
+                    <Pin size={10} /> Pinned
+                  </span>
+                )}
+              </>
             )}
             {roadmap && (
               <span
@@ -411,11 +543,18 @@ const PostCard: React.FC<PostCardProps> = ({ post, onVote, onOpen }) => {
               </span>
             )}
           </div>
-          <p className="text-sm text-gray-600 line-clamp-2 whitespace-pre-wrap">{post.body}</p>
+          <p className={`line-clamp-2 whitespace-pre-wrap ${isAnnouncement ? 'text-sm text-slate-700' : 'text-sm text-gray-600'}`}>
+            {post.body}
+          </p>
           <div className="mt-2 flex items-center gap-3 text-xs text-gray-500 flex-wrap">
             <span>
               {post.authorDisplayName || post.authorHandle || 'Unknown'} · {timeAgo(post.createdAt)}
             </span>
+            {post.authorRole === 'admin' && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-100">
+                <ShieldCheck size={10} /> Team
+              </span>
+            )}
             <span className="inline-flex items-center gap-1">
               <MessageCircle size={12} />
               {post.commentCount}
@@ -437,7 +576,7 @@ interface ComposerModalProps {
   kind: Kind;
   isAdmin: boolean;
   onClose: () => void;
-  onCreated: (postId: string) => void;
+  onCreated: (postId: string, createdPost: FeedPost | null) => void;
   authorName?: string;
 }
 
@@ -487,7 +626,16 @@ const ComposerModal: React.FC<ComposerModalProps> = ({
         ? { title: title.trim(), body: body.trim(), tags, pinned }
         : { title: title.trim(), body: body.trim(), tags, kind };
       const result = await apiClient.post<{ postId: string }>(endpoint, payload);
-      onCreated(result.postId);
+      let createdPost: FeedPost | null = null;
+      try {
+        const created = await apiClient.get<{ post: PostResponse | null }>(
+          `/api/community/post?id=${result.postId}`,
+        );
+        createdPost = hydratePost(created.post);
+      } catch {
+        // Fall back to a full feed reload in the parent if the detail fetch fails.
+      }
+      onCreated(result.postId, createdPost);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to post');
     } finally {
@@ -518,7 +666,7 @@ const ComposerModal: React.FC<ComposerModalProps> = ({
               kind === 'feature_request' ? 'What should we build?' :
               kind === 'bug' ? 'What broke?' :
               kind === 'feedback' ? 'What do you want to say?' :
-              'Update title'
+              'News headline'
             }
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -530,7 +678,7 @@ const ComposerModal: React.FC<ComposerModalProps> = ({
               kind === 'feature_request' ? 'Describe it. How would it work? Why do you need it?' :
               kind === 'bug' ? 'Steps to reproduce, expected vs actual, any screenshots...' :
               kind === 'feedback' ? 'What would you change? What do you love?' :
-              'Describe the update. What did you ship?'
+              'Describe the news. What shipped, launched, or changed?'
             }
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -562,7 +710,7 @@ const ComposerModal: React.FC<ComposerModalProps> = ({
                 onChange={(e) => setPinned(e.target.checked)}
                 className="rounded border-black/10"
               />
-              Pin to top of Updates
+              Pin to top of News
             </label>
           )}
           {err && (
@@ -586,32 +734,41 @@ const ComposerModal: React.FC<ComposerModalProps> = ({
 // ────────── PostDetailModal ──────────
 interface PostDetailModalProps {
   postId: string;
+  initialPost: FeedPost | null;
   isAdmin: boolean;
   onClose: () => void;
-  onVoteToggle: () => void;
+  onVoteToggle: () => Promise<void>;
   onCommentAdded: () => void;
   onRoadmapChanged: () => void;
 }
 
 const PostDetailModal: React.FC<PostDetailModalProps> = ({
-  postId, isAdmin, onClose, onVoteToggle, onCommentAdded, onRoadmapChanged,
+  postId, initialPost, isAdmin, onClose, onVoteToggle, onCommentAdded, onRoadmapChanged,
 }) => {
-  const [post, setPost] = useState<FeedPost | null>(null);
+  const [post, setPost] = useState<FeedPost | null>(initialPost);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialPost);
   const [commentDraft, setCommentDraft] = useState('');
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    if (!initialPost) return;
+    setPost((current) => {
+      if (!current || current._id !== initialPost._id) return initialPost;
+      return { ...current, ...initialPost };
+    });
+  }, [initialPost]);
+
+  const load = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const [postRes, commentsRes] = await Promise.all([
-        apiClient.get<{ post: { post: FeedPost } | null }>(`/api/community/post?id=${postId}`),
+        apiClient.get<{ post: PostResponse | null }>(`/api/community/post?id=${postId}`),
         apiClient.get<{ comments: Comment[] }>(`/api/community/comments?postId=${postId}`),
       ]);
-      setPost(postRes.post?.post ?? null);
+      setPost(hydratePost(postRes.post));
       setComments(commentsRes.comments);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load post');
@@ -621,8 +778,8 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
   }, [postId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    void load(!initialPost);
+  }, [initialPost, load]);
 
   const addComment = async () => {
     if (!commentDraft.trim()) return;
@@ -634,7 +791,7 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
         body: commentDraft.trim(),
       });
       setCommentDraft('');
-      await load();
+      await load(false);
       onCommentAdded();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to comment');
@@ -649,7 +806,7 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
         postId,
         roadmapStatus: status,
       });
-      await load();
+      await load(false);
       onRoadmapChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to update roadmap');
@@ -696,8 +853,20 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     {post.kind === 'announcement' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
-                        <Megaphone size={10} /> Update
+                      <>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
+                          <Megaphone size={10} /> News
+                        </span>
+                        {post.pinnedAt && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider">
+                            <Pin size={10} /> Pinned
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {post.authorRole === 'admin' && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-bold uppercase tracking-wider">
+                        <ShieldCheck size={10} /> Official
                       </span>
                     )}
                     {roadmap && (
@@ -712,7 +881,11 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   </p>
                 </div>
               </div>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed mt-4 mb-4">{post.body}</p>
+              <div className={post.kind === 'announcement' ? 'rounded-2xl border border-indigo-100 bg-indigo-50/65 p-4' : ''}>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                  {post.body}
+                </p>
+              </div>
 
               {isAdmin && post.kind === 'feature_request' && (
                 <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
@@ -740,6 +913,11 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
               )}
 
               <h3 className="font-serif text-sm font-bold text-slate-900 mt-5 mb-3 uppercase tracking-wide">Comments</h3>
+              {isAdmin && (
+                <p className="mb-3 text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                  Team replies are highlighted as official responses.
+                </p>
+              )}
               {comments.length === 0 && (
                 <p className="text-sm text-gray-400">Be the first to comment.</p>
               )}
@@ -756,9 +934,20 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     >
                       {!c.authorAvatarUrl && (c.authorDisplayName?.[0]?.toUpperCase() ?? '?')}
                     </div>
-                    <div className="flex-1 min-w-0 bg-slate-50 rounded-xl px-3 py-2">
-                      <p className="text-xs font-semibold text-slate-900">
+                    <div
+                      className={`flex-1 min-w-0 rounded-xl px-3 py-2 ${
+                        c.authorRole === 'admin'
+                          ? 'border border-indigo-100 bg-indigo-50/80'
+                          : 'bg-slate-50'
+                      }`}
+                    >
+                      <p className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-900">
                         {c.authorDisplayName ?? c.authorHandle ?? 'Unknown'}
+                        {c.authorRole === 'admin' && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                            <ShieldCheck size={10} /> Official reply
+                          </span>
+                        )}
                         <span className="text-gray-400 font-normal ml-2">{timeAgo(c.createdAt)}</span>
                       </p>
                       <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.body}</p>
@@ -772,7 +961,7 @@ const PostDetailModal: React.FC<PostDetailModalProps> = ({
         {post && isAuthenticated && (
           <div className="border-t border-black/5 bg-white px-4 py-3 flex items-end gap-2">
             <textarea
-              placeholder="Add a comment…"
+              placeholder={isAdmin ? 'Post an official reply…' : 'Add a comment…'}
               value={commentDraft}
               onChange={(e) => setCommentDraft(e.target.value)}
               rows={1}

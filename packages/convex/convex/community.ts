@@ -233,27 +233,49 @@ async function ensureProfile(
   return inserted;
 }
 
-// Batch-hydrate author profiles for a set of posts or comments.
-// Replaces the per-row `for (post of rows) await db.query...` pattern
-// which was O(n) serial DB reads. Runs in parallel, dedupes by authorId.
-async function hydrateAuthors<T extends { authorId: Id<"users"> }>(
+type AuthorMeta = {
+  profile: Doc<"communityProfiles"> | null;
+  role: Doc<"users">["role"] | undefined;
+};
+
+// Batch-hydrate author profile + role for a set of posts or comments.
+// We need the role so the UI can visually distinguish official team
+// replies from regular community comments.
+async function hydrateAuthorMeta<T extends { authorId: Id<"users"> }>(
   ctx: QueryCtx,
   rows: T[],
-): Promise<Map<string, Doc<"communityProfiles"> | null>> {
+): Promise<Map<string, AuthorMeta>> {
   const unique = Array.from(new Set(rows.map((r) => r.authorId as unknown as string)));
   const results = await Promise.all(
-    unique.map((id) =>
-      ctx.db
-        .query("communityProfiles")
-        .withIndex("by_user", (q) => q.eq("userId", id as Id<"users">))
-        .first(),
-    ),
+    unique.map(async (id) => {
+      const userId = id as Id<"users">;
+      const [profile, user] = await Promise.all([
+        ctx.db
+          .query("communityProfiles")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .first(),
+        ctx.db.get(userId),
+      ]);
+      return {
+        profile: profile ?? null,
+        role: user?.role,
+      };
+    }),
   );
-  const map = new Map<string, Doc<"communityProfiles"> | null>();
+  const map = new Map<string, AuthorMeta>();
   for (let i = 0; i < unique.length; i++) {
-    map.set(unique[i], results[i] ?? null);
+    map.set(unique[i], results[i] ?? { profile: null, role: undefined });
   }
   return map;
+}
+
+function mapAuthorMeta(meta: AuthorMeta | undefined) {
+  return {
+    authorHandle: meta?.profile?.handle,
+    authorDisplayName: meta?.profile?.displayName,
+    authorAvatarUrl: meta?.profile?.avatarUrl,
+    authorRole: meta?.role,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -332,7 +354,7 @@ export const listFeed = query({
     // Previously this was N+1 sequential per row (~120 reads per feed
     // page). Now it's O(unique_authors) + O(row_count) in parallel.
     const viewer = await getOptionalUser(ctx, sessionToken);
-    const profileMap = await hydrateAuthors(ctx, rows);
+    const authorMap = await hydrateAuthorMeta(ctx, rows);
     const likeChecks = viewer
       ? await Promise.all(
           rows.map((post) =>
@@ -350,12 +372,10 @@ export const listFeed = query({
       : [];
 
     const out = rows.map((post, i) => {
-      const profile = profileMap.get(post.authorId as unknown as string) ?? null;
+      const authorMeta = authorMap.get(post.authorId as unknown as string);
       return {
         ...post,
-        authorHandle: profile?.handle,
-        authorDisplayName: profile?.displayName,
-        authorAvatarUrl: profile?.avatarUrl,
+        ...mapAuthorMeta(authorMeta),
         likedByMe: viewer ? !!likeChecks[i] : false,
       };
     });
@@ -418,10 +438,13 @@ export const getPost = query({
     if (!isAdmin && post.status !== "published") {
       return null;
     }
-    const profile = await ctx.db
-      .query("communityProfiles")
-      .withIndex("by_user", (q) => q.eq("userId", post.authorId))
-      .first();
+    const [profile, author] = await Promise.all([
+      ctx.db
+        .query("communityProfiles")
+        .withIndex("by_user", (q) => q.eq("userId", post.authorId))
+        .first(),
+      ctx.db.get(post.authorId),
+    ]);
     let likedByMe = false;
     if (viewer) {
       const like = await ctx.db
@@ -444,6 +467,7 @@ export const getPost = query({
             avatarUrl: profile.avatarUrl,
           }
         : null,
+      authorRole: author?.role,
       likedByMe,
     };
   },
@@ -472,14 +496,12 @@ export const listComments = query({
     const visible = comments.filter((c) => c.status === "published");
 
     // Batch author hydration (was N+1).
-    const profileMap = await hydrateAuthors(ctx, visible);
+    const authorMap = await hydrateAuthorMeta(ctx, visible);
     return visible.map((c) => {
-      const profile = profileMap.get(c.authorId as unknown as string) ?? null;
+      const authorMeta = authorMap.get(c.authorId as unknown as string);
       return {
         ...c,
-        authorHandle: profile?.handle,
-        authorDisplayName: profile?.displayName,
-        authorAvatarUrl: profile?.avatarUrl,
+        ...mapAuthorMeta(authorMeta),
       };
     });
   },

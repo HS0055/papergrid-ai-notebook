@@ -1,7 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { Check, X, Info } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { formatPrice } from '@papergrid/core';
+import { usePricingConfig } from '../../hooks/usePricingConfig';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -19,10 +21,22 @@ interface CompetitorRow {
   note?: string;
 }
 
-const ROWS: CompetitorRow[] = [
+/**
+ * Competitor data is hardcoded because it's verified externally and
+ * shouldn't drift with admin edits. But the Papera row's price/Ink/block
+ * numbers come from usePricingConfig so an admin change in /admin → Plans
+ * propagates here automatically. That's what buildRows(paperaAnnual, ...)
+ * is for: the shape of the table is constant, only Papera's numbers are
+ * live-wired.
+ */
+function buildRows(paperaPro: {
+  annualPrice: string;
+  totalWithAi: string;
+}): CompetitorRow[] {
+  return [
   {
     feature: 'Base annual price',
-    papera: '$89',
+    papera: paperaPro.annualPrice,
     goodnotes: '$35.99',
     notability: '$14.99',
     notion: '$120',
@@ -46,7 +60,7 @@ const ROWS: CompetitorRow[] = [
   },
   {
     feature: 'Total annual with full AI',
-    papera: '$89',
+    papera: paperaPro.totalWithAi,
     goodnotes: '$155.87',
     notability: '$14.99',
     notion: '$180+',
@@ -128,7 +142,8 @@ const ROWS: CompetitorRow[] = [
     notion: true,
     note: 'All apps offer a free tier with limitations',
   },
-];
+  ];
+}
 
 const renderCell = (value: string | boolean, isHighlight: boolean) => {
   if (typeof value === 'boolean') {
@@ -166,6 +181,30 @@ const renderCell = (value: string | boolean, isHighlight: boolean) => {
 
 export const ComparisonTable: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
+  const pricing = usePricingConfig();
+
+  // Derive Papera's live numbers from the single source of truth.
+  // If the hook hasn't loaded yet (or the server is offline), fall
+  // back to the static defaults that match pricingConfig.ts so the
+  // table renders immediately.
+  const { paperaAnnualLabel, paperaTotalLabel, goodnotesSavings } = useMemo(() => {
+    const pro = pricing.getPlan('pro');
+    const annual = pro?.annualPrice ?? 89;
+    const annualLabel = formatPrice(annual);
+    // Papera bundles AI — there's no "with AI" upcharge, so the total
+    // equals the base annual price.
+    return {
+      paperaAnnualLabel: annualLabel,
+      paperaTotalLabel: annualLabel,
+      // Competitor total vs Papera. Goodnotes Pro + AI Pass = $155.87.
+      goodnotesSavings: Math.max(0, 155.87 - annual),
+    };
+  }, [pricing]);
+
+  const ROWS = useMemo(
+    () => buildRows({ annualPrice: paperaAnnualLabel, totalWithAi: paperaTotalLabel }),
+    [paperaAnnualLabel, paperaTotalLabel],
+  );
 
   useEffect(() => {
     if (!sectionRef.current) return;
@@ -257,10 +296,10 @@ export const ComparisonTable: React.FC = () => {
                 Papera Pro
               </p>
               <p className="font-serif font-bold text-3xl mb-1" style={{ color: 'var(--color-indigo-brand)' }}>
-                $89
+                {paperaAnnualLabel}
               </p>
               <p className="text-xs font-semibold" style={{ color: '#10b981' }}>
-                AI included. Save $67+/yr
+                AI included. Save ${Math.round(goodnotesSavings)}+/yr
               </p>
             </div>
           </div>

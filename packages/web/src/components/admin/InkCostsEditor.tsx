@@ -4,17 +4,12 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const SESSION_KEY = 'papergrid_session';
 
 function authHeaders(): Record<string, string> {
-  const raw = localStorage.getItem(SESSION_KEY);
+  // Session is stored as a raw string by useAuth.tsx. The previous
+  // JSON.parse path here silently dropped the token and every admin
+  // edit to the Ink costs tab looked successful but hit 401 server-side.
+  const token = localStorage.getItem(SESSION_KEY);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      const token = parsed?.token;
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-    } catch {
-      /* ignore */
-    }
-  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
 }
 

@@ -2,17 +2,17 @@ import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 
 import { useNavigate } from 'react-router-dom';
 import { NotebookView } from './NotebookView';
 import { LayoutGenerator } from './LayoutGenerator';
-import { Notebook, NotebookPage, Block, BlockType } from '@papergrid/core';
+import { Notebook, NotebookPage, Block, BlockType, PricingPlanId } from '@papergrid/core';
 import { generateLayout, generateCover, ExistingPageContext } from '../services/geminiService';
 import { CoverGenModal } from './CoverGenModal';
 import {
   Book, Plus, Sparkles, Menu, ChevronLeft, ChevronRight, Bookmark,
   AlertCircle, CheckCircle2, X, Home, Search, FileText, Undo2,
   Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
-  Download, Image, Printer, Volume2, VolumeX, Wand2, Trash2,
-  Users, DollarSign, Gift,
+  Printer, Volume2, VolumeX, Wand2, Trash2,
+  Users, DollarSign, Gift, Maximize2, Minimize2, CreditCard,
+  MessageSquare, Droplet,
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
 import { useSoundEffects } from '../hooks/useSoundEffects';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -21,6 +21,8 @@ import {
   saveNotebooksToStorage,
 } from '../utils/notebookStorage';
 import { useConvexNotebooks } from '../hooks/useConvexNotebooks';
+import { usePricingConfig } from '../hooks/usePricingConfig';
+import { Logo } from './landing/Logo';
 import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
 import { TabBar, type TabId } from './ios/TabBar';
 import { BottomSheet } from './ios/BottomSheet';
@@ -352,6 +354,77 @@ const Toast: React.FC<{ toast: ToastData; onDismiss: (id: number) => void }> = (
   );
 };
 
+interface ExportNotebookDocumentProps {
+  notebook: Notebook;
+  branded: boolean;
+  watermarked: boolean;
+}
+
+const ExportNotebookDocument: React.FC<ExportNotebookDocumentProps> = ({
+  notebook,
+  branded,
+  watermarked,
+}) => {
+  const noopUpdatePage = useCallback((_updatedPage: NotebookPage) => {}, []);
+  const coverTitle = notebook.title?.trim() || 'Untitled Notebook';
+  const pageCount = notebook.pages.length;
+
+  return (
+    <div data-pdf-export-root aria-hidden="true">
+      <section data-pdf-export-page data-pdf-export-cover="true">
+        <div data-pdf-export-frame data-pdf-export-cover-card="true">
+          {branded ? (
+            <div data-pdf-export-cover-brand>
+              <Logo variant="light" size={36} />
+            </div>
+          ) : null}
+          <div data-pdf-export-cover-body>
+            <p data-pdf-export-eyebrow>Notebook Export</p>
+            <h1 data-pdf-export-title>{coverTitle}</h1>
+            <p data-pdf-export-subtitle>
+              {pageCount} {pageCount === 1 ? 'page' : 'pages'} together as one PDF
+            </p>
+          </div>
+          {watermarked ? (
+            <div data-pdf-export-cover-watermark>Created with Papera</div>
+          ) : null}
+        </div>
+      </section>
+
+      {notebook.pages.map((page, index) => (
+        <section key={page.id} data-pdf-export-page>
+          <div data-pdf-export-frame>
+            {branded ? (
+              <div data-pdf-export-header>
+                <Logo variant="light" size={22} />
+                <span>{coverTitle}</span>
+              </div>
+            ) : null}
+
+            <div data-pdf-export-notebook>
+              <NotebookView
+                page={page}
+                onUpdatePage={noopUpdatePage}
+                allPages={notebook.pages}
+                hideChrome
+              />
+            </div>
+
+            <div data-pdf-export-footer>
+              <span>{page.title?.trim() || `Page ${index + 1}`}</span>
+              <span>Page {index + 1} of {pageCount}</span>
+            </div>
+
+            {watermarked ? (
+              <div data-pdf-export-watermark>Created with Papera</div>
+            ) : null}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+};
+
 // Persistence keys for last-viewed context (which notebook + page the user
 // was on when they left). Lives outside the notebooks payload so it
 // survives a full Convex re-sync.
@@ -401,6 +474,22 @@ export const Dashboard: React.FC = () => {
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  // Focus mode hides every chrome element (sidebar, header, FAB) so the
+  // user sees only the notebook spread. Toggled by an icon in the top
+  // bar; can be exited with a small floating button or by hitting Esc.
+  const [focusMode, setFocusMode] = useState(false);
+  // True once the 3D BookCoverScene has painted its first frame. Until
+  // then, we hide the DOM overlay (title, color picker, AI Cover CTA,
+  // template tiles) so the user never sees them floating over a blank
+  // canvas for the 1–2 seconds it takes the chunk + scene to init on
+  // first open. Reset every time the active notebook changes.
+  const [coverSceneReady, setCoverSceneReady] = useState(false);
+  useEffect(() => {
+    setCoverSceneReady(false);
+  }, [activeNotebookId]);
+  // Live ink balance for the sidebar pill. Refreshed on mount + after
+  // any AI generation completes.
+  const [inkBalance, setInkBalance] = useState<{ subscription: number; purchased: number; total: number; resetAt: string | null } | null>(null);
 
   // iOS tab bar state
   const [activeTab, setActiveTab] = useState<TabId>('notebooks');
@@ -423,6 +512,13 @@ export const Dashboard: React.FC = () => {
   const sfx = useSoundEffects();
   const auth = useAuth();
   const convex = useConvexNotebooks();
+  const pricing = usePricingConfig();
+
+  const effectivePlan =
+    pricing.getPlan((auth.user?.plan ?? 'free') as PricingPlanId) ??
+    pricing.getPlan('free');
+  const exportUsesBranding = effectivePlan?.brandedExport ?? false;
+  const exportUsesWatermark = effectivePlan?.exportWatermark ?? true;
 
   // User-scoped localStorage key to prevent cross-account data leakage
   const storageKey = auth.user?.id
@@ -595,6 +691,76 @@ export const Dashboard: React.FC = () => {
     saveActiveContext({ notebookId: activeNotebookId, pageIndex: activePageIndex });
   }, [activeNotebookId, activePageIndex]);
 
+  // Fetch the user's current ink balance for the sidebar pill. Refreshes
+  // on mount + whenever the auth user changes (login/logout).
+  const fetchInkBalance = useCallback(async () => {
+    if (!auth.isAuthenticated) {
+      setInkBalance(null);
+      return;
+    }
+    const token = localStorage.getItem('papergrid_session');
+    if (!token) return;
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${apiBase}/api/ink/balance`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { subscription: number; purchased: number; total: number; resetAt: string | null };
+      setInkBalance(data);
+    } catch {
+      // Silent — the wallet pill just won't show
+    }
+  }, [auth.isAuthenticated]);
+  useEffect(() => {
+    void fetchInkBalance();
+  }, [fetchInkBalance]);
+
+  // Esc to exit focus mode. Bound at the window level so it works
+  // regardless of which child has focus.
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFocusMode(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusMode]);
+
+  // Open the Stripe Customer Billing Portal so the user can manage /
+  // cancel their subscription. Falls back to navigating /pricing if
+  // they're not actually subscribed yet (404 from the backend).
+  const openBillingPortal = useCallback(async () => {
+    const token = localStorage.getItem('papergrid_session');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${apiBase}/api/billing/portal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.status === 404) {
+        navigate('/pricing');
+        return;
+      }
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        addToast(detail?.error || 'Could not open billing portal', 'error');
+        return;
+      }
+      const data = (await res.json()) as { url?: string };
+      if (data.url) window.location.href = data.url;
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'Network error', 'error');
+    }
+  }, [addToast, navigate]);
+
   // Save to localStorage (user-scoped) on every change
   useEffect(() => {
     if (notebooks.length > 0 && initialLoadDone.current) {
@@ -701,6 +867,34 @@ export const Dashboard: React.FC = () => {
     ? activeNotebook.pages[activePageIndex]
     : null;
 
+  // Quiet skeleton shown WHILE the lazy-loaded BookCoverScene chunk is
+  // fetching. Previously this rendered a full flat cover with the title,
+  // which then "flashed" out as the 3D cover faded in — users saw
+  // "New Notebook" twice in the first 50–500ms after opening the app.
+  // The new fallback is a uniform dark book-shaped placeholder with a
+  // subtle pulse and NO title text, so the 3D scene appears as a clean
+  // fade-in instead of replacing duplicate content.
+  const renderCoverSkeleton = () => (
+    <div className="w-full h-full max-h-[800px] flex items-center justify-center pointer-events-none">
+      <div
+        className="relative rounded-2xl overflow-hidden shadow-2xl animate-pulse"
+        style={{
+          width: 'min(85%, 520px)',
+          aspectRatio: '3 / 4',
+          background: 'linear-gradient(135deg, #1e1e24 0%, #2a2a32 50%, #1e1e24 100%)',
+        }}
+      >
+        {/* Spine darken */}
+        <div className="absolute left-0 top-0 bottom-0 w-10 bg-black/30" />
+        {/* Soft inner highlight to suggest the 3D shape that's loading */}
+        <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/30" />
+      </div>
+    </div>
+  );
+
+  // The "real" flat cover. Used by the Canvas3DErrorBoundary as a HARD
+  // fallback if WebGL fails or the chunk errors — that path needs the
+  // editable title because the 3D renderer is permanently unavailable.
   const renderFlatCoverFallback = () => (
     <div
       className={`w-full h-full max-h-[800px] ${activeNotebook.coverColor} rounded-r-3xl rounded-l-md shadow-2xl relative cursor-pointer group transition-transform duration-300 hover:scale-[1.01] overflow-hidden`}
@@ -758,8 +952,13 @@ export const Dashboard: React.FC = () => {
       bookmarks: [],
       pages: []
     };
-    // Optimistic: add immediately for snappy UX
-    setNotebooks([newNb, ...notebooks]);
+    // Optimistic: add immediately for snappy UX.
+    // CRITICAL: use functional setState so we don't capture a stale
+    // `notebooks` closure. When this runs right after handleDeleteNotebook
+    // (which calls setNotebooks(remaining)), the plain `notebooks` ref
+    // still points at the pre-delete list — and spreading that would
+    // resurrect the deleted notebook alongside the new one.
+    setNotebooks(prev => [newNb, ...prev]);
     setActiveNotebookId(newNb.id);
     setActivePageIndex(-1);
     setContentKey(k => k + 1);
@@ -776,9 +975,15 @@ export const Dashboard: React.FC = () => {
     } catch (e: unknown) {
       const err = e as Error & { code?: string };
       if (err?.code === 'plan_limit') {
-        // Roll back the optimistic add
+        // Roll back the optimistic add. Use functional form for the
+        // same closure-safety reason as above.
         setNotebooks(prev => prev.filter(nb => nb.id !== newNb.id));
-        setActiveNotebookId(prev => prev === newNb.id ? (notebooks[0]?.id ?? '') : prev);
+        setActiveNotebookId(prev => {
+          if (prev !== newNb.id) return prev;
+          // Fall back to any remaining notebook in current state.
+          const remaining = notebooksRef.current.filter(nb => nb.id !== newNb.id);
+          return remaining[0]?.id ?? '';
+        });
         addToast(err.message, 'error');
       } else {
         // Other errors: leave the local copy alone, the next debounced sync retries.
@@ -798,25 +1003,64 @@ export const Dashboard: React.FC = () => {
   const handleDeleteNotebook = async (nbId: string) => {
     const nb = notebooks.find(n => n.id === nbId);
     if (!nb) return;
-    // Remove from local state
-    const remaining = notebooks.filter(n => n.id !== nbId);
-    setNotebooks(remaining);
-    if (activeNotebookId === nbId) {
-      if (remaining.length > 0) {
-        setActiveNotebookId(remaining[0].id);
-      } else {
-        // Create a fresh notebook if all deleted
-        handleNewNotebook();
+
+    // Optimistic local removal via functional setState (never touch the
+    // stale `notebooks` closure — see the matching comment in
+    // handleNewNotebook).
+    setNotebooks(prev => prev.filter(n => n.id !== nbId));
+
+    const wasActive = activeNotebookId === nbId;
+    if (wasActive) {
+      // Switch to the next surviving notebook immediately so the UI
+      // never dangles on a deleted id. If nothing survives we defer
+      // the auto-recreate until AFTER the server delete succeeds to
+      // avoid a plan_limit race on the free tier (create would be
+      // rejected because the server still sees the old notebook).
+      const fallback = notebooksRef.current.find(n => n.id !== nbId);
+      if (fallback) {
+        setActiveNotebookId(fallback.id);
       }
       setActivePageIndex(-1);
     }
     setDeleteConfirmId(null);
-    // Delete from Convex
+
+    // Delete from Convex. We MUST await this before creating a
+    // replacement notebook so the server-side plan-limit probe sees
+    // the old one as tombstoned.
     const ok = await convex.deleteNotebook(nbId);
     if (ok) {
       addToast(`"${nb.title || 'Untitled'}" deleted`, 'success');
     } else {
       addToast('Deleted locally (cloud sync pending)', 'success');
+    }
+
+    // Auto-create a fresh welcome notebook when the user just deleted
+    // their last one. Runs AFTER the server delete completes so the
+    // plan-limit check on /api/notebooks/save sees zero active rows.
+    if (wasActive && notebooksRef.current.length === 0) {
+      await handleNewNotebook();
+    }
+
+    // Reconcile against the authoritative cloud snapshot. If an earlier
+    // stale-closure bug (now fixed) left the user with a ghost notebook
+    // in local state, this is their recovery path: once the deleted row
+    // is really gone on the server, pull the authoritative list and
+    // overwrite local state so the sidebar finally matches reality.
+    if (auth.isAuthenticated) {
+      try {
+        const cloud = await convex.loadNotebooks();
+        if (cloud && cloud.length > 0) {
+          setNotebooks(cloud);
+          // If the previously-active id no longer exists (because it
+          // was a ghost), fall through to the first cloud notebook.
+          setActiveNotebookId(prev =>
+            cloud.some(n => n.id === prev) ? prev : cloud[0].id,
+          );
+          void saveNotebooksToStorage(storageKey, cloud).catch(() => {});
+        }
+      } catch {
+        // Silent — next debounced sync will eventually reconcile.
+      }
     }
   };
 
@@ -893,6 +1137,16 @@ export const Dashboard: React.FC = () => {
       setPageDirection('right');
       setActivePageIndex(0);
     }, 400);
+  }, []);
+
+  // Focus mode is a pure "hide all chrome" toggle. It NEVER moves the
+  // user between cover and pages on its own — if they're on the closed
+  // cover, they stay on the closed cover (just without the title input,
+  // color picker, AI cover button, templates grid, or Open Notebook CTA).
+  // If they're on a page, they stay on that page. Exit is via the Esc key
+  // or the floating "Exit focus" pill.
+  const handleEnterFocusMode = useCallback(() => {
+    setFocusMode(true);
   }, []);
 
   const handleAiGeneration = async (prompt: string, industry?: string, aesthetic?: string, pageCount?: string) => {
@@ -979,40 +1233,9 @@ export const Dashboard: React.FC = () => {
     }));
   };
 
-  // Export state
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close export menu on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (exportMenuRef.current && e.target instanceof Node && !exportMenuRef.current.contains(e.target)) {
-        setShowExportMenu(false);
-      }
-    };
-    if (showExportMenu) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showExportMenu]);
-
-  const handleExportPNG = async () => {
-    const el = document.querySelector<HTMLElement>('[data-export-target]');
-    if (!el) return;
-    try {
-      const canvas = await html2canvas(el, { backgroundColor: '#e5e5e5', scale: 2, useCORS: true });
-      const link = document.createElement('a');
-      link.download = `${activePage?.title || 'page'}-${Date.now()}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-      addToast('Page exported as PNG', 'success');
-    } catch {
-      addToast('Failed to export PNG', 'error');
-    }
-    setShowExportMenu(false);
-  };
-
-  const handlePrint = () => {
+  const handleExportPdf = () => {
     window.print();
-    setShowExportMenu(false);
+    addToast('Print dialog opened. Choose Save as PDF.', 'success');
   };
 
   // Undo handler for block deletion
@@ -1088,7 +1311,11 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in">
+    <>
+      <div
+        data-dashboard-shell
+        className="flex h-screen w-full bg-[#f0f2f5] font-sans text-gray-900 overflow-hidden anim-fade-in"
+      >
       {/* Sidebar backdrop (mobile) — hidden on native iOS (uses tab bar) */}
       {!native && isSidebarOpen && (
         <div
@@ -1097,16 +1324,17 @@ export const Dashboard: React.FC = () => {
         />
       )}
 
-      {/* Sidebar — hidden on native iOS (replaced by tab bar navigation) */}
+      {/* Sidebar — hidden on native iOS (replaced by tab bar navigation)
+          AND hidden when focus mode is active (user wants notebook only). */}
       <aside
-        className={`${native ? 'hidden' : isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'}
+        className={`${native || focusMode ? 'hidden' : isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'}
         bg-[#1a1c23] text-gray-300 transition-all duration-300 ease-in-out flex flex-col border-r border-gray-800 absolute z-20 md:relative h-full shadow-2xl overflow-hidden`}
       >
-        <div className="p-6 flex items-center gap-3 text-white border-b border-gray-800/50">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Book size={18} />
-          </div>
-          <span className="font-semibold text-lg tracking-tight">Papera</span>
+        <div className="p-5 flex items-center text-white border-b border-gray-800/50">
+          {/* Same brand Logo component used by the landing page navbar /
+              footer. Dark variant gives the cyan glow that pops on the
+              sidebar's near-black background. */}
+          <Logo variant="dark" size={32} />
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
@@ -1229,6 +1457,29 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="p-4 border-t border-gray-800/50 space-y-3">
+          {/* Ink balance pill — clickable to navigate to /pricing for refill */}
+          {auth.user && inkBalance && (
+            <button
+              onClick={() => navigate('/pricing')}
+              className="w-full px-3 py-2.5 bg-gradient-to-br from-sky-500/10 to-indigo-500/10 hover:from-sky-500/20 hover:to-indigo-500/20 border border-sky-500/20 hover:border-sky-400/40 rounded-xl flex items-center gap-2.5 transition-all group/ink"
+              title="Tap to buy more Ink"
+            >
+              <div className="w-9 h-9 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0">
+                <Droplet size={16} className="text-sky-300 fill-sky-300/40" />
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Ink balance</div>
+                <div className="text-white font-bold text-base tabular-nums leading-tight">
+                  {inkBalance.total.toLocaleString()}
+                  <span className="text-[10px] text-gray-500 font-normal ml-1">
+                    ({inkBalance.subscription} mo · {inkBalance.purchased} owned)
+                  </span>
+                </div>
+              </div>
+              <Plus size={14} className="text-gray-500 group-hover/ink:text-sky-300 transition-colors shrink-0" />
+            </button>
+          )}
+
           {/* User Profile */}
           {auth.user && (
             <div className="flex items-center gap-3 px-2 py-2 mb-1">
@@ -1252,54 +1503,82 @@ export const Dashboard: React.FC = () => {
           {auth.user?.plan === 'free' && (
             <button
               onClick={() => navigate('/pricing')}
-              className="w-full py-2 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg flex items-center justify-center gap-2 text-xs font-medium shadow-lg shadow-indigo-500/20 transition-all"
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl flex items-center justify-center gap-2 text-xs font-bold shadow-lg shadow-indigo-500/20 transition-all"
             >
               <Sparkles size={14} />
-              <span>Upgrade Plan</span>
+              <span>Upgrade plan</span>
+            </button>
+          )}
+
+          {/* Manage / cancel subscription — only for paid plans */}
+          {auth.user && auth.user.plan !== 'free' && (
+            <button
+              onClick={openBillingPortal}
+              className="w-full py-2 px-4 bg-gray-800/40 hover:bg-gray-800 text-gray-300 hover:text-white rounded-xl flex items-center justify-center gap-2 text-xs font-medium transition-colors border border-gray-700/50 hover:border-gray-600"
+              title="Open Stripe billing portal"
+            >
+              <CreditCard size={13} />
+              <span>Manage subscription</span>
             </button>
           )}
 
           <button
             onClick={handleNewNotebook}
-            className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-medium border border-gray-700 transition-colors"
+            className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-xl flex items-center justify-center gap-2 text-sm font-medium border border-gray-700 transition-colors"
           >
             <Plus size={16} />
-            <span>New Notebook</span>
+            <span>New notebook</span>
           </button>
-          <button
-            onClick={() => navigate('/community')}
-            className="w-full py-2 px-4 text-gray-400 hover:text-white rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors border border-gray-800 hover:border-gray-700"
-          >
-            <Users size={14} />
-            <span>Community</span>
-          </button>
-          <button
-            onClick={() => navigate('/referral')}
-            className="w-full py-2 px-4 text-gray-400 hover:text-white rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors border border-gray-800 hover:border-gray-700"
-          >
-            <Gift size={14} />
-            <span>Invite friends · Give Ink</span>
-          </button>
-          <button
-            onClick={() => navigate('/affiliate')}
-            className="w-full py-2 px-4 text-gray-400 hover:text-white rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors border border-gray-800 hover:border-gray-700"
-          >
-            <DollarSign size={14} />
-            <span>Affiliate · Earn 30%</span>
-          </button>
-          <button
-            onClick={() => navigate('/')}
-            className="w-full py-2 px-4 text-gray-500 hover:text-gray-300 rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors"
-          >
-            <Home size={14} />
-            <span>Back to Home</span>
-          </button>
-          <button
-            onClick={auth.logout}
-            className="w-full py-1.5 px-4 text-gray-600 hover:text-red-400 rounded-lg text-xs font-medium transition-colors"
-          >
-            Log Out
-          </button>
+
+          {/* Beautified nav — community / referral / affiliate as a
+              compact 3-tile grid with icons, instead of 3 stacked outline
+              buttons that took half the sidebar. */}
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={() => navigate('/community')}
+              className="group/nav flex flex-col items-center justify-center gap-1 py-2.5 px-2 bg-gray-800/30 hover:bg-indigo-500/15 border border-gray-700/50 hover:border-indigo-500/40 rounded-xl transition-all"
+              title="Feedback, requests, updates"
+            >
+              <MessageSquare size={15} className="text-gray-400 group-hover/nav:text-indigo-300 transition-colors" />
+              <span className="text-[10px] font-semibold text-gray-400 group-hover/nav:text-white transition-colors">Community</span>
+            </button>
+            <button
+              onClick={() => navigate('/referral')}
+              className="group/nav flex flex-col items-center justify-center gap-1 py-2.5 px-2 bg-gray-800/30 hover:bg-emerald-500/15 border border-gray-700/50 hover:border-emerald-500/40 rounded-xl transition-all relative"
+              title="Invite friends · Give Ink, get Ink"
+            >
+              <Gift size={15} className="text-gray-400 group-hover/nav:text-emerald-300 transition-colors" />
+              <span className="text-[10px] font-semibold text-gray-400 group-hover/nav:text-white transition-colors">Invite</span>
+              <span className="absolute -top-1 -right-1 px-1 py-0 bg-emerald-500 text-white text-[8px] font-bold rounded-full leading-none uppercase tracking-wider" style={{ paddingTop: 2, paddingBottom: 2 }}>
+                +Ink
+              </span>
+            </button>
+            <button
+              onClick={() => navigate('/affiliate')}
+              className="group/nav flex flex-col items-center justify-center gap-1 py-2.5 px-2 bg-gray-800/30 hover:bg-amber-500/15 border border-gray-700/50 hover:border-amber-500/40 rounded-xl transition-all"
+              title="Earn 30% recurring commission"
+            >
+              <DollarSign size={15} className="text-gray-400 group-hover/nav:text-amber-300 transition-colors" />
+              <span className="text-[10px] font-semibold text-gray-400 group-hover/nav:text-white transition-colors">Affiliate</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 border-t border-gray-800/50">
+            <button
+              onClick={() => navigate('/')}
+              className="flex-1 py-1.5 px-2 text-gray-500 hover:text-gray-300 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-medium transition-colors"
+            >
+              <Home size={11} />
+              <span>Home</span>
+            </button>
+            <div className="w-px h-3 bg-gray-700/50" />
+            <button
+              onClick={auth.logout}
+              className="flex-1 py-1.5 px-2 text-gray-600 hover:text-red-400 rounded-lg text-[11px] font-medium transition-colors"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1324,6 +1603,7 @@ export const Dashboard: React.FC = () => {
       >
         {/* Top-left controls — desktop only (tab bar owns left side on native) */}
         {!native && (
+          !focusMode && (
           <div
             className="absolute left-3 z-30 flex gap-2"
             style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
@@ -1348,12 +1628,13 @@ export const Dashboard: React.FC = () => {
               {sfx.enabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
             </button>
           </div>
+          )
         )}
 
         {/* Navigation & Actions — desktop cluster only.
             On native: bookmark + AI + add-page move into the NotebookView header
             and the floating AI FAB. */}
-        {!native && (
+        {!native && !focusMode && (
         <div
           className="absolute right-3 z-30 flex gap-1.5 md:gap-2"
           style={{ top: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
@@ -1382,37 +1663,44 @@ export const Dashboard: React.FC = () => {
                 <Sparkles size={16} />
                 <span className="hidden sm:inline">AI Layout</span>
               </button>
-              <div className="relative" ref={exportMenuRef}>
-                <button
-                  onClick={() => setShowExportMenu(!showExportMenu)}
-                  className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white transition-colors"
-                  aria-label="Export page"
-                  aria-expanded={showExportMenu}
-                >
-                  <Download size={20} />
-                </button>
-                {showExportMenu && (
-                  <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 py-1 min-w-[160px] z-50 anim-popover">
-                    <button
-                      onClick={handleExportPNG}
-                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                    >
-                      <Image size={16} className="text-gray-400" />
-                      Export as PNG
-                    </button>
-                    <button
-                      onClick={handlePrint}
-                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                    >
-                      <Printer size={16} className="text-gray-400" />
-                      Print / PDF
-                    </button>
-                  </div>
-                )}
-              </div>
             </>
           )}
+          {activeNotebook.pages.length > 0 && (
+            <button
+              onClick={handleExportPdf}
+              className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white hover:text-indigo-600 transition-colors"
+              aria-label="Export notebook as PDF"
+              title="Export notebook as PDF"
+            >
+              <Printer size={20} />
+            </button>
+          )}
+          {/* Focus mode toggle — always visible (even on the cover) so
+              users can hide everything and see only the notebook. */}
+          <button
+            onClick={handleEnterFocusMode}
+            className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white hover:text-indigo-600 transition-colors"
+            aria-label="Enter focus mode"
+            title="Focus mode (hide everything)"
+          >
+            <Maximize2 size={18} />
+          </button>
         </div>
+        )}
+
+        {/* Focus mode exit pill — only visible when focus mode is on. */}
+        {focusMode && !native && (
+          <button
+            onClick={() => setFocusMode(false)}
+            className="absolute right-3 z-40 inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900/90 backdrop-blur text-white rounded-full shadow-2xl text-xs font-semibold hover:bg-slate-800 transition-colors"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+            aria-label="Exit focus mode"
+            title="Exit focus mode (Esc)"
+          >
+            <Minimize2 size={14} />
+            <span>Exit focus</span>
+            <kbd className="px-1 py-0.5 ml-1 bg-white/15 rounded text-[9px] font-mono uppercase">Esc</kbd>
+          </button>
         )}
 
         {/* Notebook Container — flex-fills available main space */}
@@ -1495,7 +1783,7 @@ export const Dashboard: React.FC = () => {
                 style={{ opacity: coverFading ? 0 : 1 }}
               >
                 <Suspense
-                  fallback={renderFlatCoverFallback()}
+                  fallback={renderCoverSkeleton()}
                 >
                   {/* 3D Book Cover + DOM overlay */}
                   <div
@@ -1510,34 +1798,52 @@ export const Dashboard: React.FC = () => {
                         pageCount={activeNotebook.pages.length}
                         isOpening={isOpening}
                         onOpenComplete={handleCoverOpenComplete}
+                        onReady={() => setCoverSceneReady(true)}
                       />
                     </Canvas3DErrorBoundary>
-                    {/* DOM overlay for title editing, color picker, CTA */}
+                    {/* DOM overlay for title editing, color picker, CTA.
+                        • In focus mode the user should land directly in
+                          the notebook, so this overlay never becomes a
+                          second "Open Notebook" gate.
+                        • Before the 3D scene fires onReady, the overlay
+                          is hidden (opacity 0 + non-interactive) so
+                          users never see the title + color picker +
+                          template tiles floating over a blank canvas
+                          during the 1-2s scene initialization. */}
                     <div
-                      className="absolute inset-x-0 top-[20%] md:top-[15%] bottom-[8%] md:bottom-[10%] flex flex-col items-center justify-center px-3 md:px-6 text-center pointer-events-none"
-                      style={{ zIndex: 20 }}
+                      className="absolute inset-x-0 top-[20%] md:top-[15%] bottom-[8%] md:bottom-[10%] flex flex-col items-center justify-center px-3 md:px-6 text-center pointer-events-none transition-opacity duration-300"
+                      style={{
+                        zIndex: 20,
+                        opacity: coverSceneReady ? 1 : 0,
+                      }}
                     >
                       {/* Gradient scrim removed — 3D scene provides enough contrast */}
 
                       <div className="relative z-10 flex flex-col items-center w-full max-h-full overflow-y-auto overflow-x-hidden scrollbar-hide">
-                      {/* Title — always shown, looks "printed" on the cover */}
-                      <input
-                        className="pointer-events-auto bg-transparent text-white text-xl md:text-4xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md px-2"
-                        style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
-                        value={activeNotebook.title}
-                        onChange={(e) => {
-                          setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, title: e.target.value } : nb));
-                        }}
-                      />
+                      {/* Title — hidden in focus mode (the printed title
+                          on the 3D cover is enough). */}
+                      {!focusMode && (
+                        <input
+                          className="pointer-events-auto bg-transparent text-white text-xl md:text-4xl font-serif font-bold text-center border-b-2 border-transparent hover:border-white/30 focus:border-white/50 focus:outline-none transition-colors w-full max-w-md px-2"
+                          style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
+                          value={activeNotebook.title}
+                          onChange={(e) => {
+                            setNotebooks(prev => prev.map(nb => nb.id === activeNotebookId ? { ...nb, title: e.target.value } : nb));
+                          }}
+                        />
+                      )}
 
-                      <div
-                        className="mt-1 md:mt-2 text-white/60 font-sans tracking-widest uppercase text-[10px] md:text-xs"
-                        style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
-                      >
-                        {activeNotebook.pages.length} Spreads
-                      </div>
+                      {!focusMode && (
+                        <div
+                          className="mt-1 md:mt-2 text-white/60 font-sans tracking-widest uppercase text-[10px] md:text-xs"
+                          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
+                        >
+                          {activeNotebook.pages.length} Spreads
+                        </div>
+                      )}
 
-                      {/* Cover Customization Panel */}
+                      {/* Cover Customization Panel — hidden in focus mode. */}
+                      {!focusMode && (
                       <div className="pointer-events-auto flex flex-col items-center gap-1.5 mt-2 md:mt-4 w-full max-w-md px-2 md:px-4">
                         {/* Color Swatches — wrapping grid for all colors */}
                         <div className="flex flex-wrap items-center justify-center gap-1 md:gap-1.5 px-2 md:px-3 py-1.5 md:py-2 bg-black/40 backdrop-blur-xl rounded-xl md:rounded-2xl border border-white/10 shadow-2xl shadow-black/40">
@@ -1575,8 +1881,9 @@ export const Dashboard: React.FC = () => {
                           )}
                         </div>
                       </div>
+                      )}
                       {activeNotebook.pages.length > 0 ? (
-                        !isOpening && (
+                        !focusMode && !isOpening && (
                           <button
                             onClick={handleOpen3DCover}
                             className="pointer-events-auto mt-3 text-white flex items-center gap-2 bg-indigo-600/80 hover:bg-indigo-500/90 backdrop-blur-sm px-4 py-2 md:px-6 md:py-3 rounded-xl md:rounded-2xl transition-all hover:scale-105 cursor-pointer text-sm md:text-base font-medium shadow-xl shadow-indigo-900/30"
@@ -1588,7 +1895,7 @@ export const Dashboard: React.FC = () => {
                             <ChevronRight size={16} className="hidden md:block" />
                           </button>
                         )
-                      ) : (
+                      ) : focusMode ? null : (
                         /* Onboarding Templates — premium glass tiles */
                         <div className="pointer-events-auto mt-5 w-full max-w-2xl">
                           <div className="flex items-center justify-center gap-2 mb-3">
@@ -1663,6 +1970,7 @@ export const Dashboard: React.FC = () => {
                 onToggleBookmark={native ? toggleBookmark : undefined}
                 onOpenAIGenerator={() => setIsGeneratorOpen(true)}
                 onAddPage={() => handleNewPage()}
+                hideChrome={focusMode}
               />
             ) : (
               /* Empty State (End of book) */
@@ -1861,7 +2169,16 @@ export const Dashboard: React.FC = () => {
 
       {/* iOS Tab Bar — only renders on native */}
       {/* iOS Tab Bar — only renders on native; hidden while keyboard is up */}
-      <TabBar activeTab={activeTab} onTabChange={handleTabChange} hidden={keyboardVisible} />
-    </div>
+        <TabBar activeTab={activeTab} onTabChange={handleTabChange} hidden={keyboardVisible} />
+      </div>
+
+      {activeNotebook.pages.length > 0 && (
+        <ExportNotebookDocument
+          notebook={activeNotebook}
+          branded={exportUsesBranding}
+          watermarked={exportUsesWatermark}
+        />
+      )}
+    </>
   );
 };

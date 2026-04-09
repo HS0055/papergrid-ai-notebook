@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Book, Sparkles, ArrowRight, ArrowLeft, Mail, Lock, User, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Sparkles, ArrowRight, ArrowLeft, Mail, Lock, User, Eye, EyeOff, KeyRound, BookOpen } from 'lucide-react';
+import { Logo } from './landing/Logo';
 
 interface AuthPageProps {
     onLogin: (email: string, password: string) => Promise<void>;
@@ -114,13 +115,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onSignup, onGoogleL
             </div>
 
             <div className="w-full max-w-md relative z-10">
-                {/* Logo */}
+                {/* Logo — same component used by the landing navbar so
+                    the brand is identical across every surface. */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                            <Book size={24} className="text-white" />
-                        </div>
-                        <span className="text-3xl font-bold text-white tracking-tight">Papera</span>
+                    <div className="flex justify-center mb-4">
+                        <Logo variant="dark" size={48} />
                     </div>
                     <p className="text-indigo-200/60 text-sm">
                         AI-powered digital notebooks that feel real
@@ -431,7 +430,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onSignup, onGoogleL
                         <span>AI Layouts</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <Book size={12} />
+                        <BookOpen size={12} />
                         <span>16 Block Types</span>
                     </div>
                     <div className="flex items-center gap-1.5">

@@ -837,23 +837,160 @@
    PRINT STYLES
    ======================================== */
 
+[data-pdf-export-root] {
+  display: none;
+}
+
 @media print {
-  aside,
-  [data-toast-container],
-  .anim-fab-pop,
-  [class*="absolute"][class*="bottom-4"],
-  [class*="absolute"][class*="top-4"],
-  [class*="justify-center"][class*="mb-2"],
-  button[class*="rounded-full"][class*="shadow-lg"] {
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+
+  [data-dashboard-shell] {
     display: none !important;
   }
 
   body, html {
     background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  main {
-    padding: 0 !important;
+  [data-pdf-export-root] {
+    display: block !important;
+    background: white !important;
+  }
+
+  [data-pdf-export-page] {
+    display: block;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  [data-pdf-export-page]:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  [data-pdf-export-frame] {
+    position: relative;
+    min-height: calc(100vh - 20mm);
+    background: white !important;
+    color: #111827 !important;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 28px;
+    overflow: hidden;
+  }
+
+  [data-pdf-export-cover-card="true"] {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 28mm 20mm 20mm;
+    background:
+      radial-gradient(circle at top, rgba(99, 102, 241, 0.12), transparent 34%),
+      linear-gradient(180deg, #ffffff 0%, #eef2ff 100%);
+  }
+
+  [data-pdf-export-cover-brand] {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  [data-pdf-export-cover-body] {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  [data-pdf-export-eyebrow] {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #4f46e5;
+  }
+
+  [data-pdf-export-title] {
+    margin: 0;
+    font-size: 32px;
+    line-height: 1.1;
+    color: #111827;
+  }
+
+  [data-pdf-export-subtitle] {
+    margin: 0;
+    font-size: 14px;
+    color: #475569;
+  }
+
+  [data-pdf-export-cover-watermark] {
+    align-self: flex-end;
+    font-size: 12px;
+    color: rgba(79, 70, 229, 0.72);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  [data-pdf-export-header] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  [data-pdf-export-notebook] {
+    padding: 12px;
+  }
+
+  [data-pdf-export-notebook] [data-scroll-container] {
+    overflow: visible !important;
+    padding-bottom: 0 !important;
+    max-height: none !important;
+  }
+
+  [data-pdf-export-notebook] button {
+    display: none !important;
+  }
+
+  [data-pdf-export-notebook] input,
+  [data-pdf-export-notebook] textarea {
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #111827 !important;
+  }
+
+  [data-pdf-export-notebook] textarea {
+    overflow: visible !important;
+  }
+
+  [data-pdf-export-footer] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px 16px;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  [data-pdf-export-watermark] {
+    position: absolute;
+    inset: auto 18px 52px auto;
+    font-size: 11px;
+    color: rgba(79, 70, 229, 0.55);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   [data-export-target] {

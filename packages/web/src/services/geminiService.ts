@@ -212,14 +212,23 @@ export async function chargeInk(action: string, amount: number): Promise<{ allow
 
 export const generateCover = async (prompt: string, aesthetic?: string): Promise<{ imageUrl: string }> => {
   try {
+    const sessionToken = localStorage.getItem('papergrid_session');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (sessionToken) {
+      headers['Authorization'] = `Bearer ${sessionToken}`;
+    }
+
     const response = await fetch(`${API_BASE}/api/generate-cover`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ prompt, aesthetic }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      if (response.status === 401) {
+        throw new Error('Please sign in to generate a cover.');
+      }
       throw new Error(errorData.error || `API error: ${response.status}`);
     }
 

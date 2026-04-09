@@ -15,17 +15,12 @@ interface WaitlistRow {
 }
 
 function authHeaders(): Record<string, string> {
-  const raw = localStorage.getItem(SESSION_KEY);
+  // Session is stored as a raw string by useAuth.tsx. The previous
+  // JSON.parse path silently dropped the token and the Waitlist admin
+  // tab always hit the server unauthenticated.
+  const token = localStorage.getItem(SESSION_KEY);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      const token = parsed?.token;
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-    } catch {
-      /* ignore */
-    }
-  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
 }
 

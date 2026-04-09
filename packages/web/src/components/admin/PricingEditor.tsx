@@ -29,18 +29,27 @@ export const PricingEditor: React.FC = () => {
   const resetPacks = resetConfig;
 
   const updatePlan = (id: PricingPlanId, patch: Partial<PricingPlan>) => {
+    // When the plan is still a "default" (not yet in the Convex override),
+    // `plans[id]` is undefined. Spreading undefined gives you back just
+    // the patch, so we'd write a plan with ONLY the patched field and
+    // lose everything else (name, price, ink, features...). Hydrate from
+    // the canonical defaults first.
+    const base = plans[id] ?? DEFAULT_PRICING_PLANS[id];
+    if (!base) return;
     setPlans({
       ...plans,
-      [id]: { ...plans[id], ...patch },
+      [id]: { ...base, ...patch },
     });
   };
 
   const updatePlanInk = (id: PricingPlanId, patch: Partial<{ monthly: number; rollover: number }>) => {
+    const base = plans[id] ?? DEFAULT_PRICING_PLANS[id];
+    if (!base) return;
     setPlans({
       ...plans,
       [id]: {
-        ...plans[id],
-        ink: { ...plans[id].ink, ...patch },
+        ...base,
+        ink: { ...base.ink, ...patch },
       },
     });
   };
@@ -82,7 +91,17 @@ export const PricingEditor: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Pricing Editor</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Edit subscription plans and Ink packs. Changes save instantly to localStorage.
+            Edit subscription plans and Ink packs. Changes sync to Convex
+            after ~500&nbsp;ms and appear on the landing page, in-app pricing,
+            FAQ, and comparison table for every visitor.
+          </p>
+          <p className="text-xs text-amber-700 mt-2 max-w-prose">
+            <strong>Note:</strong> Ink monthly grant and notebook cap are
+            ALSO editable in the separate <em>Plan Limits</em> tab (which
+            is what the backend enforces at runtime). Until those two keys
+            are merged server-side, edit <strong>both</strong> when you
+            change Ink or notebook caps to avoid drift between the
+            marketing copy and the enforced limit.
           </p>
         </div>
         <div className="flex gap-2">
@@ -109,20 +128,44 @@ export const PricingEditor: React.FC = () => {
       {/* ─── Subscription Plans ─────────────────────────────────── */}
       <section>
         <h3 className="text-lg font-bold text-gray-900 mb-4">Subscription Plans</h3>
+        <p className="text-xs text-gray-500 mb-3 max-w-prose">
+          All 5 plans are always shown here, even if the Convex override
+          doesn't contain them yet. Editing a missing plan will create it
+          on the next save. Hidden plans still exist for the backend —
+          they're just not rendered on the public landing page.
+        </p>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {(['free', 'starter', 'pro', 'creator', 'founder'] as const).map((planId) => {
-            // Skip plans that don't exist in the current config.
-            if (!plans[planId]) return null;
-            const plan = plans[planId];
+            // Hydrate from core defaults when the Convex override doesn't
+            // have this plan yet. This lets admins edit / show / hide any
+            // of the 5 canonical plans from day 1, without needing a
+            // one-off migration to seed the missing rows.
+            const plan = plans[planId] ?? DEFAULT_PRICING_PLANS[planId];
+            if (!plan) return null;
+            const isUnsavedDefault = !plans[planId];
             return (
               <div
                 key={planId}
-                className="bg-white rounded-xl border border-gray-200 p-5 space-y-3"
+                className={`bg-white rounded-xl border p-5 space-y-3 ${
+                  isUnsavedDefault
+                    ? 'border-dashed border-amber-300 bg-amber-50/40'
+                    : 'border-gray-200'
+                }`}
               >
                 {/* Plan name + tagline */}
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    {planId}
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      {planId}
+                    </div>
+                    {isUnsavedDefault && (
+                      <span
+                        className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200"
+                        title="This plan is not yet in the Convex override. Edit any field to save it."
+                      >
+                        default
+                      </span>
+                    )}
                   </div>
                   <input
                     type="text"
@@ -219,16 +262,43 @@ export const PricingEditor: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Featured toggle */}
-                <label className="flex items-center gap-2 text-xs text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={plan.featured}
-                    onChange={(e) => updatePlan(planId, { featured: e.target.checked })}
-                    className="rounded"
-                  />
-                  Featured (highlighted card)
-                </label>
+                {/* Visibility + featured toggles */}
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={plan.featured}
+                      onChange={(e) => updatePlan(planId, { featured: e.target.checked })}
+                      className="rounded"
+                    />
+                    Featured (highlighted card)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={plan.hiddenFromLanding === true}
+                      onChange={(e) =>
+                        updatePlan(planId, { hiddenFromLanding: e.target.checked })
+                      }
+                      className="rounded"
+                    />
+                    Hidden from public landing page
+                  </label>
+                  {plan.annualPrice && plan.annualPrice > 0 && (
+                    <p className="text-[10px] text-gray-400 pl-5">
+                      Annual-equivalent monthly:&nbsp;
+                      <span className="font-mono font-semibold text-gray-600">
+                        ${(plan.annualPrice / 12).toFixed(2)}
+                      </span>
+                      {plan.annualEquivMonthly &&
+                        Math.abs(plan.annualEquivMonthly - plan.annualPrice / 12) > 0.01 && (
+                          <span className="text-rose-500 ml-2">
+                            (stored: ${plan.annualEquivMonthly.toFixed(2)} — stale)
+                          </span>
+                        )}
+                    </p>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -333,7 +403,7 @@ export const PricingEditor: React.FC = () => {
 
       {/* Footer note */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
-        <strong>How this works:</strong> Changes save to localStorage instantly and sync to the public landing page in your current browser. To make changes permanent for all visitors, click <strong>Export JSON</strong> and paste the result into <code className="bg-blue-100 px-1 rounded">packages/core/src/pricingConfig.ts</code>.
+        <strong>How this works:</strong> Changes save to Convex (<code className="bg-blue-100 px-1 rounded">appSettings["pricing-config"]</code>) after a ~500&nbsp;ms debounce and are immediately visible to all visitors — no deploy required. The defaults in <code className="bg-blue-100 px-1 rounded">packages/core/src/pricingConfig.ts</code> are only the fallback used when no Convex override exists. <strong>Export JSON</strong> is a convenience if you ever want to promote a live edit back into source control as a new default.
       </div>
     </div>
   );

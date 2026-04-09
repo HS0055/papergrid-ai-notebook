@@ -31,6 +31,15 @@ interface BookCoverSceneProps {
   pageCount: number;
   isOpening: boolean;
   onOpenComplete: () => void;
+  /**
+   * Fired once the 3D scene has finished mounting and its first frame
+   * is on screen. The Dashboard uses this to delay the DOM overlay
+   * (title input, color picker, template tiles) so the overlay can
+   * never render on an empty white background while the scene is
+   * still initialising — which was a visible 1–2s flicker on first
+   * open.
+   */
+  onReady?: () => void;
 }
 
 /**
@@ -40,6 +49,29 @@ interface BookCoverSceneProps {
  * When `isOpening` is true, the front cover swings open and fires `onOpenComplete`.
  */
 export default function BookCoverScene(props: BookCoverSceneProps) {
+  // Fire the onReady callback on the next tick after the scene mounts.
+  // The Canvas contents are already queued by the time the wrapping
+  // component renders, and r3f guarantees at least one frame is drawn
+  // by the time a microtask following `useEffect` runs.
+  useEffect(() => {
+    if (!props.onReady) return;
+    // Two rAFs — first lets r3f commit the scene, second guarantees
+    // the paint has actually happened so the overlay doesn't flash
+    // against an empty canvas.
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        props.onReady?.();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <NotebookCanvas
       lightPreset="notebook"

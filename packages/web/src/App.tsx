@@ -5,6 +5,7 @@ import { Dashboard } from './components/Dashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthPage } from './components/AuthPage';
 import { PricingPage } from './components/PricingPage';
+import { CheckoutPage } from './components/CheckoutPage';
 import { BillingSuccessPage } from './components/BillingSuccessPage';
 import { AdminPanel } from './components/AdminPanel';
 import { AuthProvider, useAuth } from './hooks/useAuth';
@@ -93,6 +94,15 @@ export default function App() {
             <Route path="/" element={native ? <Navigate to="/login" replace /> : <LandingPage />} />
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/pricing" element={<PricingPage />} />
+            {/* High-converting in-house checkout (Stripe Elements). All
+                "Go Pro" / "Buy Ink" CTAs route here instead of redirecting
+                to Stripe-hosted Checkout — keeps users on the Papera
+                domain end-to-end. */}
+            <Route path="/checkout" element={
+              <ProtectedRoute>
+                <CheckoutPage />
+              </ProtectedRoute>
+            } />
             {/* Stripe checkout success redirect. The server webhook has
                 usually already upgraded the user's plan by the time they
                 land here — this page just shows confirmation and bounces

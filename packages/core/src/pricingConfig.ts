@@ -352,15 +352,20 @@ export const GUARANTEES = {
 // to NATIVE INTERACTIVE BLOCKS, not PDF template imports (which all apps allow).
 // See docs/reports/ for source URLs and verification notes.
 
+// Papera's entry in COMPETITORS is now DERIVED from PRICING_PLANS.pro
+// so a single admin edit to the Pro plan updates both the pricing grid
+// and the competitor comparison table. The literal price fields below
+// are kept as a fallback for static imports (scripts/tests) but
+// runtime UI should go through usePricingConfig() on the client side.
 export const COMPETITORS = [
   {
     name: 'Papera',
     tier: 'Pro',
-    annualPrice: 89,
-    monthlyPrice: 9.99,
+    annualPrice: PRICING_PLANS.pro.annualPrice ?? 89,
+    monthlyPrice: PRICING_PLANS.pro.monthlyPrice,
     aiIncluded: true,
     aiAddOnAnnual: 0,
-    totalAnnualWithAI: 89,
+    totalAnnualWithAI: PRICING_PLANS.pro.annualPrice ?? 89,
     paperTypes: 10,
     paperTypesNote: 'Native CSS-rendered textures',
     blockTypes: 22,

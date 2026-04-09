@@ -3,12 +3,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const SESSION_KEY = 'papergrid_session';
 
+/**
+ * Read the auth session token from localStorage.
+ *
+ * The session is written as a raw string by useAuth.tsx (line 85) and
+ * AuthPage.tsx (line 85), NOT as JSON. Earlier revisions of this helper
+ * tried `JSON.parse(raw)` which threw on every real token and silently
+ * returned null — which made every admin edit in PricingEditor a silent
+ * no-op. If you ever change the storage format, update BOTH sides at
+ * the same time (search `setItem.*papergrid_session`).
+ */
 function getSessionToken(): string | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.token ?? null;
+    return localStorage.getItem(SESSION_KEY);
   } catch {
     return null;
   }

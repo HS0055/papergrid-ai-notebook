@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, Sparkles, Zap, Crown, Droplet } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -11,6 +12,7 @@ import {
   type InkPack,
 } from '@papergrid/core';
 import { useServerConfig } from '../../hooks/useServerConfig';
+import { useAuth } from '../../hooks/useAuth';
 
 interface PricingConfigShape {
   plans: Record<string, PricingPlan>;
@@ -78,103 +80,59 @@ const buildFeatureLabels = (
 });
 
 export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
+  const navigate = useNavigate();
+  const auth = useAuth();
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('annual');
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
 
-  // Start a Stripe checkout session for a paid plan. Falls back to onLaunch
-  // (which pops the signup modal) if the user isn't authenticated yet, or
-  // if Stripe isn't configured on the server — landing visitors without an
-  // account should be able to see pricing and still sign up.
-  const startCheckout = async (planId: string) => {
+  // Map the Ink pack id from our pricing config (drop/bottle/well/barrel,
+  // or admin-added packs) to the canonical checkout target the backend
+  // understands (ink_25 / ink_75 / ink_200 / ink_500).
+  const inkTargetForPackId = (pack: InkPack): string | null => {
+    if (pack.id === 'drop') return 'ink_25';
+    if (pack.id === 'bottle') return 'ink_75';
+    if (pack.id === 'well') return 'ink_200';
+    if (pack.id === 'barrel') return 'ink_500';
+    if (/^ink_(25|75|200|500)$/.test(pack.id)) return pack.id;
+    if ([25, 75, 200, 500].includes(pack.ink)) return `ink_${pack.ink}`;
+    return null;
+  };
+
+  // Plan CTA: navigate to the in-house /checkout page (Stripe Elements)
+  // instead of the previous redirect to Stripe-hosted Checkout. Keeps
+  // users on the Papera domain end-to-end. Unauthenticated visitors
+  // still get the signup modal first.
+  const startCheckout = (planId: string) => {
+    setCheckoutError(null);
     if (planId === 'free') {
       onLaunch();
       return;
     }
-    setCheckoutError(null);
-    setCheckoutLoading(planId);
-    try {
-      // If the user isn't signed in yet, pop the signup modal first;
-      // after auth the user can click the same button and get into
-      // checkout.
-      const token =
-        (typeof localStorage !== 'undefined' && localStorage.getItem('papergrid_session')) || null;
-      if (!token) {
-        onLaunch();
-        return;
-      }
-      const res = await fetch(`${API_BASE}/api/billing/checkout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          target: planId,
-          interval: billingPeriod === 'annual' ? 'year' : 'month',
-        }),
-      });
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}));
-        if (res.status === 503) {
-          // Billing not configured yet on the backend — fall through to
-          // the signup/join-waitlist flow so visitors aren't blocked.
-          onLaunch();
-          return;
-        }
-        throw new Error(detail?.error || `Checkout failed (${res.status})`);
-      }
-      const data = (await res.json()) as { checkoutUrl?: string };
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-        return;
-      }
-      throw new Error('No checkout URL returned');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to start checkout';
-      setCheckoutError(msg);
-      setCheckoutLoading(null);
+    if (!auth.isAuthenticated) {
+      onLaunch();
+      return;
     }
+    setCheckoutLoading(planId);
+    const interval = billingPeriod === 'annual' ? 'year' : 'month';
+    navigate(`/checkout?target=${planId}&interval=${interval}`);
   };
 
-  const startInkCheckout = async (packId: string) => {
+  // Ink pack CTA: same in-house checkout flow.
+  const startInkCheckout = (pack: InkPack) => {
     setCheckoutError(null);
-    setCheckoutLoading(packId);
-    try {
-      const token =
-        (typeof localStorage !== 'undefined' && localStorage.getItem('papergrid_session')) || null;
-      if (!token) {
-        onLaunch();
-        return;
-      }
-      const res = await fetch(`${API_BASE}/api/billing/checkout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ target: `ink_${packId}` }),
-      });
-      if (!res.ok) {
-        if (res.status === 503) {
-          onLaunch();
-          return;
-        }
-        const detail = await res.json().catch(() => ({}));
-        throw new Error(detail?.error || `Checkout failed (${res.status})`);
-      }
-      const data = (await res.json()) as { checkoutUrl?: string };
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-        return;
-      }
-      throw new Error('No checkout URL returned');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to start checkout';
-      setCheckoutError(msg);
-      setCheckoutLoading(null);
+    const target = inkTargetForPackId(pack);
+    if (!target) {
+      setCheckoutError(`This Ink pack (${pack.name}) is not wired to Stripe yet.`);
+      return;
     }
+    if (!auth.isAuthenticated) {
+      onLaunch();
+      return;
+    }
+    setCheckoutLoading(pack.id);
+    navigate(`/checkout?target=${target}`);
   };
 
   // Live-edited plans + Ink packs from Convex (admin edits in /admin tab
@@ -517,7 +475,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
               <button
                 key={pack.id}
                 type="button"
-                onClick={() => startInkCheckout(String(pack.ink))}
+                onClick={() => startInkCheckout(pack)}
                 disabled={checkoutLoading !== null}
                 aria-label={`Buy ${pack.ink} Ink pack for ${formatPrice(pack.price)}`}
                 className={`ink-pack-card relative rounded-2xl p-6 border transition-all hover:scale-[1.03] hover:shadow-lg text-center focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/30 disabled:opacity-60 disabled:cursor-wait ${

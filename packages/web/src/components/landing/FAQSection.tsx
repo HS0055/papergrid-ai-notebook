@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Plus, Minus } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { usePricingConfig } from '../../hooks/usePricingConfig';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -10,58 +11,93 @@ interface FAQItem {
   a: string;
 }
 
-const FAQ_ITEMS: FAQItem[] = [
-  {
-    q: 'What is Ink?',
-    a: 'Ink is Papera\'s creative fuel. Each Ink drop powers one AI-generated notebook page. 1 Ink = 1 page layout. 4 Ink = 1 cover image. Simple and transparent.',
-  },
-  {
-    q: 'What happens when I run out of Ink?',
-    a: 'Your notebooks and all your content remain fully accessible — always. You simply can\'t generate new AI layouts until your Ink refreshes next month or you purchase a top-up pack.',
-  },
-  {
-    q: 'Do unused Ink drops roll over?',
-    a: 'Pro users roll over up to 50 Ink per month. Creator users roll over up to 125 Ink. Purchased Ink top-up packs never expire while your account is active.',
-  },
-  {
-    q: 'Can I use Papera without a subscription?',
-    a: 'Yes. The free plan includes 10 Ink/month and 1 notebook forever. You can also buy Ink top-up packs anytime without subscribing. No credit card required to start.',
-  },
-  {
-    q: 'Is there a free trial?',
-    a: 'No trials. We believe in a genuine free tier instead. Start free forever with 10 Ink/month. Upgrade only when you need more. No credit card, no forgetting to cancel.',
-  },
-  {
-    q: 'What\'s the difference between Pro and Creator?',
-    a: 'Pro is designed for personal use: unlimited notebooks, 100 Ink/month, all features. Creator adds template marketplace publishing (keep 70% of every sale), branded exports, priority AI, and 250 Ink/month.',
-  },
-  {
-    q: 'Can I cancel anytime?',
-    a: 'Yes, cancel with one tap. Your benefits last until the end of your billing period. Your notebooks are always yours — we never lock away content you created, even after cancellation.',
-  },
-  {
-    q: 'Is my data private?',
-    a: 'Absolutely. Your notebooks are encrypted and only accessible to you. We don\'t train AI models on your content. You can export everything as PDF at any time.',
-  },
-  {
-    q: 'Do you offer refunds?',
-    a: 'Yes. Annual plans come with a 30-day money-back guarantee. If Papera isn\'t right for you in the first month, email support for a full refund — no questions asked.',
-  },
-  {
-    q: 'How does the template marketplace work?',
-    a: 'Creator subscribers can publish their best notebook layouts as templates. Set your price, keep 70% of every sale. Papera takes 30% for payment processing and hosting.',
-  },
-  {
-    q: 'Does Papera work offline?',
-    a: 'You can view and edit your notebooks offline. AI layout generation requires an internet connection. Changes sync automatically when you\'re back online.',
-  },
-  {
-    q: 'When is the iOS app coming?',
-    a: 'The iOS app is launching soon. Join the waitlist below to get notified and receive a bonus 25 Ink on launch day.',
-  },
-];
+/**
+ * Build the FAQ item list from live pricing so admin edits to Ink
+ * amounts or rollover caps propagate into the copy automatically.
+ *
+ * Each question that mentions a number pulls it from usePricingConfig
+ * rather than hardcoding. That way "100 Ink/month" can never drift
+ * from what the PricingSection grid or the backend enforcement says.
+ */
+function useFaqItems(): FAQItem[] {
+  const pricing = usePricingConfig();
+
+  return useMemo(() => {
+    const free = pricing.getPlan('free');
+    const pro = pricing.getPlan('pro');
+    const creator = pricing.getPlan('creator');
+
+    // Conservative fallbacks if the server hasn't loaded yet — match
+    // the static defaults in packages/core/src/pricingConfig.ts so the
+    // copy never shows "0 Ink" on first paint.
+    const freeInk = free?.monthlyInk ?? 10;
+    const freeNotebooks = free?.maxNotebooks ?? 1;
+    const freeNotebooksLabel =
+      freeNotebooks === -1
+        ? 'unlimited notebooks'
+        : `${freeNotebooks} notebook${freeNotebooks === 1 ? '' : 's'}`;
+    const proInk = pro?.monthlyInk ?? 100;
+    const proRollover = pro?.inkRolloverCap ?? 50;
+    const creatorInk = creator?.monthlyInk ?? 250;
+    const creatorRollover = creator?.inkRolloverCap ?? 125;
+    const creatorRevShare = Math.round((creator?.marketplaceRevShare ?? 0.7) * 100);
+    const creatorCut = 100 - creatorRevShare;
+
+    return [
+      {
+        q: 'What is Ink?',
+        a: "Ink is Papera's creative fuel. Each Ink drop powers one AI-generated notebook page. 1 Ink = 1 page layout. 4 Ink = 1 cover image. Simple and transparent.",
+      },
+      {
+        q: 'What happens when I run out of Ink?',
+        a: "Your notebooks and all your content remain fully accessible — always. You simply can't generate new AI layouts until your Ink refreshes next month or you purchase a top-up pack.",
+      },
+      {
+        q: 'Do unused Ink drops roll over?',
+        a: `Pro users roll over up to ${proRollover} Ink per month. Creator users roll over up to ${creatorRollover} Ink. Purchased Ink top-up packs never expire while your account is active.`,
+      },
+      {
+        q: 'Can I use Papera without a subscription?',
+        a: `Yes. The free plan includes ${freeInk} Ink/month and ${freeNotebooksLabel} forever. You can also buy Ink top-up packs anytime without subscribing. No credit card required to start.`,
+      },
+      {
+        q: 'Is there a free trial?',
+        a: `No trials. We believe in a genuine free tier instead. Start free forever with ${freeInk} Ink/month. Upgrade only when you need more. No credit card, no forgetting to cancel.`,
+      },
+      {
+        q: "What's the difference between Pro and Creator?",
+        a: `Pro is designed for personal use: unlimited notebooks, ${proInk} Ink/month, all features. Creator adds template marketplace publishing (keep ${creatorRevShare}% of every sale), branded exports, priority AI, and ${creatorInk} Ink/month.`,
+      },
+      {
+        q: 'Can I cancel anytime?',
+        a: 'Yes, cancel with one tap. Your benefits last until the end of your billing period. Your notebooks are always yours — we never lock away content you created, even after cancellation.',
+      },
+      {
+        q: 'Is my data private?',
+        a: "Absolutely. Your notebooks are encrypted and only accessible to you. We don't train AI models on your content. You can export everything as PDF at any time.",
+      },
+      {
+        q: 'Do you offer refunds?',
+        a: "Yes. Annual plans come with a 30-day money-back guarantee. If Papera isn't right for you in the first month, email support for a full refund — no questions asked.",
+      },
+      {
+        q: 'How does the template marketplace work?',
+        a: `Creator subscribers can publish their best notebook layouts as templates. Set your price, keep ${creatorRevShare}% of every sale. Papera takes ${creatorCut}% for payment processing and hosting.`,
+      },
+      {
+        q: 'Does Papera work offline?',
+        a: "You can view and edit your notebooks offline. AI layout generation requires an internet connection. Changes sync automatically when you're back online.",
+      },
+      {
+        q: 'When is the iOS app coming?',
+        a: 'The iOS app is launching soon. Join the waitlist below to get notified and receive a bonus 25 Ink on launch day.',
+      },
+    ];
+  }, [pricing]);
+}
 
 export const FAQSection: React.FC = () => {
+  const FAQ_ITEMS = useFaqItems();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   const sectionRef = useRef<HTMLElement>(null);
 

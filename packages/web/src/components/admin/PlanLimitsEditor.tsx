@@ -34,12 +34,12 @@ const PLAN_COLORS: Record<PlanId, string> = {
   creator: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
+// useAuth.tsx stores the session token as a raw string, NOT as JSON.
+// The prior JSON.parse version here silently returned null and every
+// Plan Limits edit was dropped on the floor.
 function getSessionToken(): string | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.token ?? null;
+    return localStorage.getItem(SESSION_KEY);
   } catch {
     return null;
   }

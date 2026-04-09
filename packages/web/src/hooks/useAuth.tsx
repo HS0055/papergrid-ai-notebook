@@ -7,7 +7,8 @@ interface User {
     name: string;
     email: string;
     avatarUrl?: string;
-    plan: 'free' | 'starter' | 'pro' | 'founder';
+    plan: 'free' | 'starter' | 'pro' | 'founder' | 'creator';
+    role?: 'user' | 'admin';
     aiGenerationsUsed: number;
 }
 
@@ -51,7 +52,8 @@ type AuthApiUser = {
     name: string;
     email: string;
     avatarUrl?: string;
-    plan: 'free' | 'starter' | 'pro' | 'founder';
+    plan: 'free' | 'starter' | 'pro' | 'founder' | 'creator';
+    role?: 'user' | 'admin';
     aiGenerationsUsed?: number;
 };
 
@@ -62,6 +64,7 @@ function mapUser(user: AuthApiUser): User {
         email: user.email,
         avatarUrl: user.avatarUrl,
         plan: user.plan,
+        role: user.role,
         aiGenerationsUsed: user.aiGenerationsUsed ?? 0,
     };
 }

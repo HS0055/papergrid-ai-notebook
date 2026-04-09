@@ -68,6 +68,13 @@ interface NotebookViewProps {
   onOpenAIGenerator?: () => void;
   /** Native-only: append a new page to the notebook */
   onAddPage?: () => void;
+  /**
+   * Focus mode: hide ALL chrome from the notebook view (page-title bar,
+   * paper type pill, date, etc) so only the actual writing surface +
+   * blocks remain visible. The user-level "Exit focus" pill lives at
+   * the Dashboard level.
+   */
+  hideChrome?: boolean;
 }
 
 const PAPER_TYPES = [
@@ -179,7 +186,7 @@ function groupConsecutiveBlocks(blocks: Block[]): BlockGroup[] {
 
 export const NotebookView: React.FC<NotebookViewProps> = ({
   page, onUpdatePage, allPages, onNavigate, onBlockDeleted, sounds,
-  isBookmarked, onToggleBookmark, onOpenAIGenerator,
+  isBookmarked, onToggleBookmark, onOpenAIGenerator, hideChrome,
 }) => {
   const native = isNativeApp();
   const { keyboardVisible, keyboardHeight } = useKeyboardHandler();
@@ -840,12 +847,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         </>
       ))}
 
-      {/* Header
-          Native: clean 52pt header with title + paper pill + bookmark.
-                  L/R switch moved to a floating segmented control above the
-                  tab bar (thumb-zone, 44pt targets, no crushing).
-          Web:    separate 48/64px headers per page (unchanged) */}
-      {native ? (
+      {/* Header — entirely hidden in focus mode so the user sees only
+          the writing surface + blocks. */}
+      {hideChrome ? null : native ? (
         <div
           className="border-b border-black/[0.06] flex items-center gap-3 px-4 bg-paper shrink-0"
           style={{ height: '52px' }}
