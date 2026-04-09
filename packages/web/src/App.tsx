@@ -92,6 +92,11 @@ export default function App() {
           <Routes>
             {/* On native iOS, skip the marketing landing page — go straight to login */}
             <Route path="/" element={native ? <Navigate to="/login" replace /> : <LandingPage />} />
+            {/* Path-based referral URLs: /r/<code> renders the landing
+                page and the capture helper picks up the code from
+                window.location.pathname. The URL stays visible so the
+                visitor has proof the invitation was received. */}
+            <Route path="/r/:code" element={native ? <Navigate to="/login" replace /> : <LandingPage />} />
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/pricing" element={<PricingPage />} />
             {/* High-converting in-house checkout (Stripe Elements). All
@@ -128,13 +133,13 @@ export default function App() {
                 </Suspense>
               </ProtectedRoute>
             } />
-            {/* Referral dashboard — auth-gated, user→user growth loop */}
+            {/* Referral page — public. Authenticated users see their
+                share dashboard; unauthenticated visitors see a public
+                "You're invited" explainer with a signup CTA. */}
             <Route path="/referral" element={
-              <ProtectedRoute>
-                <Suspense fallback={<LazyFallback />}>
-                  <ReferralPage />
-                </Suspense>
-              </ProtectedRoute>
+              <Suspense fallback={<LazyFallback />}>
+                <ReferralPage />
+              </Suspense>
             } />
             {/* Admin panel is hidden on native builds to avoid App Store rejection */}
             {!native && (

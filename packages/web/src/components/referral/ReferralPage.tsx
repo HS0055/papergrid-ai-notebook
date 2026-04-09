@@ -106,8 +106,15 @@ export const ReferralPage: React.FC = () => {
     }
   }, [stats?.code]);
 
+  // Use the path-based `/r/<code>` format as the shareable URL.
+  // It's cleaner, friendlier to share verbally ("papera.app slash r
+  // slash hayk-xyz23"), and stays visible in the visitor's address
+  // bar as proof the invitation was received. The query-based form
+  // `?ref=<code>` still works as a fallback for legacy outgoing
+  // links (newsletters, existing shares) — the capture helper
+  // detects both.
   const referralUrl = useMemo(
-    () => (stats ? `${window.location.origin}/?ref=${stats.code}` : ''),
+    () => (stats ? `${window.location.origin}/r/${stats.code}` : ''),
     [stats],
   );
 

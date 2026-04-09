@@ -15,23 +15,31 @@ Prerequisites:
 - [ ] Navigate to `/referral` via the Dashboard nav (`Dashboard.tsx:1737`).
 - [ ] A unique code is provisioned on first visit (e.g. `hayk23kx`).
 - [ ] The hero card shows the current reward amounts from admin config (default 25 / 25).
-- [ ] The referral link shows `<origin>/?ref=<code>` and the Copy button turns green on click.
+- [ ] The referral link shows `<origin>/r/<code>` (path-based — no query string). The Copy button turns green on click.
 - [ ] The stats grid reads `Clicks: 0 · Signups: 0 · Qualified: 0 · Ink earned: 0`.
 
 **If this fails:** check `/api/referral/ensure-code` in Network tab, confirm `referralCodes` table has a row for User A.
 
 ---
 
-## 2. URL capture + click tracking
+## 2a. Path-based URL capture (`/r/<code>` — primary format)
 
-- [ ] In an **incognito window**, paste the copied link. URL loads as `<origin>/?ref=<code>`.
-- [ ] Within 1 second the address bar URL is cleaned to `<origin>/` (the `?ref=` is stripped).
+- [ ] In an **incognito window**, paste the copied link: `<origin>/r/<code>`.
+- [ ] The address bar **stays at** `/r/<code>` — the URL is **not** cleaned (this is by design; the pretty path is the share format).
 - [ ] DevTools → Application → Local Storage shows key `papergrid_referral_ref` with `{"code":"<code>","capturedAt":<ms>}`.
 - [ ] DevTools → Application → Local Storage also shows key `papergrid_referral_click_ttl` with `{"code":"<code>","firedAt":<ms>}`.
-- [ ] Network tab shows a `GET /api/referral/lookup?code=<code>` → 200 `{valid:true, rewards:{...}}`.
-- [ ] Network tab shows a `POST /api/referral/track-click` → 200 `{ok:true}`.
-- [ ] Landing page renders the **ReferralBanner** gradient strip above the hero: "You were invited to Papera. Sign up and claim 25 free Ink."
+- [ ] Network tab shows `GET /api/referral/lookup?code=<code>` → 200 `{valid:true, rewards:{...}}`.
+- [ ] Network tab shows `POST /api/referral/track-click` → 200 `{ok:true}`.
+- [ ] The floating **ReferralBanner** card slides up from bottom-right within ~1s: "A friend sent you 25 free Ink" with a "Claim 25 Ink →" button and a "Details" link.
+- [ ] The landing page renders normally underneath — no NavBar collision.
 - [ ] Go back to User A's `/referral` page and click **Refresh** on the stat grid — `Clicks` should now read `1`.
+
+## 2b. Query-based URL capture (`?ref=<code>` — legacy fallback)
+
+- [ ] In a fresh incognito window, visit `<origin>/?ref=<code>`.
+- [ ] Within 1 second the address bar URL is cleaned to `<origin>/` (the `?ref=` **is** stripped, because query-based URLs get sanitized for aesthetics).
+- [ ] Same localStorage + network checks as 2a pass.
+- [ ] Banner renders identically to 2a.
 
 **If clicks don't increment:** confirm `VITE_API_URL` is set (or the relative path reaches the Convex HTTP router). Check the rate-limit ceiling in `referrals.track_click_ip` (30/min/IP).
 

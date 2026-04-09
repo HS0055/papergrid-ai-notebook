@@ -1,8 +1,21 @@
 // Tiny cookie-free referral-code capture helper.
 //
-// When a visitor lands on the site with `?ref=CODE`, we:
-//   1. Pull the code out of the URL
-//   2. Clean the URL immediately so the address bar looks pretty
+// Supports TWO URL formats:
+//
+//   Path-based (preferred, user-facing shareable):
+//     https://papergrid-five.vercel.app/r/hayk-xyz23
+//     → URL is LEFT AS-IS in the address bar — the pretty path is the
+//       whole point, and keeping it visible is proof to the visitor
+//       that the invitation was received.
+//
+//   Query-based (legacy, still works for email/newsletter URLs):
+//     https://papergrid-five.vercel.app/?ref=hayk-xyz23
+//     → The `?ref=` is stripped via history.replaceState so the
+//       address bar looks clean afterwards.
+//
+// Flow for both:
+//   1. Pull the code out of the URL (path first, query second)
+//   2. Clean the URL if it was query-based
 //   3. Validate the code against /api/referral/lookup (best-effort)
 //   4. Persist it in localStorage under a dedicated key
 //   5. Fire a click-track ping — deduped per code in a 24h window so
@@ -49,31 +62,49 @@ interface LookupResponse {
   };
 }
 
+// Matches `/r/<code>` as the entire path, with optional trailing slash.
+// Code is 1-32 chars of the lowercase referral alphabet. Anchored so
+// `/referral` and other paths starting with `/r` don't accidentally match.
+const PATH_REFERRAL_REGEX = /^\/r\/([a-z0-9_-]{1,32})\/?$/i;
+
 /**
- * Capture a referral code from ?ref= in the current URL and persist it.
+ * Capture a referral code from the current URL and persist it.
  *
- * Async — callers can fire-and-forget. Errors are swallowed so the page
- * never breaks on a referral-path failure.
+ * Async — callers can fire-and-forget. Errors are swallowed so the
+ * page never breaks on a referral-path failure. Detects BOTH formats:
+ *
+ *   Path-based: `/r/<code>`  — URL stays as-is (preferred)
+ *   Query-based: `?ref=<code>` — URL gets cleaned to look pretty
  */
 export async function captureReferralFromUrl(): Promise<void> {
   if (typeof window === 'undefined') return;
   let code: string;
   try {
     const url = new URL(window.location.href);
-    const raw = url.searchParams.get('ref');
+
+    // Path takes precedence — it's the shareable format.
+    const pathMatch = url.pathname.match(PATH_REFERRAL_REGEX);
+    const pathCode = pathMatch ? pathMatch[1].toLowerCase() : null;
+    const queryCode = url.searchParams.get('ref');
+
+    const raw = pathCode ?? queryCode;
     if (!raw) return;
     const candidate = raw.trim().toLowerCase().slice(0, 32);
     if (!candidate || !/^[a-z0-9_-]+$/.test(candidate)) return;
     code = candidate;
 
-    // Clean the URL immediately so the user sees a pretty link in the
-    // address bar even if validation is slow.
-    url.searchParams.delete('ref');
-    const clean =
-      url.pathname +
-      (url.searchParams.toString() ? `?${url.searchParams}` : '') +
-      url.hash;
-    window.history.replaceState({}, '', clean);
+    // Only clean the URL if we came in via `?ref=`. For path-based
+    // `/r/<code>`, the URL IS the pretty format — stripping it would
+    // defeat the purpose and leave the visitor wondering whether we
+    // received the invitation.
+    if (!pathCode && queryCode) {
+      url.searchParams.delete('ref');
+      const clean =
+        url.pathname +
+        (url.searchParams.toString() ? `?${url.searchParams}` : '') +
+        url.hash;
+      window.history.replaceState({}, '', clean);
+    }
   } catch {
     return;
   }
