@@ -633,9 +633,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   // ── FAB Button ────────────────────────────────────────────
   // Completely unmount when keyboard is visible to avoid any z-index / stacking
   // leakage above the keyboard. The tiny mount/unmount cost is negligible and
-  // gives us a guaranteed-clean hide.
+  // gives us a guaranteed-clean hide. Also unmounted in hideChrome mode so
+  // PDF exports never show the interactive "+" add-block button.
   const renderFAB = (side: 'left' | 'right') => {
-    if (keyboardVisible) return null;
+    if (keyboardVisible || hideChrome) return null;
     return (
     <div
       className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none"
@@ -1037,19 +1038,19 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           const renderBlocks = !isCanvasPaper;
           return (
             <>
-              {isPaperEmpty && !isCanvasPaper && (
+              {isPaperEmpty && !isCanvasPaper && !hideChrome && (
                 <div className="text-gray-400 font-hand text-xl md:text-2xl text-center mt-16 md:mt-20 opacity-50 select-none pointer-events-none">
                   Tap anywhere to start writing
                 </div>
               )}
-              {isPaperEmpty && (page.paperType === 'hex' || page.paperType === 'isometric') && isLeft && (
+              {isPaperEmpty && (page.paperType === 'hex' || page.paperType === 'isometric') && isLeft && !hideChrome && (
                 <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
                   {page.paperType === 'hex'
                     ? 'Tap anywhere to place a hex · Shift-click a hex to connect'
                     : 'Tap anywhere to place a step · Shift-click a step to connect'}
                 </div>
               )}
-              {isPaperEmpty && page.paperType === 'grid' && isLeft && (
+              {isPaperEmpty && page.paperType === 'grid' && isLeft && !hideChrome && (
                 <div className="text-gray-400 font-hand text-xl text-center mt-20 opacity-60 select-none pointer-events-none">
                   Tap any cell to write · arrow keys move · backspace deletes
                 </div>

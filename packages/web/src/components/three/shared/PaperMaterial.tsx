@@ -13,6 +13,8 @@ interface PaperMaterialOptions {
   withNormalMap?: boolean;
   /** Normal map strength */
   normalStrength?: number;
+  /** Anisotropy level — use 1 on mobile, 16 on desktop */
+  anisotropy?: number;
 }
 
 // Colors
@@ -319,6 +321,7 @@ export function usePaperMaterial(options: PaperMaterialOptions) {
     resolution = 1024,
     withNormalMap = true,
     normalStrength = 0.3,
+    anisotropy = 16,
   } = options;
 
   const material = useMemo(() => {
@@ -329,7 +332,7 @@ export function usePaperMaterial(options: PaperMaterialOptions) {
     colorTexture.wrapT = THREE.RepeatWrapping;
     colorTexture.minFilter = THREE.LinearMipmapLinearFilter;
     colorTexture.magFilter = THREE.LinearFilter;
-    colorTexture.anisotropy = 16;
+    colorTexture.anisotropy = anisotropy;
 
     const mat = new THREE.MeshStandardMaterial({
       map: colorTexture,
@@ -356,9 +359,13 @@ export function usePaperMaterial(options: PaperMaterialOptions) {
 /**
  * Creates a cover material for notebook covers.
  */
-export function useCoverMaterial(coverType: 'leather' | 'velvet' | 'canvas' | 'linen' | 'kraft', color: string) {
+export function useCoverMaterial(
+  coverType: 'leather' | 'velvet' | 'canvas' | 'linen' | 'kraft',
+  color: string,
+  resolution = 1024,
+) {
   const material = useMemo(() => {
-    const size = 1024;
+    const size = resolution;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -487,7 +494,7 @@ export function useCoverMaterial(coverType: 'leather' | 'velvet' | 'canvas' | 'l
     colorTexture.wrapT = THREE.RepeatWrapping;
     colorTexture.minFilter = THREE.LinearMipmapLinearFilter;
     colorTexture.magFilter = THREE.LinearFilter;
-    colorTexture.anisotropy = 16;
+    colorTexture.anisotropy = size <= 256 ? 1 : size <= 512 ? 4 : 16;
 
     const normalTexture = new THREE.CanvasTexture(normalCanvas);
     normalTexture.wrapS = THREE.RepeatWrapping;
@@ -509,7 +516,7 @@ export function useCoverMaterial(coverType: 'leather' | 'velvet' | 'canvas' | 'l
       roughness: roughnessMap[coverType] ?? 0.8,
       metalness: coverType === 'leather' ? 0.08 : 0.0,
     });
-  }, [coverType, color]);
+  }, [coverType, color, resolution]);
 
   return material;
 }

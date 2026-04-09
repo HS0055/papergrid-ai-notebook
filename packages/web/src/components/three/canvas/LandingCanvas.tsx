@@ -59,7 +59,7 @@ export default function LandingCanvas({
 
   // Mobile: cap DPR at 1.5 for balance. Desktop: cap at 2.0.
   useEffect(() => {
-    const maxDpr = mobileLowPower ? 1.5 : 2.0;
+    const maxDpr = mobileLowPower ? 1.0 : 2.0;
     const deviceDpr = Math.min(window.devicePixelRatio, maxDpr);
     setDpr(deviceDpr);
   }, [mobileLowPower]);

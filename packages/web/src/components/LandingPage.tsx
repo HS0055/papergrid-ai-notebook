@@ -142,50 +142,56 @@ export const LandingPage: React.FC = () => {
         });
       });
 
-      // ── Section-level scroll animations (continuous scroll narrative) ──
-      // Each major section slides up with parallax as it enters
-      // Skip hero-section (already has its own scroll animation)
-      // Mobile: reduced travel distance for subtler effect
-      const sectionTravel = isMobile ? 30 : 60;
-      gsap.utils.toArray<HTMLElement>('section:not(.hero-section)').forEach((section) => {
-        gsap.fromTo(
-          section.querySelector('.max-w-7xl, .max-w-5xl, .max-w-6xl') || section,
-          { y: sectionTravel },
-          {
-            y: 0,
-            ease: 'none',
-            scrollTrigger: {
-              trigger: section,
-              start: 'top bottom',
-              end: isMobile ? 'top 40%' : 'top 20%',
-              scrub: 0.5,
-            },
-          },
-        );
-      });
-
-      // ── Staggered children for bento grids and card layouts ──
-      gsap.utils.toArray<HTMLElement>('.reveal-scale').forEach((el) => {
-        const cards = el.querySelectorAll('[class*="rounded"]');
-        if (cards.length > 1) {
+      // ── Section-level scroll animations (desktop only) ──
+      // Scrub-based parallax is too expensive on mobile (14+ simultaneous
+      // ScrollTriggers cause scroll jank). Mobile sections just use CSS
+      // reveal transitions via .reveal classes instead.
+      if (!isMobile) {
+        gsap.utils.toArray<HTMLElement>('section:not(.hero-section)').forEach((section) => {
           gsap.fromTo(
-            Array.from(cards),
-            { y: 30, opacity: 0 },
+            section.querySelector('.max-w-7xl, .max-w-5xl, .max-w-6xl') || section,
+            { y: 60 },
             {
               y: 0,
-              opacity: 1,
-              duration: 0.5,
-              stagger: 0.08,
-              ease: 'power2.out',
+              ease: 'none',
               scrollTrigger: {
-                trigger: el,
-                start: 'top 85%',
-                once: true,
+                trigger: section,
+                start: 'top bottom',
+                end: 'top 20%',
+                scrub: 0.5,
               },
             },
           );
-        }
-      });
+        });
+      }
+
+      // ── Staggered children for bento grids and card layouts ──
+      // Only run on desktop — on mobile the cards are already visible (no hover state).
+      // Use .bento-card selector instead of [class*="rounded"] to avoid
+      // matching 100+ nested elements and creating excessive tweens.
+      if (!isMobile) {
+        gsap.utils.toArray<HTMLElement>('.reveal-scale').forEach((el) => {
+          const cards = el.querySelectorAll('.bento-card');
+          if (cards.length > 1) {
+            gsap.fromTo(
+              Array.from(cards),
+              { y: 30, opacity: 0 },
+              {
+                y: 0,
+                opacity: 1,
+                duration: 0.5,
+                stagger: 0.08,
+                ease: 'power2.out',
+                scrollTrigger: {
+                  trigger: el,
+                  start: 'top 85%',
+                  once: true,
+                },
+              },
+            );
+          }
+        });
+      }
 
       // Ensure all ScrollTrigger positions are recalculated after pin spacers
       ScrollTrigger.refresh();

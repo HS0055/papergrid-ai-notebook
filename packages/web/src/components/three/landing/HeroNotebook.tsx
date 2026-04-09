@@ -30,7 +30,7 @@ interface HeroNotebookProps {
 export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile = false }: HeroNotebookProps) {
   const groupRef = useRef<THREE.Group>(null);
   const frontCoverRef = useRef<THREE.Group>(null);
-  const titleGlowRef = useRef<THREE.PointLight>(null);
+  const titleGlowRef = useRef<THREE.PointLight>(null); // kept for hover glow only
   const targetOpen = useRef(0);
   const currentOpen = useRef(0);
   const currentCursorX = useRef(0);
@@ -39,11 +39,23 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
   const currentLateralShift = useRef(0);
   const currentDepthShift = useRef(0);
 
-  // Materials — both mobile and desktop use higher resolution for visible quality
-  const texRes = isMobile ? 512 : 1024;
-  const coverMaterial = useCoverMaterial('leather', '#3730a3');
-  const leftPageMaterial = usePaperMaterial({ paperType: 'lined', resolution: texRes });
-  const rightPageMaterial = usePaperMaterial({ paperType: 'dotted', resolution: texRes });
+  // Mobile: 256px textures (4× less GPU memory), no normal maps, anisotropy=1
+  // Desktop: 1024px with normal maps and max anisotropy
+  const texRes = isMobile ? 256 : 1024;
+  const coverRes = isMobile ? 256 : 1024;
+  const coverMaterial = useCoverMaterial('leather', '#3730a3', coverRes);
+  const leftPageMaterial = usePaperMaterial({
+    paperType: 'lined',
+    resolution: texRes,
+    withNormalMap: !isMobile,
+    anisotropy: isMobile ? 1 : 16,
+  });
+  const rightPageMaterial = usePaperMaterial({
+    paperType: 'dotted',
+    resolution: texRes,
+    withNormalMap: !isMobile,
+    anisotropy: isMobile ? 1 : 16,
+  });
 
   // Page edge material
   const pageEdgeMat = useMemo(() => new THREE.MeshStandardMaterial({
@@ -70,46 +82,54 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     emissiveIntensity: 0.35,
   }), []);
 
-  // Title texture for cover — high-res canvas for crisp text on both platforms
+  // Keep the cover text texture high-res even on mobile. The text plane is
+  // small, so this gives a sharp title/subtitle without bringing back the
+  // heavier full-cover material cost.
   const titleMat = useMemo(() => {
-    const canvasWidth = isMobile ? 512 : 1024;
-    const canvasHeight = isMobile ? 256 : 512;
+    const w = isMobile ? 2048 : 4096;
+    const h = Math.round(w * 0.5);
     const canvas = document.createElement('canvas');
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    ctx.clearRect(0, 0, w, h);
 
-    // Title text
-    ctx.fillStyle = '#d4a574';
-    ctx.font = isMobile ? 'bold 56px "Playfair Display", serif' : 'bold 110px "Playfair Display", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Papera', canvasWidth / 2, canvasHeight * 0.38);
+    ctx.fillStyle = '#d4a574';
 
-    // Subtitle
-    ctx.font = isMobile ? '20px "Inter", sans-serif' : '40px "Inter", sans-serif';
+    ctx.font = `bold italic ${Math.round(h * 0.34)}px "Playfair Display", Georgia, serif`;
+    ctx.fillText('Papera', w / 2, h * 0.34);
+
+    ctx.font = `${Math.round(h * 0.07)}px "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
     ctx.fillStyle = '#c4956a';
-    ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', canvasWidth / 2, canvasHeight * 0.65);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('THE NOTEBOOK THAT THINKS WITH YOU', w / 2, h * 0.66);
 
-    // Decorative line under subtitle
     ctx.strokeStyle = '#c4956a';
-    ctx.lineWidth = isMobile ? 1 : 2;
-    const lineY = canvasHeight * 0.78;
-    const lineHalf = canvasWidth * 0.25;
+    ctx.lineWidth = Math.max(2, Math.round(h * 0.004));
+    const lineY = h * 0.79;
+    const lineHalf = w * 0.24;
     ctx.beginPath();
-    ctx.moveTo(canvasWidth / 2 - lineHalf, lineY);
-    ctx.lineTo(canvasWidth / 2 + lineHalf, lineY);
+    ctx.moveTo(w / 2 - lineHalf, lineY);
+    ctx.lineTo(w / 2 + lineHalf, lineY);
     ctx.stroke();
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.anisotropy = isMobile ? 4 : 16;
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
+    tex.anisotropy = 16;
+    tex.needsUpdate = true;
+
     return new THREE.MeshStandardMaterial({
-      map: texture,
+      map: tex,
       transparent: true,
       alphaTest: 0.05,
-      roughness: 0.12,
-      metalness: 0.85,
+      roughness: 0.1,
+      metalness: 0.88,
       emissive: '#d4a574',
       emissiveIntensity: 0.3,
     });
@@ -152,6 +172,12 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
     const open = currentOpen.current;
     const glowStrength = hovered ? Math.max(0, 1 - open * 0.7) : 0;
 
+    titleMat.emissiveIntensity = THREE.MathUtils.lerp(
+      titleMat.emissiveIntensity,
+      0.3 + glowStrength * 0.42,
+      lerpFactor,
+    );
+
     // ── Cursor tilt (fades as book opens, disabled on mobile) ──
     let cursorTiltX = 0;
     let cursorTiltY = 0;
@@ -166,11 +192,6 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
       cursorTiltY = currentCursorX.current * 0.12 * cursorWeight;
     }
 
-    titleMat.emissiveIntensity = THREE.MathUtils.lerp(
-      titleMat.emissiveIntensity,
-      0.3 + glowStrength * 0.42,
-      lerpFactor,
-    );
     goldMat.emissiveIntensity = THREE.MathUtils.lerp(
       goldMat.emissiveIntensity,
       0.35 + glowStrength * 0.28,
@@ -291,7 +312,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
   // Mobile: compensate for inner hw offset (all meshes sit at x=hw=1.6) to visually center,
   // and sit below the (now slimmer) phase-1 text so book cover with "Papera" title is visible
   // Desktop: start below hero text, center horizontally (hw offset compensates for spine-origin geometry)
-  const bookPosition: [number, number, number] = isMobile ? [-hw, -3.6, 0] : [-hw + 1.7, -2.35, 0];
+  const bookPosition: [number, number, number] = isMobile ? [-hw, -1.5, 0] : [-hw + 1.7, -2.35, 0];
 
   const notebookContent = (
     <group position={bookPosition}>
@@ -340,6 +361,7 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
             decay={2}
             position={[hw, 0.34, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.24]}
           />
+
           <mesh
             position={[hw, 0, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS / 2]}
             castShadow
@@ -349,7 +371,6 @@ export function HeroNotebook({ scrollRef, hovered = false, cursorRef, isMobile =
             <boxGeometry args={[BOOK_WIDTH + 0.05, BOOK_HEIGHT + 0.05, COVER_THICKNESS]} />
           </mesh>
 
-          {/* Title on front cover */}
           <mesh
             position={[hw, 0.3, PAGE_STACK_THICKNESS / 2 + COVER_THICKNESS + 0.002]}
             material={titleMat}

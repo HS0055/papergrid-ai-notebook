@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 import { useScrollSpy } from '../../hooks/useScrollSpy';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 interface NavBarProps {
   onLaunch: () => void;
@@ -18,6 +19,7 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
   const [scrolled, setScrolled] = useState(false);
   const sectionIds = useMemo(() => NAV_LINKS.map((l) => l.id), []);
   const activeSection = useScrollSpy(sectionIds);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -33,9 +35,14 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
           : 'bg-transparent'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <div
+        className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center"
+        style={{
+          paddingTop: isMobile ? 'max(0.75rem, env(safe-area-inset-top))' : undefined,
+        }}
+      >
         {/* Logo — adapts to scroll state for readability */}
-        <Logo variant={scrolled ? 'light' : 'dark'} size={36} />
+        <Logo variant={scrolled ? 'light' : 'dark'} size={isMobile ? 32 : 36} />
 
         {/* Links */}
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-500">
@@ -60,10 +67,12 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
         {/* CTA */}
         <button
           onClick={onLaunch}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#1a1c23] hover:bg-black text-white text-sm font-semibold rounded-full transition-all group"
+          className={`flex items-center gap-2 bg-[#1a1c23] hover:bg-black text-white font-semibold rounded-full transition-all group ${
+            isMobile ? 'px-4 py-2 text-xs' : 'px-5 py-2.5 text-sm'
+          }`}
         >
           Open App
-          <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+          <ArrowRight size={isMobile ? 13 : 15} className="group-hover:translate-x-0.5 transition-transform" />
         </button>
       </div>
     </nav>

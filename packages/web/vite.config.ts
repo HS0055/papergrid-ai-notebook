@@ -322,5 +322,26 @@ export default defineConfig(({ mode }) => {
     css: {
       postcss: path.resolve(__dirname, 'postcss.config.js'),
     },
+    // Dep pre-bundling hints.
+    //
+    // Why this block exists
+    // ---------------------
+    // The PDF export flow lazy-imports `html-to-image` and `jspdf`
+    // from Dashboard.tsx. Because those imports live behind a
+    // `const [{toPng}, {jsPDF}] = await Promise.all([import(...), import(...)])`
+    // call site that only runs when the user clicks "Export PDF",
+    // Vite's dev dependency scanner doesn't see them on cold start and
+    // skips optimizing them. The first export then triggers an
+    // on-the-fly re-optimization, which (a) stalls for 1-2s, and (b)
+    // invalidates the dep manifest hash — the browser's cached
+    // `?v=HASH` query doesn't match the newly written file and the
+    // import fails with "Failed to fetch dynamically imported module".
+    //
+    // Pre-declaring them in `optimizeDeps.include` forces Vite to
+    // prebundle on startup, so the first export hits an already-warm
+    // cache and the hash is stable from the first request onward.
+    optimizeDeps: {
+      include: ['html-to-image', 'jspdf'],
+    },
   };
 });

@@ -103,7 +103,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     >
       <div
         ref={pinContainerRef}
-        className={`relative flex flex-col items-center overflow-hidden px-6 ${isMobile ? 'justify-start min-h-[100svh] pt-14 pb-6' : 'justify-center min-h-screen pt-24 pb-16'}`}
+        className={`relative flex flex-col items-center overflow-hidden px-5 sm:px-6 ${isMobile ? 'justify-start min-h-[100svh] pt-16 pb-8' : 'justify-center min-h-screen pt-24 pb-16'}`}
         style={{
           background: 'linear-gradient(160deg, #0f111a 0%, #1a1c23 45%, #2a1f3d 70%, #0f111a 100%)',
         }}
@@ -162,12 +162,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           className="relative w-full max-w-6xl mx-auto text-center"
           style={{
             zIndex: 20,
-            paddingTop: isMobile ? 0 : '1rem',
-            paddingBottom: isMobile ? 0 : '10rem',
+            paddingTop: isMobile ? 'max(2.75rem, calc(env(safe-area-inset-top) + 1.75rem))' : '1rem',
+            paddingBottom: isMobile ? '1.5rem' : '10rem',
           }}
         >
           {/* Badge */}
-          <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-3 md:mb-8 border"
+          <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold mb-4 md:mb-8 border"
             style={{
               background: 'rgba(79,70,229,0.15)',
               borderColor: 'rgba(79,70,229,0.4)',
@@ -175,7 +175,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             }}
           >
             <Sparkles size={14} />
-            <span>Powered by Advanced AI</span>
+            <span>{isMobile ? 'Powered by AI' : 'Powered by Advanced AI'}</span>
           </div>
 
           {/* Headline */}
@@ -193,12 +193,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           </h1>
 
           {/* Subheadline */}
-          <p className="hero-desc max-w-2xl mx-auto text-sm md:text-xl mb-4 md:mb-10 leading-relaxed" style={{ color: '#94a3b8' }}>
+          <p
+            className="hero-desc max-w-2xl mx-auto text-sm md:text-xl mb-5 md:mb-10 leading-relaxed"
+            style={{ color: '#94a3b8', maxWidth: isMobile ? '22rem' : undefined }}
+          >
             Describe your day, task, or idea — AI generates the perfect notebook layout instantly.
           </p>
 
           {/* CTAs */}
-          <div className="hero-btns flex flex-col sm:flex-row items-center justify-center gap-2.5 md:gap-4 mb-3 md:mb-6">
+          <div className="hero-btns flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 mb-4 md:mb-6">
             <button
               onClick={onLaunch}
               className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-3 md:py-4 text-white font-bold text-base md:text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
@@ -222,7 +225,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             </a>
           </div>
 
-          <p className="text-[10px] md:text-xs font-medium tracking-widest uppercase" style={{ color: 'rgba(148,163,184,0.6)' }}>
+          <p
+            className="text-[10px] md:text-xs font-medium tracking-widest uppercase"
+            style={{ color: 'rgba(148,163,184,0.6)', marginTop: isMobile ? '0.25rem' : undefined }}
+          >
             Free · AI-Powered · No credit card needed
           </p>
         </div>
@@ -236,8 +242,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           <div
             className="text-center max-w-3xl rounded-3xl px-5 py-7 md:px-10 md:py-12"
             style={{
-              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
-              backdropFilter: 'blur(8px)',
+              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.92) 0%, rgba(15,17,26,0.75) 70%, transparent 100%)',
             }}
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold mb-3 md:mb-6 border"
@@ -273,8 +278,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           <div
             className="text-center max-w-3xl rounded-3xl px-5 py-7 md:px-10 md:py-12"
             style={{
-              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.85) 0%, rgba(15,17,26,0.6) 70%, transparent 100%)',
-              backdropFilter: 'blur(8px)',
+              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.92) 0%, rgba(15,17,26,0.75) 70%, transparent 100%)',
             }}
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold mb-3 md:mb-6 border"

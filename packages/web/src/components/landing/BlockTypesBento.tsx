@@ -135,7 +135,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[0] = el; }}
             onMouseEnter={() => handleMouseEnter(0)}
             onMouseLeave={() => handleMouseLeave(0)}
-            className="reveal-scale col-span-2 row-span-2 rounded-3xl overflow-hidden p-6 border border-gray-200/60 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale col-span-2 row-span-2 rounded-3xl overflow-hidden p-6 border border-gray-200/60 shadow-sm transition-shadow relative"
             style={{ background: '#fdfbf7', transitionDelay: '0ms' }}
           >
             <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4 font-sans">Priority Matrix</div>
@@ -170,7 +170,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[1] = el; }}
             onMouseEnter={() => handleMouseEnter(1)}
             onMouseLeave={() => handleMouseLeave(1)}
-            className="reveal-scale rounded-3xl overflow-hidden p-5 border border-amber-200/80 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl overflow-hidden p-5 border border-amber-200/80 shadow-sm transition-shadow relative"
             style={{ background: '#fef3c7', transitionDelay: '80ms' }}
           >
             <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-12 h-5 rounded-sm" style={{ background: 'rgba(217,119,6,0.45)' }} />
@@ -196,7 +196,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[2] = el; }}
             onMouseEnter={() => handleMouseEnter(2)}
             onMouseLeave={() => handleMouseLeave(2)}
-            className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
             style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #fdf4ff 100%)', transitionDelay: '160ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-500 mb-4 font-sans">Mood Tracker</div>
@@ -225,7 +225,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[3] = el; }}
             onMouseEnter={() => handleMouseEnter(3)}
             onMouseLeave={() => handleMouseLeave(3)}
-            className="reveal-scale col-span-2 rounded-3xl overflow-hidden border border-emerald-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale col-span-2 rounded-3xl overflow-hidden border border-emerald-100 shadow-sm transition-shadow relative"
             style={{ background: '#f0fdf4', transitionDelay: '240ms' }}
           >
             <div className="px-5 pt-5 pb-2">
@@ -272,7 +272,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[4] = el; }}
             onMouseEnter={() => handleMouseEnter(4)}
             onMouseLeave={() => handleMouseLeave(4)}
-            className="reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
             style={{ background: '#fdfbf7', transitionDelay: '320ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-400 mb-3 font-sans">Pull Quote</div>
@@ -296,7 +296,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[5] = el; }}
             onMouseEnter={() => handleMouseEnter(5)}
             onMouseLeave={() => handleMouseLeave(5)}
-            className="reveal-scale rounded-3xl p-5 border border-rose-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-rose-100 shadow-sm transition-shadow relative"
             style={{ background: '#fff7f7', transitionDelay: '400ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-rose-400 mb-3 font-sans">Task List</div>
@@ -335,7 +335,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[6] = el; }}
             onMouseEnter={() => handleMouseEnter(6)}
             onMouseLeave={() => handleMouseLeave(6)}
-            className="reveal-scale col-span-2 rounded-3xl p-5 border border-violet-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale col-span-2 rounded-3xl p-5 border border-violet-100 shadow-sm transition-shadow relative"
             style={{ background: '#faf5ff', transitionDelay: '480ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-violet-500 mb-3 font-sans">Kanban Board</div>
@@ -360,7 +360,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[7] = el; }}
             onMouseEnter={() => handleMouseEnter(7)}
             onMouseLeave={() => handleMouseLeave(7)}
-            className="reveal-scale rounded-3xl p-5 border border-sky-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-sky-100 shadow-sm transition-shadow relative"
             style={{ background: '#f0f9ff', transitionDelay: '560ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-sky-500 mb-3 font-sans">Calendar</div>
@@ -392,7 +392,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[8] = el; }}
             onMouseEnter={() => handleMouseEnter(8)}
             onMouseLeave={() => handleMouseLeave(8)}
-            className="reveal-scale rounded-3xl p-5 border border-emerald-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-emerald-100 shadow-sm transition-shadow relative"
             style={{ background: '#f0fdf4', transitionDelay: '640ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-500 mb-3 font-sans">Habit Tracker</div>
@@ -423,7 +423,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[9] = el; }}
             onMouseEnter={() => handleMouseEnter(9)}
             onMouseLeave={() => handleMouseLeave(9)}
-            className="reveal-scale col-span-2 rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale col-span-2 rounded-3xl p-5 border border-indigo-100 shadow-sm transition-shadow relative"
             style={{ background: '#eef2ff', transitionDelay: '720ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-500 mb-3 font-sans">Weekly View</div>
@@ -450,7 +450,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[10] = el; }}
             onMouseEnter={() => handleMouseEnter(10)}
             onMouseLeave={() => handleMouseLeave(10)}
-            className="reveal-scale rounded-3xl p-5 border border-slate-200 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-slate-200 shadow-sm transition-shadow relative"
             style={{ background: '#fdfbf7', transitionDelay: '800ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-3 font-sans">Music Staff</div>
@@ -476,7 +476,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[11] = el; }}
             onMouseEnter={() => handleMouseEnter(11)}
             onMouseLeave={() => handleMouseLeave(11)}
-            className="reveal-scale rounded-3xl p-5 border border-amber-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-amber-100 shadow-sm transition-shadow relative"
             style={{ background: '#fffbeb', transitionDelay: '880ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-amber-500 mb-3 font-sans">Time Blocks</div>
@@ -502,7 +502,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[12] = el; }}
             onMouseEnter={() => handleMouseEnter(12)}
             onMouseLeave={() => handleMouseLeave(12)}
-            className="reveal-scale rounded-3xl p-5 border border-cyan-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-cyan-100 shadow-sm transition-shadow relative"
             style={{ background: '#ecfeff', transitionDelay: '960ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-cyan-500 mb-3 font-sans">Water Tracker</div>
@@ -527,7 +527,7 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             ref={(el) => { cardRefs.current[13] = el; }}
             onMouseEnter={() => handleMouseEnter(13)}
             onMouseLeave={() => handleMouseLeave(13)}
-            className="reveal-scale rounded-3xl p-5 border border-pink-100 shadow-sm transition-shadow relative"
+            className="bento-card reveal-scale rounded-3xl p-5 border border-pink-100 shadow-sm transition-shadow relative"
             style={{ background: '#fdf2f8', transitionDelay: '1040ms' }}
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-pink-500 mb-3 font-sans">Goals</div>
