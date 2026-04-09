@@ -1360,12 +1360,15 @@ export const Dashboard: React.FC = () => {
         import('jspdf'),
       ]);
 
-      // Two animation frames so flex layout, paper textures, and any
-      // GSAP-driven transforms settle before the snapshot. html-to-image
-      // reads computed styles synchronously so the DOM must be in its
-      // final visual state before we call toPng().
+      // Two animation frames + a short timeout so flex layout, paper
+      // textures, and any GSAP-driven transforms settle before the
+      // snapshot. html-to-image reads computed styles synchronously
+      // so the DOM must be in its final visual state before toJpeg.
+      // The setTimeout gives Vercel/Safari extra time to apply the
+      // `body.papera-exporting` class's layout rules.
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const exportRoot = document.querySelector<HTMLElement>(
         '[data-pdf-export-root]',
@@ -1373,6 +1376,13 @@ export const Dashboard: React.FC = () => {
       if (!exportRoot) {
         throw new Error('Export root not found in DOM');
       }
+
+      // Force a synchronous layout/reflow so offsetWidth/offsetHeight
+      // reflect the `body.papera-exporting` CSS rules BEFORE we start
+      // rasterizing. Without this, some production builds get a stale
+      // zero-dimension read and html-to-image allocates a 0x0 canvas,
+      // whose toDataURL() returns "data:," (empty).
+      void exportRoot.offsetHeight;
 
       // Proactively replace every `oklab()` / `oklch()` computed color
       // inside the export tree with an `rgb(...)` equivalent via an
@@ -1455,14 +1465,33 @@ export const Dashboard: React.FC = () => {
       const pdfWidthPt = pdf.internal.pageSize.getWidth();
       const pdfHeightPt = pdf.internal.pageSize.getHeight();
 
+      // A4 canvas dimensions (px at 96 DPI) — html-to-image will get
+      // these exactly even if the DOM layout reports differently.
+      const A4_WIDTH_PX = 794;
+      const A4_HEIGHT_PX = 1123;
+
       for (let i = 0; i < pageSections.length; i++) {
         const section = pageSections[i];
         setExportProgress({ current: i + 1, total: pageSections.length });
+
+        // Force reflow and measure the section. If the layout hasn't
+        // settled (transient 0x0 state on production builds), fall
+        // back to the explicit A4 sheet size.
+        void section.offsetHeight;
+        const rect = section.getBoundingClientRect();
+        const snapWidth = Math.max(A4_WIDTH_PX, Math.ceil(rect.width) || 0);
+        const snapHeight = Math.max(A4_HEIGHT_PX, Math.ceil(rect.height) || 0);
 
         // pixelRatio: 2 gives retina-quality raster on high-DPI
         // displays without blowing up file size for 4K monitors.
         // quality: 0.95 is visually lossless for text/diagrams while
         // keeping the PDF well under 1 MB per page.
+        //
+        // CRITICAL: pass explicit width/height. Without these, html-
+        // to-image relies on node.offsetWidth/offsetHeight which can
+        // read as 0 on Vercel production before layout fully settles,
+        // producing a 0x0 canvas whose toDataURL returns "data:,".
+        // With explicit dims the canvas is always A4-sized.
         const dataUrl = await toJpeg(section, {
           pixelRatio: 2,
           // cacheBust would append ?cache-bust=... to resource URLs,
@@ -1472,6 +1501,18 @@ export const Dashboard: React.FC = () => {
           cacheBust: false,
           backgroundColor: '#ffffff',
           quality: 0.95,
+          // Explicit node dimensions — pixelRatio handles the 2x
+          // retina multiplier on the output canvas automatically.
+          width: snapWidth,
+          height: snapHeight,
+          style: {
+            // Belt-and-braces: force the snapshot node to be visible
+            // in case some ancestor display rule is still computing.
+            display: 'block',
+            visibility: 'visible',
+            opacity: '1',
+            transform: 'none',
+          },
           // Filter out any stray nodes that shouldn't be in the PDF
           // (e.g. React devtools hooks, stale modals).
           filter: (node) => {
@@ -1487,7 +1528,10 @@ export const Dashboard: React.FC = () => {
         // letting jsPDF throw "wrong JPEG" / "wrong PNG signature".
         if (!dataUrl || !dataUrl.startsWith('data:image/jpeg')) {
           throw new Error(
-            `Snapshot for page ${i + 1} is not a valid JPEG (got: ${dataUrl?.slice(0, 32) || 'empty'}...)`,
+            `Snapshot for page ${i + 1} is not a valid JPEG ` +
+              `(got: ${dataUrl?.slice(0, 32) || 'empty'}, ` +
+              `section: ${snapWidth}x${snapHeight}, ` +
+              `rect: ${Math.ceil(rect.width)}x${Math.ceil(rect.height)})`,
           );
         }
 
