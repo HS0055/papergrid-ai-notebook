@@ -238,10 +238,10 @@ An action item without an owner is a suggestion. The moment a task is mentioned,
 
 ### Use shorthand
 Speed matters. Develop a small notation system:
-- `D:` — decision
-- `A:` — action + name + date
-- `?:` — open question
-- `!:` — urgent or high-stakes item
+- D: — decision
+- A: — action + name + date
+- ?: — open question
+- !: — urgent or high-stakes item
 
 ## After the meeting: the two-minute edit
 Within two minutes of leaving, reorder your buckets and delete redundant context. Do not rewrite everything. Just make it scannable.
