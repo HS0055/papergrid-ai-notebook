@@ -183,4 +183,76 @@ export function registerBlogRoutes(http: HttpRouter): void {
     }),
   });
   installPreflight(http, "/api/blog/admin/delete");
+
+  // Nano Banana Pro (gemini-3-pro-image-preview) — generates images via
+  // generateContent, stores in Convex file storage, returns public URL.
+  http.route({
+    path: "/api/blog/admin/generate-image",
+    method: "POST",
+    handler: httpAction(async (ctx, request) => {
+      try {
+        const body = await request.json().catch(() => ({}));
+        const { title = "", excerpt = "", section = "" } = body as {
+          title?: string; excerpt?: string; section?: string;
+        };
+
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (!geminiKey) {
+          return json({ error: "GEMINI_API_KEY not configured in Convex env" }, 500, request);
+        }
+
+        const prompt =
+          (section
+            ? `Create a blog section image for: "${section.slice(0, 300)}". `
+            : `Create a blog hero image for article: "${title}". ${excerpt ? `About: ${excerpt.slice(0, 200)}. ` : ""}`) +
+          "Style: photorealistic, professional, warm paper and notebook tones, minimal composition. " +
+          "No text, no watermarks, no UI elements. Suitable for a productivity and planning blog.";
+
+        // Nano Banana Pro = gemini-3-pro-image-preview, uses generateContent
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+            }),
+          },
+        );
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          return json({ error: `Nano Banana Pro error: ${errText.slice(0, 400)}` }, 500, request);
+        }
+
+        const data = await resp.json() as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ inlineData?: { data: string; mimeType: string } }> };
+          }>;
+        };
+        const parts = data?.candidates?.[0]?.content?.parts ?? [];
+        const imagePart = parts.find((p) => p.inlineData?.data);
+
+        if (!imagePart?.inlineData) {
+          return json({ error: "Nano Banana Pro returned no image" }, 500, request);
+        }
+
+        const mimeType = imagePart.inlineData.mimeType ?? "image/png";
+        const binaryStr = atob(imagePart.inlineData.data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mimeType });
+
+        const storageId = await ctx.storage.store(blob);
+        const url = await ctx.storage.getUrl(storageId);
+
+        return json({ url }, 200, request);
+      } catch (error) {
+        const message = errorMessage(error, "Failed to generate image");
+        return json({ error: message }, 500, request);
+      }
+    }),
+  });
+  installPreflight(http, "/api/blog/admin/generate-image");
 }

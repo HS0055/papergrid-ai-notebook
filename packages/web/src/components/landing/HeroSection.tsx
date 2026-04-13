@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, Suspense, lazy, useState } from 'react';
-import { Sparkles, ChevronRight, ArrowRight, Github } from 'lucide-react';
+import { Sparkles, ChevronRight, ArrowRight, BookOpen } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Canvas3DErrorBoundary } from '../three/Canvas3DErrorBoundary';
@@ -245,14 +245,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
               <ChevronRight size={20} />
             </button>
             <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/blog"
               className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-3 md:py-4 font-bold text-base md:text-lg rounded-2xl border transition-all hover:bg-white/5"
               style={{ borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)' }}
             >
-              <Github size={20} />
-              View on GitHub
+              <BookOpen size={20} />
+              Read Our Guides
             </a>
           </div>
 

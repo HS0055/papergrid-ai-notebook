@@ -230,6 +230,27 @@ export const BlogPostPage: React.FC = () => {
 
   usePostSEO(post);
 
+  // Wrap <table> elements in a scrollable container for wide HTML tables
+  useEffect(() => {
+    if (!articleRef.current) return;
+    const tables = articleRef.current.querySelectorAll('.blog-html-prose table');
+    tables.forEach((table) => {
+      if (table.parentElement?.classList.contains('blog-table-wrap')) return;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'blog-table-wrap';
+      table.parentNode?.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    });
+  }, [post]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[#f7f2ea] flex items-center justify-center">
+        <div className="w-10 h-10 border-[3px] border-stone-200 border-t-stone-800 rounded-full animate-spin" />
+      </main>
+    );
+  }
+
   if (!post) {
     return (
       <main className="min-h-screen bg-[#f7f2ea] px-5 py-10 text-stone-950">
@@ -320,9 +341,13 @@ export const BlogPostPage: React.FC = () => {
 
             {/* Article body */}
             <div ref={articleRef} className="min-w-0">
-              <div className="prose-blog">
-                {renderBody(post.body || '')}
-              </div>
+              {/^\s*<[a-z]/i.test(post.body || '') ? (
+                <div className="blog-html-prose" dangerouslySetInnerHTML={{ __html: post.body || '' }} />
+              ) : (
+                <div className="prose-blog">
+                  {renderBody(post.body || '')}
+                </div>
+              )}
 
               {/* Tags */}
               {post.tags.length > 0 && (

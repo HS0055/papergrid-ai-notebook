@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Globe, Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUpRight, Globe, ImageIcon, Loader2, Plus, Save, Sparkles, Trash2 } from 'lucide-react';
 import { api as apiClient } from '../../services/apiClient';
 import { BlogPost, BlogStatus, DEFAULT_BLOG_POSTS, formatDate } from '../blog/blogData';
 
@@ -113,7 +113,10 @@ export const BlogAdmin: React.FC = () => {
   const [form, setForm] = useState<BlogForm>(() => emptyForm());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [generatingBodyImage, setGeneratingBodyImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
@@ -187,6 +190,49 @@ export const BlogAdmin: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const generateImage = async () => {
+    if (!form.title.trim()) { setError('Add a title first — it guides the image generation.'); return; }
+    setGeneratingImage(true);
+    setError(null);
+    try {
+      const data = await apiClient.post<{ url: string | null }>('/api/blog/admin/generate-image', {
+        title: form.title, excerpt: form.excerpt,
+      });
+      if (data?.url) updateForm({ featuredImageUrl: data.url });
+      else setError('Imagen returned no image. Try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Image generation failed');
+    } finally { setGeneratingImage(false); }
+  };
+
+  const generateBodyImage = async () => {
+    if (!form.title.trim()) { setError('Add a title first.'); return; }
+    setGeneratingBodyImage(true);
+    setError(null);
+    try {
+      const ta = bodyRef.current;
+      const selStart = ta?.selectionStart ?? form.body.length;
+      const selEnd = ta?.selectionEnd ?? selStart;
+      // Use selected text if any, otherwise fall back to surrounding context
+      const selectedText = selEnd > selStart
+        ? form.body.slice(selStart, selEnd)
+        : form.body.slice(Math.max(0, selStart - 300), selStart + 300);
+      if (!selectedText.trim()) { setError('Select text in the body to describe what the image should show.'); return; }
+      const data = await apiClient.post<{ url: string | null }>('/api/blog/admin/generate-image', {
+        title: form.title, excerpt: form.excerpt, section: selectedText.trim().slice(0, 400),
+      });
+      if (!data?.url) { setError('Nano Banana Pro returned no image. Try again.'); return; }
+      const md = `\n![${selectedText.trim().slice(0, 60)}](${data.url})\n`;
+      const insertPos = selEnd > selStart ? selEnd : selStart;
+      setForm((f) => ({ ...f, body: f.body.slice(0, insertPos) + md + f.body.slice(insertPos) }));
+      requestAnimationFrame(() => {
+        if (ta) { const n = insertPos + md.length; ta.focus(); ta.setSelectionRange(n, n); }
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Body image generation failed');
+    } finally { setGeneratingBodyImage(false); }
   };
 
   const remove = async () => {
@@ -356,8 +402,20 @@ export const BlogAdmin: React.FC = () => {
           <Field label="Tags">
             <input value={form.tags} onChange={(event) => updateForm({ tags: event.target.value })} className="admin-input" />
           </Field>
-          <Field label="Featured image URL">
-            <input value={form.featuredImageUrl} onChange={(event) => updateForm({ featuredImageUrl: event.target.value })} className="admin-input" />
+          <Field label="Featured image">
+            <div className="flex gap-2">
+              <input value={form.featuredImageUrl} onChange={(event) => updateForm({ featuredImageUrl: event.target.value })} placeholder="URL or generate →" className="admin-input flex-1" />
+              <button type="button" onClick={generateImage} disabled={generatingImage || saving}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50">
+                {generatingImage ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {generatingImage ? 'Generating…' : 'AI Generate'}
+              </button>
+            </div>
+            {form.featuredImageUrl && (
+              <div className="mt-2 overflow-hidden rounded-lg border border-gray-200">
+                <img src={form.featuredImageUrl} alt="Preview" className="h-36 w-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              </div>
+            )}
           </Field>
           <Field label="Author">
             <input value={form.authorName} onChange={(event) => updateForm({ authorName: event.target.value })} className="admin-input" />
@@ -374,15 +432,24 @@ export const BlogAdmin: React.FC = () => {
         </div>
 
         <div className="px-5 pb-5">
-          <Field label="Article body">
+          <label className="block">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-500">Article body</span>
+              <button type="button" onClick={generateBodyImage} disabled={generatingBodyImage || saving}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50">
+                {generatingBodyImage ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+                {generatingBodyImage ? 'Generating…' : 'Insert AI Image'}
+              </button>
+            </div>
             <textarea
+              ref={bodyRef}
               value={form.body}
               onChange={(event) => updateForm({ body: event.target.value })}
               rows={16}
               className="admin-input font-mono text-sm"
-              placeholder="# Heading&#10;Paragraph&#10;&#10;## Section&#10;- Bullet"
+              placeholder="# Heading&#10;Paragraph&#10;&#10;## Section&#10;![image](url)"
             />
-          </Field>
+          </label>
         </div>
 
         <div className="border-t px-5 py-5">

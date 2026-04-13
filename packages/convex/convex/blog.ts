@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAdminUser } from "./authHelpers";
 
@@ -264,5 +264,43 @@ export const adminDelete = mutation({
       createdAt: new Date().toISOString(),
     });
     return { success: true };
+  },
+});
+
+export const seedPost = internalMutation({
+  args: { post: upsertPostValidator },
+  handler: async (ctx, { post }) => {
+    const now = new Date().toISOString();
+    const slug = slugify(post.slug || post.title);
+    const existing = await ctx.db
+      .query("blogPosts")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+    if (existing) return { skipped: true, id: existing._id, slug };
+    const id = await ctx.db.insert("blogPosts", {
+      title: post.title.trim(),
+      slug,
+      excerpt: post.excerpt.trim(),
+      body: post.body.trim(),
+      status: post.status,
+      category: post.category.trim(),
+      mentalState: post.mentalState.trim(),
+      tags: cleanTags(post.tags),
+      featuredImageUrl: cleanOptional(post.featuredImageUrl),
+      interactivePrompt: post.interactivePrompt.trim(),
+      interactivePlaceholder: post.interactivePlaceholder.trim(),
+      interactiveOutputTitle: post.interactiveOutputTitle.trim(),
+      productCtaLabel: post.productCtaLabel.trim(),
+      productCtaUrl: post.productCtaUrl.trim(),
+      seoTitle: cleanOptional(post.seoTitle),
+      seoDescription: cleanOptional(post.seoDescription),
+      authorName: cleanOptional(post.authorName) ?? "Papera",
+      readingTimeMinutes: post.readingTimeMinutes ?? readingMinutes(post.body),
+      viewCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: post.status === "published" ? now : undefined,
+    });
+    return { seeded: true, id, slug };
   },
 });

@@ -192,7 +192,8 @@ export const BlogNotebookPreview: React.FC<BlogNotebookPreviewProps> = ({ post }
 
   const progressPercent = (targetPage / MAX_PAGE) * 100;
   const openProgress = clamp(visualPage, 0, 1);
-  const bookShift = isMobile ? 0 : openProgress * 86;
+  // On mobile, shift book right when open so the left (back) page is clipped
+  const bookShift = isMobile ? openProgress * 120 : openProgress * 86;
   const bookScale = 1;
 
   return (
@@ -329,14 +330,14 @@ function FrontCover() {
         <span>Powered by Advanced AI</span>
       </div>
       <h2>
-        The notebook
-        <span>that thinks</span>
-        with you.
+        Thinking guides
+        <span>for people</span>
+        who get stuck.
       </h2>
       <div className="blog-book-cover-stats">
-        <div><strong>22+</strong><span>block types</span></div>
-        <div><strong>10</strong><span>paper textures</span></div>
-        <div><strong>∞</strong><span>AI layouts</span></div>
+        <div><strong>10+</strong><span>guides</span></div>
+        <div><strong>AI</strong><span>structure</span></div>
+        <div><strong>Free</strong><span>to start</span></div>
       </div>
       <div className="blog-book-cover-brand">Papera</div>
       <div className="blog-book-ribbon" />
@@ -352,11 +353,11 @@ function InsideCover() {
       <div className="blog-book-toc">
         {([
           ['The guide', '03'],
-          ['AI structure', '04'],
+          ['Your structure', '04'],
           ['Paper types', '05'],
-          ['Block toolkit', '06'],
-          ['Intelligence', '07'],
-          ['Your plan', '08'],
+          ['How it works', '06'],
+          ['AI planning', '07'],
+          ['Pricing', '08'],
         ] as [string, string][]).map(([label, pg]) => (
           <div key={label} className="blog-book-toc-item">
             <span>{label}</span>
@@ -514,20 +515,34 @@ function PricingPage() {
           <span>$0</span>
         </div>
         <div className="blog-book-plan-checks">
-          <span>10 Ink/month</span>
-          <span>Unlimited notebooks</span>
-          <span>All paper types</span>
+          <span>10 Ink/mo · 1 notebook</span>
+        </div>
+      </div>
+      <div className="blog-book-plan">
+        <div>
+          <strong>Starter</strong>
+          <span>$5.99/mo</span>
+        </div>
+        <div className="blog-book-plan-checks">
+          <span>50 Ink/mo · $3.67/mo annual</span>
         </div>
       </div>
       <div className="blog-book-plan blog-book-plan--pro">
         <div>
           <strong>Pro</strong>
-          <span>$9.99/mo</span>
+          <span>$14.99/mo</span>
         </div>
         <div className="blog-book-plan-checks">
-          <span>100 Ink/month</span>
-          <span>Priority AI models</span>
-          <span>Get 2 months free</span>
+          <span>100 Ink/mo · $7.42/mo annual</span>
+        </div>
+      </div>
+      <div className="blog-book-plan">
+        <div>
+          <strong>Creator</strong>
+          <span>$24.99/mo</span>
+        </div>
+        <div className="blog-book-plan-checks">
+          <span>250 Ink/mo · $14.92/mo annual</span>
         </div>
       </div>
       <PageNumber side="left">08</PageNumber>

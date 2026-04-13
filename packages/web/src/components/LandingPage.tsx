@@ -20,6 +20,7 @@ import { FAQSection } from './landing/FAQSection';
 import { IOSWaitlistSection } from './landing/IOSWaitlistSection';
 import { InlineTestimonials } from './landing/InlineTestimonials';
 import { FinalCTA } from './landing/FinalCTA';
+import { BlogCTAStrip } from './landing/BlogCTAStrip';
 import { LandingFooter } from './landing/LandingFooter';
 import { FloatingCTABar } from './landing/FloatingCTABar';
 import { Canvas3DErrorBoundary } from './three/Canvas3DErrorBoundary';
@@ -226,6 +227,7 @@ export const LandingPage: React.FC = () => {
         </div>
       </div>
 
+      <BlogCTAStrip />
       <FinalCTA onLaunch={handleLaunch} />
 
       {/* Subtle gradient transition: FinalCTA (#0f111a) → Footer (#0a0c14) */}

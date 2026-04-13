@@ -1,5 +1,5 @@
 import React from 'react';
-import { Github } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { Logo } from './Logo';
 import { PUBLIC_BLOG_ENABLED } from '../../config/featureFlags';
 
@@ -56,7 +56,7 @@ export const LandingFooter: React.FC = () => {
                 { label: 'Privacy Policy', href: '#' },
                 { label: 'Terms of Service', href: '#' },
                 { label: 'Support', href: '#' },
-                { label: 'GitHub', href: 'https://github.com', icon: <Github size={13} /> },
+                { label: 'Blog', href: '/blog', icon: <BookOpen size={13} /> },
               ].map(link => (
                 <a
                   key={link.label}

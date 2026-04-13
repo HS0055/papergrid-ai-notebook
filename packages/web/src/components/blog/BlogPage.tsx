@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Search, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/apiClient';
-import { BlogNotebookPreview } from './BlogNotebookPreview';
 import { BLOG_IMAGES, BlogPost, DEFAULT_BLOG_POSTS, formatDate } from './blogData';
 import { Logo } from '../landing/Logo';
 
@@ -74,8 +73,6 @@ export const BlogPage: React.FC = () => {
       return categoryMatch && queryMatch;
     });
   }, [activeCategory, posts, query]);
-
-  const featured = filteredPosts[0] ?? posts[0] ?? null;
 
   return (
     <main className="min-h-screen bg-[#f7f2ea] text-stone-950">
@@ -155,9 +152,6 @@ export const BlogPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-8 lg:mt-10">
-            <BlogNotebookPreview post={featured} />
-          </div>
         </div>
       </section>
 
