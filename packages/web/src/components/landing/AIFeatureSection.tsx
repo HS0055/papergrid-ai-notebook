@@ -755,7 +755,7 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
   useEffect(() => {
     const timer = setInterval(() => {
       setActivePromptIdx(i => (i + 1) % prompts.length);
-    }, 5000);
+    }, 9000);
     return () => clearInterval(timer);
   }, []);
 
