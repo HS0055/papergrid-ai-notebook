@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Clock, Tag } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../services/apiClient';
@@ -190,9 +190,8 @@ function usePostSEO(post: BlogPost | null) {
 export const BlogPostPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const articleRef = useRef<HTMLDivElement>(null);
-  const [post, setPost] = useState<BlogPost | null>(() =>
-    DEFAULT_BLOG_POSTS.find((item) => item.slug === slug) ?? null,
-  );
+  const [post, setPost] = useState<BlogPost | null>(null);
+  const [relatedPosts, setRelatedPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -201,13 +200,25 @@ export const BlogPostPage: React.FC = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const data = await api.get<BlogPostResponse>(`/api/blog/post?slug=${encodeURIComponent(slug)}`);
+        // Fetch post and related posts in parallel
+        const [postData, listData] = await Promise.all([
+          api.get<BlogPostResponse>(`/api/blog/post?slug=${encodeURIComponent(slug)}`),
+          api.get<{ posts: BlogPost[] }>('/api/blog/posts?limit=10').catch(() => ({ posts: [] as BlogPost[] })),
+        ]);
         if (!cancelled) {
-          setPost(data.post ?? DEFAULT_BLOG_POSTS.find((item) => item.slug === slug) ?? null);
+          // Convex is source of truth; fall back to static only on network failure
+          setPost(postData.post ?? null);
+          setRelatedPosts(
+            (listData.posts.length > 0 ? listData.posts : DEFAULT_BLOG_POSTS)
+              .filter((item) => item.slug !== slug)
+              .slice(0, 3),
+          );
         }
       } catch {
+        // True network failure — fall back to static
         if (!cancelled) {
           setPost(DEFAULT_BLOG_POSTS.find((item) => item.slug === slug) ?? null);
+          setRelatedPosts(DEFAULT_BLOG_POSTS.filter((item) => item.slug !== slug).slice(0, 3));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -218,11 +229,6 @@ export const BlogPostPage: React.FC = () => {
   }, [slug]);
 
   usePostSEO(post);
-
-  const relatedPosts = useMemo(
-    () => DEFAULT_BLOG_POSTS.filter((item) => item.slug !== post?.slug).slice(0, 3),
-    [post?.slug],
-  );
 
   if (!post) {
     return (

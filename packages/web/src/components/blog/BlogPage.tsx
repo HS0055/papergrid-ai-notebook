@@ -14,13 +14,26 @@ const uniqueCategories = (posts: BlogPost[]): string[] =>
   Array.from(new Set(posts.map((post) => post.category).filter(Boolean)));
 
 export const BlogPage: React.FC = () => {
-  const [posts, setPosts] = useState<BlogPost[]>(DEFAULT_BLOG_POSTS);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
   const [query, setQuery] = useState('');
 
   useEffect(() => {
     document.title = 'Thinking Guides — Papera AI Notebook';
+    const setMeta = (name: string, content: string, prop = false) => {
+      const attr = prop ? 'property' : 'name';
+      let el = document.querySelector<HTMLMetaElement>(`meta[${attr}="${name}"]`);
+      if (!el) { el = document.createElement('meta'); el.setAttribute(attr, name); document.head.appendChild(el); }
+      el.setAttribute('content', content);
+    };
+    setMeta('description', 'Practical thinking guides for writers, students, and knowledge workers. Learn to structure thoughts, beat procrastination, and make clearer decisions.');
+    setMeta('og:title', 'Thinking Guides — Papera AI Notebook', true);
+    setMeta('og:description', 'Practical thinking guides for writers, students, and knowledge workers.', true);
+    setMeta('og:type', 'website', true);
+    setMeta('twitter:card', 'summary_large_image');
+    setMeta('twitter:title', 'Thinking Guides — Papera AI Notebook');
+    setMeta('twitter:description', 'Practical thinking guides for writers, students, and knowledge workers.');
   }, []);
 
   useEffect(() => {
@@ -29,10 +42,12 @@ export const BlogPage: React.FC = () => {
       setLoading(true);
       try {
         const data = await api.get<BlogListResponse>('/api/blog/posts?limit=36');
-        if (!cancelled && data.posts.length > 0) {
+        if (!cancelled) {
+          // Convex is source of truth — use whatever it returns (even empty)
           setPosts(data.posts);
         }
       } catch {
+        // True network failure only — fall back to static seed posts
         if (!cancelled) setPosts(DEFAULT_BLOG_POSTS);
       } finally {
         if (!cancelled) setLoading(false);
@@ -60,7 +75,7 @@ export const BlogPage: React.FC = () => {
     });
   }, [activeCategory, posts, query]);
 
-  const featured = filteredPosts[0] ?? posts[0] ?? DEFAULT_BLOG_POSTS[0];
+  const featured = filteredPosts[0] ?? posts[0] ?? null;
 
   return (
     <main className="min-h-screen bg-[#f7f2ea] text-stone-950">
@@ -200,6 +215,11 @@ export const BlogPage: React.FC = () => {
       <section className="mx-auto max-w-7xl px-5 py-12">
         {loading && (
           <div className="mb-5 text-sm font-semibold text-stone-500">Loading latest posts...</div>
+        )}
+        {!loading && filteredPosts.length === 0 && (
+          <p className="py-10 text-center text-stone-500">
+            {query || activeCategory !== 'All' ? 'No guides match your search.' : 'No guides published yet.'}
+          </p>
         )}
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredPosts.map((post, index) => (

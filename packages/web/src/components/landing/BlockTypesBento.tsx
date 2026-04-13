@@ -29,36 +29,34 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
       });
     }
 
-    // Scroll entrance: staggered card reveal
-    const cards = cardRefs.current.filter(Boolean) as HTMLElement[];
-    if (cards.length && gridRef.current) {
-      gsap.fromTo(
-        cards,
-        { opacity: 0, y: 28, scale: 0.96 },
-        {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 0.55,
-          ease: 'power2.out',
-          stagger: 0.055,
-          scrollTrigger: {
-            trigger: gridRef.current,
-            start: 'top 78%',
-            once: true,
+    // Wrap in gsap.context so ctx.revert() kills both tweens AND ScrollTriggers
+    // on unmount — prevents React StrictMode double-mount from leaving orphaned
+    // ScrollTriggers that cause cards to stay stuck at opacity: 0.
+    const ctx = gsap.context(() => {
+      const cards = cardRefs.current.filter(Boolean) as HTMLElement[];
+      if (cards.length && gridRef.current) {
+        gsap.fromTo(
+          cards,
+          { opacity: 0, y: 28, scale: 0.96 },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.55,
+            ease: 'power2.out',
+            stagger: 0.055,
+            scrollTrigger: {
+              trigger: gridRef.current,
+              start: 'top 78%',
+              once: true,
+            },
           },
-        },
-      );
-    }
+        );
+      }
+    }, sectionRef);
 
     return () => {
-      // Kill all tweens on unmount
-      cardRefs.current.forEach((card) => {
-        if (card) gsap.killTweensOf(card);
-      });
-      contentRefs.current.forEach((content) => {
-        if (content) gsap.killTweensOf(content);
-      });
+      ctx.revert();
     };
   }, []);
 
