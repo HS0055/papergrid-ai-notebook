@@ -814,10 +814,11 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
     return () => ctx.revert();
   }, []);
 
-  // Chip-click animation: kill any running tl, re-type prompt + swap output
+  // Chip-click animation: fast crossfade swap (~0.7s total, no re-typing)
   useEffect(() => {
     if (!hasInitAnimated.current) return;
 
+    // Kill previous — do NOT reset opacity first; fade out from wherever we are
     if (currentTlRef.current) {
       currentTlRef.current.kill();
       currentTlRef.current = null;
@@ -830,40 +831,27 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
     ].filter(Boolean) as HTMLElement[];
     if (!blocks.length) return;
 
-    gsap.set(blocks, { opacity: 1, y: 0 });
-    gsap.set(thinkingRef.current, { opacity: 0, scale: 0.8 });
-
-    const promptText = prompts[activePromptIdx];
-    if (typingTextRef.current) typingTextRef.current.textContent = '';
-    if (cursorRef.current) cursorRef.current.style.opacity = '1';
+    // Update prompt text immediately (no re-typing on manual switch)
+    if (typingTextRef.current) typingTextRef.current.textContent = prompts[activePromptIdx];
+    if (cursorRef.current) cursorRef.current.style.opacity = '0';
 
     const tl = gsap.timeline({
       onComplete: () => { currentTlRef.current = null; },
     });
     currentTlRef.current = tl;
 
-    tl.to(blocks, { opacity: 0, y: 6, duration: 0.18, ease: 'power2.in', stagger: 0.03 });
+    // Fade out from current opacity (no flash reset)
+    tl.to(blocks, { opacity: 0, y: 4, duration: 0.15, ease: 'power2.in' });
 
-    const charCount = { val: 0 };
-    tl.to(charCount, {
-      val: promptText.length,
-      duration: Math.min(1.4, promptText.length * 0.042),
-      ease: 'none',
-      onUpdate: () => {
-        if (typingTextRef.current) {
-          typingTextRef.current.textContent = promptText.substring(0, Math.floor(charCount.val));
-        }
-      },
-      onComplete: () => {
-        if (cursorRef.current) cursorRef.current.style.opacity = '0';
-      },
-    }, '-=0.1');
+    // Brief thinking flash
+    tl.set(thinkingRef.current, { opacity: 0, scale: 0.85 });
+    tl.to(thinkingRef.current, { opacity: 1, scale: 1, duration: 0.15, ease: 'power2.out' });
+    tl.to(thinkingRef.current, { opacity: 0, scale: 0.85, duration: 0.15 }, '+=0.2');
 
-    tl.to(thinkingRef.current, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(1.7)' }, '+=0.05');
-    tl.to(thinkingRef.current, { opacity: 0, scale: 0.8, duration: 0.2 }, '+=0.65');
-
+    // Swap content then fade in cleanly
     tl.call(() => setDisplayedIdx(activePromptIdx));
-    tl.to(blocks, { opacity: 1, y: 0, duration: 0.35, ease: 'power3.out', stagger: 0.06 }, '+=0.05');
+    tl.set(blocks, { y: 0 });
+    tl.to(blocks, { opacity: 1, duration: 0.25, ease: 'power2.out', stagger: 0.05 }, '+=0.02');
   }, [activePromptIdx]);
 
   const layout = promptLayouts[displayedIdx];
