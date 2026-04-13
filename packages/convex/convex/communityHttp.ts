@@ -24,6 +24,8 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:5173",
   "capacitor://localhost",
   "ionic://localhost",
+  "https://papera.io",
+  "https://www.papera.io",
   "https://papergrid.app",
   "https://www.papergrid.app",
   "https://papergrid-five.vercel.app",
@@ -157,6 +159,29 @@ export function registerCommunityRoutes(http: HttpRouter) {
     }),
   });
   installPreflight(http, "/api/community/admin/announce");
+
+  // ── POST /api/community/admin/delete-post ───────────────
+  http.route({
+    path: "/api/community/admin/delete-post",
+    method: "POST",
+    handler: httpAction(async (ctx, request) => {
+      try {
+        const body = await request.json().catch(() => ({}));
+        if (!body.postId) {
+          return json({ error: "postId required" }, 400, request);
+        }
+        await ctx.runMutation(api.community.adminRemovePost, {
+          sessionToken: getSessionToken(request) ?? undefined,
+          postId: body.postId,
+        });
+        return json({ success: true }, 200, request);
+      } catch (error) {
+        const msg = errMsg(error, "Failed to remove post");
+        return json({ error: msg }, statusFromMessage(msg), request);
+      }
+    }),
+  });
+  installPreflight(http, "/api/community/admin/delete-post");
 
   // ── POST /api/community/admin/roadmap-status ────────────
   http.route({

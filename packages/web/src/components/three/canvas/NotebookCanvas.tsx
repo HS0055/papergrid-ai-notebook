@@ -19,6 +19,12 @@ interface NotebookCanvasProps {
   fov?: number;
   /** Camera position */
   cameraPosition?: [number, number, number];
+  /** Cap device pixel ratio for this canvas */
+  maxDpr?: number;
+  /** Whether the rim light should follow cursor movement */
+  followCursorLight?: boolean;
+  /** Disable post-processing for lighter scenes */
+  disableEffects?: boolean;
 }
 
 /**
@@ -35,13 +41,16 @@ export default function NotebookCanvas({
   postPreset = 'notebook',
   fov = 40,
   cameraPosition = [0, 1.5, 6],
+  maxDpr = 1.5,
+  followCursorLight,
+  disableEffects = false,
 }: NotebookCanvasProps) {
   const [dpr, setDpr] = useState(1.5);
 
   useEffect(() => {
-    const deviceDpr = Math.min(window.devicePixelRatio, 1.5);
+    const deviceDpr = Math.min(window.devicePixelRatio, maxDpr);
     setDpr(deviceDpr);
-  }, []);
+  }, [maxDpr]);
 
   return (
     <div
@@ -83,9 +92,9 @@ export default function NotebookCanvas({
           }
         }}
       >
-        <Lighting preset={lightPreset} followCursor={!overlay} />
+        <Lighting preset={lightPreset} followCursor={followCursorLight ?? !overlay} />
         {children}
-        <PostEffects preset={postPreset} />
+        <PostEffects preset={postPreset} disabled={disableEffects} />
         <Preload all />
       </Canvas>
     </div>

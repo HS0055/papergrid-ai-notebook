@@ -343,6 +343,7 @@ export const signupWithEmailPassword = mutation({
     // If this email was on the iOS launch waitlist, honor the promised
     // 25 Ink bonus (stored under `inkPurchased` so it survives monthly
     // refills) and mark the row as redeemed so we don't double-grant.
+    let waitlistBonusGranted = false;
     try {
       const waitlistRow = await ctx.db
         .query("waitlist")
@@ -350,6 +351,7 @@ export const signupWithEmailPassword = mutation({
         .first();
       if (waitlistRow && !waitlistRow.redeemedAt) {
         const bonus = WAITLIST_BONUS_INK;
+        waitlistBonusGranted = true;
         await ctx.db.patch(user._id, {
           inkPurchased: (user.inkPurchased ?? 0) + bonus,
           inkLastActivity: nowIso,
@@ -379,6 +381,23 @@ export const signupWithEmailPassword = mutation({
     // ctx.db.get which returns `| null`.
     if (!user) throw new Error("Failed to resolve user after signup");
     const sessionToken = await createSession(ctx, user._id);
+
+    await ctx.scheduler.runAfter(0, internal.emailActions.sendTransactional, {
+      templateKey: "welcome",
+      toEmail: normalizedEmail,
+      context: {
+        name: user.name,
+        plan: user.plan,
+        welcomeBonusLine: waitlistBonusGranted
+          ? `You also unlocked ${WAITLIST_BONUS_INK} bonus Ink from the launch waitlist.`
+          : "Your dashboard is ready to go.",
+      },
+      metadata: {
+        source: "signup",
+        plan: user.plan,
+        waitlistBonusGranted,
+      },
+    });
 
     return { sessionToken, user: sanitizeUser(user) };
   },
@@ -1068,7 +1087,7 @@ export const adminGrantInk = mutation({
     description: v.optional(v.string()),
   },
   handler: async (ctx, { sessionToken, targetUserId, amount, description }) => {
-    await requireAdmin(ctx, sessionToken);
+    const admin = await requireAdmin(ctx, sessionToken);
     const target = await ctx.db.get(targetUserId);
     if (!target) throw new Error("User not found");
 
@@ -1085,6 +1104,29 @@ export const adminGrantInk = mutation({
       description: description ?? `Admin granted ${amount} Ink`,
       createdAt: new Date().toISOString(),
     });
+
+    if (amount > 0 && target.email) {
+      const appBaseUrl = process.env.PUBLIC_APP_URL || "https://papera.io";
+      await ctx.scheduler.runAfter(0, internal.emailActions.sendTransactional, {
+        templateKey: "gift",
+        toEmail: target.email,
+        context: {
+          name: target.name,
+          giftSenderName: admin.name || "Papera Team",
+          giftAmount: `${amount} Ink`,
+          giftMessage: description || "A small boost to help you keep creating.",
+          ctaUrl: `${appBaseUrl}/app`,
+          ctaLabel: "Open dashboard",
+        },
+        metadata: {
+          source: "admin-grant-ink",
+          amount,
+          targetUserId,
+        },
+        triggeredByUserId: admin._id,
+        triggeredByEmail: admin.email,
+      });
+    }
 
     return { balance: newBalance };
   },

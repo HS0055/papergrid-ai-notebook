@@ -23,7 +23,7 @@ type PriceLookupKey = `${string}:${string}`;
 //   STRIPE_PRICE_INK_75        — price_...
 //   STRIPE_PRICE_INK_200       — price_...
 //   STRIPE_PRICE_INK_500       — price_...
-//   PUBLIC_APP_URL             — e.g. https://papergrid.app (success / cancel urls)
+//   PUBLIC_APP_URL             — e.g. https://papera.io (success / cancel urls)
 //
 // The webhook is pure-fetch: we don't pull in the stripe npm SDK since
 // Convex runs on Cloud (no long-lived sockets, small bundle preferred).
@@ -172,7 +172,7 @@ export function registerStripeRoutes(http: HttpRouter) {
         if (!stripeKey) {
           return errorResponse("Billing not configured (STRIPE_SECRET_KEY unset)", 503, request);
         }
-        const appUrl = process.env.PUBLIC_APP_URL || "https://papergrid.app";
+        const appUrl = process.env.PUBLIC_APP_URL || "https://papera.io";
 
         // Auth — require a real session. Unauthenticated callers can
         // still hit the landing page, but creating a checkout session
@@ -381,7 +381,7 @@ export function registerStripeRoutes(http: HttpRouter) {
         if (!stripeKey) {
           return errorResponse("Billing not configured (STRIPE_SECRET_KEY unset)", 503, request);
         }
-        const appUrl = process.env.PUBLIC_APP_URL || "https://papergrid.app";
+        const appUrl = process.env.PUBLIC_APP_URL || "https://papera.io";
 
         const auth = request.headers.get("authorization") ?? "";
         const sessionToken = auth.startsWith("Bearer ")

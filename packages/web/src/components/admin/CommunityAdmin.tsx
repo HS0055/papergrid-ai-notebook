@@ -14,6 +14,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   X,
   XCircle,
 } from 'lucide-react';
@@ -157,6 +158,7 @@ export function CommunityAdmin() {
   const [postingReply, setPostingReply] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingPost, setDeletingPost] = useState(false);
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
@@ -255,6 +257,30 @@ export function CommunityAdmin() {
       return;
     }
     setKind('announcement');
+  };
+
+  const removeSelectedPost = async () => {
+    if (!selectedPostId || !selectedPost) return;
+    const confirmed = window.confirm(
+      `Remove "${selectedPost.title}" from the public community?`,
+    );
+    if (!confirmed) return;
+
+    setDeletingPost(true);
+    setError(null);
+    try {
+      await apiClient.post('/api/community/admin/delete-post', {
+        postId: selectedPostId,
+      });
+      setSelectedPostId(null);
+      setSelectedPost(null);
+      setComments([]);
+      await loadFeed();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove post');
+    } finally {
+      setDeletingPost(false);
+    }
   };
 
   return (
@@ -454,6 +480,14 @@ export function CommunityAdmin() {
                         </p>
                       </div>
                     </div>
+                    <button
+                      onClick={() => void removeSelectedPost()}
+                      disabled={deletingPost}
+                      className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold uppercase tracking-[0.16em] text-rose-700 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingPost ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      Remove post
+                    </button>
                   </div>
 
                   <div className={`mt-4 rounded-2xl ${selectedPost.kind === 'announcement' ? 'border border-indigo-100 bg-indigo-50/80 p-4' : ''}`}>

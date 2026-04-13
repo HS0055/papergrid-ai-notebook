@@ -7,6 +7,7 @@ import {
   MutationCtx,
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { getAuthUser, requireAuthUser, requireAdminUser } from "./authHelpers";
 
 // ─────────────────────────────────────────────────────────────
@@ -300,6 +301,36 @@ async function qualifyRedemption(
     action: "referral_welcome",
     description: `Referral bonus — you were invited`,
     createdAt: nowIso,
+  });
+
+  await ctx.scheduler.runAfter(0, internal.emailActions.sendTransactional, {
+    templateKey: "referral_reward",
+    toEmail: referrer.email,
+    context: {
+      name: referrer.name,
+      referredName: referred.name || referred.email,
+      rewardInk: config.referrerReward,
+    },
+    metadata: {
+      source: "referral",
+      role: "referrer",
+      redemptionId,
+    },
+  });
+
+  await ctx.scheduler.runAfter(0, internal.emailActions.sendTransactional, {
+    templateKey: "referral_welcome",
+    toEmail: referred.email,
+    context: {
+      name: referred.name,
+      referrerName: referrer.name || referrer.email,
+      rewardInk: config.referredReward,
+    },
+    metadata: {
+      source: "referral",
+      role: "referred",
+      redemptionId,
+    },
   });
 
   // Patch the redemption + referral stats.

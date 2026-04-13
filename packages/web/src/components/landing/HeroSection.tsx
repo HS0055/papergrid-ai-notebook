@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, Suspense, lazy, useState } from 'react';
-import { Sparkles, ChevronRight, Github } from 'lucide-react';
+import { Sparkles, ChevronRight, ArrowRight, Github } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Canvas3DErrorBoundary } from '../three/Canvas3DErrorBoundary';
@@ -134,7 +134,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
     >
       <div
         ref={pinContainerRef}
-        className={`relative flex flex-col items-center overflow-hidden px-5 sm:px-6 ${isMobile ? 'justify-start min-h-[100svh] pt-16 pb-8' : 'justify-center min-h-screen pt-24 pb-16'}`}
+        className={`relative flex flex-col items-center overflow-hidden px-5 sm:px-6 ${isMobile ? 'justify-start min-h-[100svh] pt-20 pb-8' : 'justify-center min-h-screen pt-24 pb-16'}`}
         style={{
           background: 'linear-gradient(160deg, #0f111a 0%, #1a1c23 45%, #2a1f3d 70%, #0f111a 100%)',
         }}
@@ -206,7 +206,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             }}
           >
             <Sparkles size={14} />
-            <span>{isMobile ? 'Powered by AI' : 'Powered by Advanced AI'}</span>
+            <span>{isMobile ? 'AI builds your layout' : 'AI builds your layout — you just describe it'}</span>
           </div>
 
           {/* Headline */}
@@ -219,8 +219,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             }}
           >
             <span className="hero-word block">The notebook</span>
-            <span className="hero-word block" style={{ color: '#818cf8' }}>that thinks</span>
-            <span className="hero-word block italic" style={{ color: '#F4F0EC' }}>with you.</span>
+            <span className="hero-word block" style={{ color: '#818cf8' }}>that builds</span>
+            <span className="hero-word block italic" style={{ color: '#F4F0EC' }}>itself.</span>
           </h1>
 
           {/* Subheadline */}
@@ -228,7 +228,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             className="hero-desc max-w-2xl mx-auto text-sm md:text-xl mb-5 md:mb-10 leading-relaxed"
             style={{ color: '#94a3b8', maxWidth: isMobile ? '22rem' : undefined }}
           >
-            Describe your day, task, or idea — AI generates the perfect notebook layout instantly.
+            Tired of staring at a blank page? Describe what you need — Papera builds the perfect layout in seconds. No templates to pick. No grids to draw.
           </p>
 
           {/* CTAs */}
@@ -238,10 +238,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
               className="w-full sm:w-auto flex items-center justify-center gap-3 px-9 py-3 md:py-4 text-white font-bold text-base md:text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
               style={{
                 background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                boxShadow: '0 20px 60px rgba(79,70,229,0.4)',
+                boxShadow: '0 8px 32px rgba(79,70,229,0.45)',
               }}
             >
-              Start Writing Now
+              Build My First Notebook
               <ChevronRight size={20} />
             </button>
             <a
@@ -260,7 +260,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
             className="text-[10px] md:text-xs font-medium tracking-widest uppercase"
             style={{ color: 'rgba(148,163,184,0.6)', marginTop: isMobile ? '0.25rem' : undefined }}
           >
-            Free · AI-Powered · No credit card needed
+            Free forever · No credit card · Cancel paid plans anytime
           </p>
         </div>
 
@@ -284,18 +284,18 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
               }}
             >
               <Sparkles size={14} />
-              <span>10 Paper Textures · 22+ Block Types</span>
+              <span>10 Paper Textures · 22+ Interactive Blocks</span>
             </div>
             <h2
               className="font-serif font-bold text-white mb-3 md:mb-4"
               style={{ fontSize: 'clamp(2rem, 7vw, 5rem)', lineHeight: 1.1 }}
             >
-              Open the cover.
+              Real paper.
               <br />
-              <span className="italic" style={{ color: '#818cf8' }}>Discover the pages.</span>
+              <span className="italic" style={{ color: '#818cf8' }}>Zero blank pages.</span>
             </h2>
             <p className="text-sm md:text-lg" style={{ color: '#94a3b8' }}>
-              Scroll to watch the notebook unfold with real paper textures and AI-generated content.
+              10 paper textures. 22+ interactive blocks. AI generates the whole spread — not just the headings.
             </p>
           </div>
         </div>
@@ -307,39 +307,50 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onLaunch }) => {
           style={{ zIndex: 20, opacity: 0, pointerEvents: 'none' }}
         >
           <div
-            className="text-center max-w-3xl rounded-3xl px-5 py-7 md:px-10 md:py-12"
+            className="text-center max-w-3xl rounded-3xl px-5 py-7 md:px-10 md:py-12 border"
             style={{
-              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.92) 0%, rgba(15,17,26,0.75) 70%, transparent 100%)',
+              background: 'radial-gradient(ellipse at center, rgba(15,17,26,0.96) 0%, rgba(15,17,26,0.80) 70%, transparent 100%)',
+              borderColor: 'rgba(245,158,11,0.15)',
             }}
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-semibold mb-3 md:mb-6 border"
+            <div
+              className="inline-flex items-center px-3.5 py-1.5 text-xs font-bold uppercase tracking-widest mb-3 md:mb-6 border"
               style={{
-                background: 'rgba(16,185,129,0.15)',
-                borderColor: 'rgba(16,185,129,0.4)',
-                color: '#6ee7b7',
+                background: 'rgba(245,158,11,0.2)',
+                borderColor: 'rgba(245,158,11,0.7)',
+                borderWidth: '1.5px',
+                borderRadius: '6px',
+                color: '#fcd34d',
               }}
             >
-              <Sparkles size={14} />
-              <span>Lined · Grid · Dotted · Music · Legal & More</span>
+              BLANK PAGE PARALYSIS IS REAL
             </div>
             <h2
-              className="font-serif font-bold text-white mb-4 md:mb-6"
-              style={{ fontSize: 'clamp(2rem, 7vw, 5rem)', lineHeight: 1.1 }}
+              className="font-serif font-black text-white mb-4 md:mb-6"
+              style={{
+                fontSize: isMobile ? 'clamp(1.875rem, 8.5vw, 3rem)' : 'clamp(2.4rem, 7vw, 5.5rem)',
+                lineHeight: 1.0,
+                letterSpacing: '-0.03em',
+              }}
             >
-              Your pages.
+              Still staring at
               <br />
-              <span className="italic" style={{ color: '#818cf8' }}>Your story.</span>
+              <span className="italic" style={{ color: '#f59e0b' }}>a blank page?</span>
             </h2>
             <button
               onClick={onLaunch}
-              className="inline-flex items-center justify-center gap-3 px-7 py-3 md:px-10 md:py-5 text-white font-bold text-base md:text-lg rounded-2xl transition-all hover:scale-[1.03] active:scale-[0.98] shadow-2xl"
+              className="cta-level-3 inline-flex items-center justify-center gap-3 px-10 py-3.5 font-bold text-base transition-all hover:scale-[1.02] active:scale-[0.97] focus-visible:outline-[3px] focus-visible:outline-offset-[3px]"
               style={{
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                boxShadow: '0 20px 60px rgba(79,70,229,0.4)',
+                background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #d97706 100%)',
+                backgroundSize: '200% 100%',
+                color: '#0f111a',
+                borderRadius: '10px',
+                minWidth: '14rem',
+                outlineColor: '#f59e0b',
               }}
             >
-              Start Writing Now
-              <ChevronRight size={20} />
+              See It Generate Live
+              <ArrowRight size={20} />
             </button>
           </div>
         </div>

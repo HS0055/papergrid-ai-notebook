@@ -241,20 +241,52 @@ export const ComparisonTable: React.FC = () => {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-14">
-          <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--color-indigo-brand)' }}>
-            Honest Comparison
+          <p className="text-[11px] font-bold uppercase tracking-widest mb-5" style={{ color: 'var(--color-indigo-brand)', letterSpacing: '0.14em' }}>
+            THE ONLY DIFFERENCE THAT MATTERS
           </p>
-          <h2
-            className="font-serif font-bold mb-4"
-            style={{ fontSize: 'clamp(2.2rem, 4vw, 3.5rem)', color: 'var(--color-ink)', lineHeight: 1.15 }}
-          >
-            Why Papera{' '}
-            <span className="italic" style={{ color: 'var(--color-indigo-brand)' }}>is different.</span>
-          </h2>
-          <p className="text-gray-500 max-w-2xl mx-auto text-lg">
-            Everyone has good paper apps. What makes Papera different is <strong>native interactive blocks</strong>.
-            Others give you static PDF templates — we give you living, editable layouts.
-          </p>
+          <div className="font-serif mb-8 mx-auto text-center md:text-center">
+            <p
+              className="font-normal"
+              style={{
+                fontSize: 'clamp(1.2rem, 4vw, 2.2rem)',
+                color: '#94a3b8',
+                lineHeight: 1.15,
+                letterSpacing: '-0.025em',
+              }}
+            >
+              GoodNotes gives you a static PDF.
+            </p>
+            <p
+              className="font-normal mt-1"
+              style={{
+                fontSize: 'clamp(1.2rem, 4vw, 2.2rem)',
+                color: '#94a3b8',
+                lineHeight: 1.15,
+                letterSpacing: '-0.025em',
+              }}
+            >
+              Notion gives you a blank database.
+            </p>
+            <p
+              className="font-bold mt-2"
+              style={{
+                fontSize: 'clamp(1.4rem, 5vw, 2.76rem)',
+                color: '#0f111a',
+                lineHeight: 1.15,
+                letterSpacing: '-0.025em',
+              }}
+            >
+              Papera gives you a{' '}
+              <span
+                style={{
+                  background: 'linear-gradient(180deg, transparent 55%, rgba(79,70,229,0.2) 55%)',
+                  paddingBottom: '2px',
+                }}
+              >
+                living page.
+              </span>
+            </p>
+          </div>
         </div>
 
         {/* Hero callout — verified total cost comparison */}
@@ -262,13 +294,14 @@ export const ComparisonTable: React.FC = () => {
           className="rounded-3xl p-8 mb-10"
           style={{
             background: 'linear-gradient(135deg, rgba(79,70,229,0.06) 0%, rgba(124,58,237,0.04) 100%)',
-            border: '1px solid rgba(79,70,229,0.15)',
+            border: '1.5px solid rgba(79,70,229,0.3)',
           }}
         >
-          <p className="text-center text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#64748b' }}>
+          <p className="text-center text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--color-indigo-brand)', letterSpacing: '0.14em' }}>
             Total annual cost with AI
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+            {/* Goodnotes — recessive on mobile (col 1) */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#94a3b8' }}>
                 Goodnotes Pro + AI Pass
@@ -280,6 +313,7 @@ export const ComparisonTable: React.FC = () => {
                 $35.99 + $119.88 AI Pass
               </p>
             </div>
+            {/* Notion — recessive on mobile (col 2) */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#94a3b8' }}>
                 Notion Business (with AI)
@@ -291,76 +325,173 @@ export const ComparisonTable: React.FC = () => {
                 AI bundled into Business tier
               </p>
             </div>
-            <div>
+            {/* Papera — full-width dominant card on mobile, normal col on desktop */}
+            <div
+              className="col-span-2 md:col-span-1 rounded-xl p-4"
+              style={{ background: 'rgba(79,70,229,0.06)' }}
+            >
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-indigo-brand)' }}>
                 Papera Pro
               </p>
-              <p className="font-serif font-bold text-3xl mb-1" style={{ color: 'var(--color-indigo-brand)' }}>
+              <p className="font-serif font-bold text-4xl mb-1" style={{ color: 'var(--color-indigo-brand)' }}>
                 {paperaAnnualLabel}
               </p>
-              <p className="text-xs font-semibold" style={{ color: '#10b981' }}>
-                AI included. Save ${Math.round(goodnotesSavings)}+/yr
+              <p className="text-sm font-bold" style={{ color: '#10b981' }}>
+                ✓ AI included. Save ${Math.round(goodnotesSavings)}+/yr
               </p>
             </div>
           </div>
         </div>
 
-        {/* Mobile cards */}
-        <div className="md:hidden space-y-4">
-          {ROWS.map((row, i) => (
-            <div
-              key={i}
-              className="comparison-row rounded-3xl border p-4"
-              style={{ background: '#fff', borderColor: 'rgba(0,0,0,0.08)' }}
-            >
-              <div className="flex items-start gap-2 mb-4">
-                <div className="text-sm font-semibold leading-snug flex-1" style={{ color: 'var(--color-ink)' }}>
-                  {row.feature}
-                </div>
-                {row.note && (
-                  <div
-                    className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full"
-                    style={{ background: 'rgba(79,70,229,0.08)', color: 'var(--color-indigo-brand)' }}
-                  >
-                    <Info size={12} />
-                  </div>
-                )}
-              </div>
+        {/* Mobile table — horizontally scrollable, sticky feature column */}
+        <div className="md:hidden">
+          <div
+            className="rounded-2xl overflow-hidden border"
+            style={{ borderColor: 'rgba(0,0,0,0.08)' }}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full" style={{ minWidth: '460px', borderCollapse: 'separate', borderSpacing: 0 }}>
+                {/* Column headers */}
+                <thead>
+                  <tr style={{ background: '#fafbfc' }}>
+                    <th
+                      className="text-left text-[11px] font-bold uppercase tracking-widest py-3 pl-4 pr-2"
+                      style={{
+                        color: '#94a3b8',
+                        width: '140px',
+                        position: 'sticky',
+                        left: 0,
+                        background: '#fafbfc',
+                        zIndex: 2,
+                        borderBottom: '1px solid rgba(0,0,0,0.08)',
+                        boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
+                      }}
+                    >
+                      Feature
+                    </th>
+                    <th
+                      className="text-center py-3 px-2"
+                      style={{
+                        background: 'rgba(79,70,229,0.06)',
+                        borderBottom: '1px solid rgba(79,70,229,0.15)',
+                        width: '80px',
+                      }}
+                    >
+                      <span
+                        className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide"
+                        style={{
+                          background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                          color: '#fff',
+                          boxShadow: '0 2px 8px rgba(79,70,229,0.3)',
+                        }}
+                      >
+                        Papera
+                      </span>
+                    </th>
+                    <th
+                      className="text-center text-[11px] font-bold py-3 px-2"
+                      style={{ color: '#64748b', width: '80px', borderBottom: '1px solid rgba(0,0,0,0.08)' }}
+                    >
+                      Goodnotes
+                    </th>
+                    <th
+                      className="text-center text-[11px] font-bold py-3 px-2"
+                      style={{ color: '#64748b', width: '80px', borderBottom: '1px solid rgba(0,0,0,0.08)' }}
+                    >
+                      Notability
+                    </th>
+                    <th
+                      className="text-center text-[11px] font-bold py-3 px-2 pr-4"
+                      style={{ color: '#64748b', width: '80px', borderBottom: '1px solid rgba(0,0,0,0.08)' }}
+                    >
+                      Notion
+                    </th>
+                  </tr>
+                </thead>
 
-              <div className="grid grid-cols-2 gap-x-3 gap-y-3">
-                <div className="rounded-2xl px-3 py-3" style={{ background: 'rgba(79,70,229,0.06)' }}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--color-indigo-brand)' }}>
-                    Papera
-                  </div>
-                  <div>{renderCell(row.papera, true)}</div>
-                </div>
-                <div className="rounded-2xl px-3 py-3" style={{ background: '#f8fafc' }}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
-                    Goodnotes
-                  </div>
-                  <div>{renderCell(row.goodnotes, false)}</div>
-                </div>
-                <div className="rounded-2xl px-3 py-3" style={{ background: '#f8fafc' }}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
-                    Notability
-                  </div>
-                  <div>{renderCell(row.notability, false)}</div>
-                </div>
-                <div className="rounded-2xl px-3 py-3" style={{ background: '#f8fafc' }}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
-                    Notion
-                  </div>
-                  <div>{renderCell(row.notion, false)}</div>
-                </div>
-              </div>
+                {/* Rows */}
+                <tbody>
+                  {ROWS.map((row, i) => (
+                    <tr
+                      key={i}
+                      className="comparison-row"
+                      style={{ borderBottom: i < ROWS.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}
+                    >
+                      {/* Feature — sticky left */}
+                      <td
+                        className="py-3 pl-4 pr-2 align-middle"
+                        style={{
+                          position: 'sticky',
+                          left: 0,
+                          background: i % 2 === 0 ? '#ffffff' : '#fafbfc',
+                          zIndex: 1,
+                          borderRight: '1px solid rgba(0,0,0,0.05)',
+                          borderTop: i === 0 ? '1px solid rgba(0,0,0,0.06)' : undefined,
+                          boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
+                        }}
+                      >
+                        <span className="text-xs font-medium leading-snug" style={{ color: 'var(--color-ink)' }}>
+                          {row.feature}
+                        </span>
+                      </td>
 
-              {row.note && (
-                <p className="mt-3 text-xs leading-relaxed" style={{ color: '#64748b' }}>
-                  {row.note}
-                </p>
-              )}
+                      {/* Papera — highlighted */}
+                      <td
+                        className="text-center py-3 px-2 align-middle"
+                        style={{
+                          background: i % 2 === 0 ? 'rgba(79,70,229,0.04)' : 'rgba(79,70,229,0.07)',
+                          borderTop: i === 0 ? '1px solid rgba(0,0,0,0.06)' : undefined,
+                        }}
+                      >
+                        {renderCell(row.papera, true)}
+                      </td>
+
+                      {/* Goodnotes */}
+                      <td
+                        className="text-center py-3 px-2 align-middle"
+                        style={{
+                          background: i % 2 === 0 ? '#ffffff' : '#fafbfc',
+                          borderTop: i === 0 ? '1px solid rgba(0,0,0,0.06)' : undefined,
+                        }}
+                      >
+                        {renderCell(row.goodnotes, false)}
+                      </td>
+
+                      {/* Notability */}
+                      <td
+                        className="text-center py-3 px-2 align-middle"
+                        style={{
+                          background: i % 2 === 0 ? '#ffffff' : '#fafbfc',
+                          borderTop: i === 0 ? '1px solid rgba(0,0,0,0.06)' : undefined,
+                        }}
+                      >
+                        {renderCell(row.notability, false)}
+                      </td>
+
+                      {/* Notion */}
+                      <td
+                        className="text-center py-3 px-2 pr-4 align-middle"
+                        style={{
+                          background: i % 2 === 0 ? '#ffffff' : '#fafbfc',
+                          borderTop: i === 0 ? '1px solid rgba(0,0,0,0.06)' : undefined,
+                        }}
+                      >
+                        {renderCell(row.notion, false)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
+
+            {/* Scroll hint */}
+            <div
+              className="flex items-center justify-center gap-1.5 py-2 border-t"
+              style={{ background: '#fafbfc', borderColor: 'rgba(0,0,0,0.06)' }}
+            >
+              <span className="text-[11px] font-medium" style={{ color: '#94a3b8' }}>↔ swipe to compare</span>
+            </div>
+          </div>
         </div>
 
         {/* Desktop table */}

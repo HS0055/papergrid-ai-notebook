@@ -259,7 +259,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onLaunch }) => {
             <span className="italic" style={{ color: 'var(--color-indigo-brand)' }}>Your price.</span>
           </h2>
           <p className="text-gray-500 max-w-xl mx-auto text-lg">
-            Start free forever. Upgrade when your creativity demands more. No trials. No surprise charges.
+            Start free, stay free as long as you want. Upgrade only when 10 Ink/month isn't enough. No bait-and-switch.
           </p>
         </div>
 

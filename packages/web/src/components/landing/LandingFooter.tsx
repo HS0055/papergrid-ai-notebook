@@ -1,6 +1,14 @@
 import React from 'react';
 import { Github } from 'lucide-react';
 import { Logo } from './Logo';
+import { PUBLIC_BLOG_ENABLED } from '../../config/featureFlags';
+
+const EXPLORE_LINKS = [
+  { label: 'Paper Styles', href: '#paper-styles' },
+  { label: 'AI Magic', href: '#ai-feature' },
+  { label: 'How It Works', href: '#how-it-works' },
+  ...(PUBLIC_BLOG_ENABLED ? [{ label: 'Blog', href: '/blog' }] : []),
+] as const;
 
 export const LandingFooter: React.FC = () => {
   return (
@@ -25,12 +33,7 @@ export const LandingFooter: React.FC = () => {
               Explore
             </div>
             <nav className="flex flex-col gap-3">
-              {[
-                { label: 'Paper Styles', href: '#paper-styles' },
-                { label: 'AI Magic', href: '#ai-feature' },
-                { label: 'How It Works', href: '#how-it-works' },
-                { label: 'Block Types', href: '#' },
-              ].map(link => (
+              {EXPLORE_LINKS.map(link => (
                 <a
                   key={link.label}
                   href={link.href}

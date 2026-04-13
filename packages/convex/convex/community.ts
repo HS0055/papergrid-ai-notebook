@@ -774,7 +774,10 @@ export const deletePost = mutation({
     if (!post) return;
     if (post.authorId !== user._id) throw new Error("Forbidden");
     if (post.status === "removed") return;
-    await ctx.db.patch(postId, { status: "removed" });
+    await ctx.db.patch(postId, {
+      status: "removed",
+      updatedAt: new Date().toISOString(),
+    });
 
     // Decrement the author's postCount. Previously `postCount` was
     // incremented on create and NEVER decremented, so every delete
@@ -1208,10 +1211,12 @@ export const adminRemovePost = mutation({
     const admin = await requireAdmin(ctx, sessionToken);
     const post = await ctx.db.get(postId);
     if (!post) throw new Error("Post not found");
+    if (post.status === "removed") return;
     await ctx.db.patch(postId, {
       status: "removed",
       hiddenReason: reason,
       hiddenBy: admin._id,
+      updatedAt: new Date().toISOString(),
     });
     // Decrement author postCount on admin takedown (same drift fix as
     // user-initiated deletePost).
@@ -1226,7 +1231,14 @@ export const adminRemovePost = mutation({
     }
     await writeAuditLog(
       ctx, admin, "community.adminRemovePost",
-      { postId, reason }, post.authorId,
+      {
+        postId,
+        reason,
+        postKind: post.kind,
+        title: post.title,
+        authorId: post.authorId,
+      },
+      post.authorId,
     );
   },
 });

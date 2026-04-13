@@ -6,7 +6,7 @@ const steps = [
     num: '01',
     icon: <PenLine size={28} />,
     title: 'Describe',
-    desc: 'Tell the AI what you want to create — a daily planner, meeting notes, gratitude journal, or anything else.',
+    desc: "Say it in plain English. 'Sprint planning with priorities' or 'gratitude journal for January.' No form to fill. No template to pick.",
     color: '#4f46e5',
     lightBg: '#eef2ff',
   },
@@ -14,7 +14,7 @@ const steps = [
     num: '02',
     icon: <Sparkles size={28} />,
     title: 'Generate',
-    desc: 'AI designs a full two-page spread — paper style, headings, grids, callouts, and mood trackers.',
+    desc: 'Papera reads your intent and builds a complete two-page spread — paper texture, headings, blocks, grids — everything in its right place.',
     color: '#d97706',
     lightBg: '#fffbeb',
   },
@@ -22,7 +22,7 @@ const steps = [
     num: '03',
     icon: <BookOpen size={28} />,
     title: 'Write',
-    desc: 'Every block is editable. Add content, reorder sections, change colors, or switch paper textures at any time.',
+    desc: 'Every block is yours. Edit, reorder, recolor, change paper textures. When it feels right, it stays right.',
     color: '#059669',
     lightBg: '#ecfdf5',
   },
@@ -41,8 +41,8 @@ export const HowItWorksSection: React.FC = () => {
             className="font-serif font-bold"
             style={{ fontSize: 'clamp(2.2rem, 4vw, 3.5rem)', color: 'var(--color-ink)', lineHeight: 1.15 }}
           >
-            From thought to page{' '}
-            <span className="italic" style={{ color: 'var(--color-indigo-brand)' }}>in seconds.</span>
+            Describe it once.{' '}
+            <span className="italic" style={{ color: 'var(--color-indigo-brand)' }}>Never start from scratch again.</span>
           </h2>
         </div>
 

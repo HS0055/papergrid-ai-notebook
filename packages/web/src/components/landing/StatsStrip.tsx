@@ -164,7 +164,7 @@ export const StatsStrip: React.FC = () => {
             className="text-center text-sm font-semibold uppercase tracking-[0.2em] mb-10"
             style={{ color: 'rgba(255,255,255,0.55)' }}
           >
-            Everything you need to create
+            Built for people who think in notebooks
           </p>
 
           {/* Stats grid — no divide-x, custom animated dividers */}

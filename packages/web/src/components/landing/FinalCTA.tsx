@@ -14,19 +14,19 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onLaunch }) => {
       {/* Content */}
       <div className="reveal relative z-10 text-center max-w-3xl mx-auto">
         <p className="text-xs font-bold uppercase tracking-widest mb-6" style={{ color: '#818cf8' }}>
-          Start your first spread
+          Your first notebook is one sentence away
         </p>
 
         <h2
           className="font-serif font-bold mb-8 leading-[1.05]"
           style={{ fontSize: 'clamp(3.5rem, 8vw, 6.5rem)', color: '#ffffff', letterSpacing: '-0.02em' }}
         >
-          Write your<br />
-          <span className="italic" style={{ color: '#818cf8' }}>first page.</span>
+          Describe it.<br />
+          <span className="italic" style={{ color: '#818cf8' }}>Papera builds it.</span>
         </h2>
 
         <p className="text-lg mb-10 max-w-md mx-auto" style={{ color: '#94a3b8', lineHeight: 1.7 }}>
-          Your digital notebook is waiting. No setup, no subscriptions — just open it and start writing.
+          No setup. Free forever. Describe your first notebook in plain English and watch it appear.
         </p>
 
         <button
@@ -39,7 +39,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onLaunch }) => {
         </button>
 
         <p className="mt-6 text-xs font-medium uppercase tracking-widest" style={{ color: '#94a3b8' }}>
-          Free · AI-Powered · No credit card needed
+          Free forever · No credit card · Cancel anytime
         </p>
       </div>
     </section>

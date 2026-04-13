@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Loader2, X, Send, ChevronUp, MessageCircle,
   Lightbulb, Bug, MessageSquare, Megaphone, Sparkles, Circle, Check,
@@ -7,6 +7,11 @@ import {
 } from 'lucide-react';
 import { api as apiClient, getSessionToken } from '../../services/apiClient';
 import { useAuth } from '../../hooks/useAuth';
+import {
+  getLatestCommunityNewsTimestamp,
+  markCommunityNewsSeen,
+  sortCommunityNews,
+} from '../../utils/communityNews';
 
 // ─────────────────────────────────────────────────────────────
 // CommunityPage — feedback board + product roadmap + changelog
@@ -100,6 +105,15 @@ const KINDS: Array<{
   },
 ];
 
+const parseKindParam = (value: string | null): Kind => (
+  value === 'feature_request' ||
+  value === 'bug' ||
+  value === 'feedback' ||
+  value === 'announcement'
+    ? value
+    : 'feature_request'
+);
+
 const ROADMAP_STATUS: Record<
   NonNullable<FeedPost['roadmapStatus']>,
   { label: string; icon: React.ReactNode; color: string }
@@ -124,14 +138,6 @@ const timeAgo = (iso: string): string => {
   if (day < 7) return `${day}d`;
   return new Date(iso).toLocaleDateString();
 };
-
-const sortAnnouncements = (feed: FeedPost[]): FeedPost[] =>
-  [...feed].sort((a, b) => {
-    const aPinned = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
-    const bPinned = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
-    if (aPinned !== bPinned) return bPinned - aPinned;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
 
 interface PostResponse {
   post: Omit<FeedPost, 'authorDisplayName' | 'authorAvatarUrl' | 'authorHandle' | 'likedByMe' | 'authorRole'>;
@@ -158,10 +164,12 @@ const hydratePost = (payload: PostResponse | null): FeedPost | null => {
 
 export const CommunityPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, user } = useAuth();
   const isAdmin = (user as { role?: string } | null)?.role === 'admin';
+  const requestedKind = parseKindParam(searchParams.get('kind'));
 
-  const [kind, setKind] = useState<Kind>('feature_request');
+  const [kind, setKind] = useState<Kind>(requestedKind);
   const [sort, setSort] = useState<Sort>('trending');
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,7 +183,7 @@ export const CommunityPage: React.FC = () => {
     if (incoming.kind !== kind) return;
     setPosts((prev) => {
       const next = [incoming, ...prev.filter((post) => post._id !== incoming._id)];
-      const ordered = kind === 'announcement' ? sortAnnouncements(next) : next;
+      const ordered = kind === 'announcement' ? sortCommunityNews(next) : next;
       return ordered.slice(0, 30);
     });
   }, [kind]);
@@ -199,7 +207,7 @@ export const CommunityPage: React.FC = () => {
         { signal: controller.signal },
       );
       if (controller.signal.aborted || requestId !== feedRequestIdRef.current) return;
-      setPosts(kind === 'announcement' ? sortAnnouncements(data.page) : data.page);
+      setPosts(kind === 'announcement' ? sortCommunityNews(data.page) : data.page);
     } catch (err) {
       if ((err as Error)?.name === 'AbortError' || requestId !== feedRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load feed');
@@ -212,6 +220,22 @@ export const CommunityPage: React.FC = () => {
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    setKind((current) => (current === requestedKind ? current : requestedKind));
+  }, [requestedKind]);
+
+  useEffect(() => {
+    if (searchParams.get('kind') === kind) return;
+    setSearchParams({ kind }, { replace: true });
+  }, [kind, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (kind !== 'announcement' || !isAuthenticated || !user?.id || posts.length === 0) return;
+    const latestCreatedAt = getLatestCommunityNewsTimestamp(posts);
+    if (!latestCreatedAt) return;
+    markCommunityNewsSeen(user.id, latestCreatedAt);
+  }, [isAuthenticated, kind, posts, user?.id]);
 
   useEffect(() => () => {
     feedAbortRef.current?.abort();
@@ -606,6 +630,10 @@ const ComposerModal: React.FC<ComposerModalProps> = ({
   const submit = async () => {
     if (!getSessionToken()) {
       setErr('Please sign in first');
+      return;
+    }
+    if (isAnnouncement && !isAdmin) {
+      setErr('Only admins can publish news.');
       return;
     }
     if (!title.trim()) {

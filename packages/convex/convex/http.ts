@@ -8,6 +8,7 @@ import { registerAffiliateRoutes } from "./affiliateHttp";
 import { registerStripeRoutes } from "./stripeWebhook";
 import { registerCommunityRoutes } from "./communityHttp";
 import { registerReferralRoutes } from "./referralsHttp";
+import { registerBlogRoutes } from "./blogHttp";
 
 // Generate a procedural premium SVG data URL as fallback cover
 function buildFallbackCover(prompt: string): string {
@@ -387,6 +388,8 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:5173",
   "capacitor://localhost",
   "ionic://localhost",
+  "https://papera.io",
+  "https://www.papera.io",
   "https://papergrid.app",
   "https://www.papergrid.app",
   "https://papergrid-five.vercel.app",
@@ -1716,10 +1719,23 @@ http.route({
       // email enumeration).
       const pending = await ctx.runQuery(internal.users.getPendingResetCodeInternal, { email });
       if (pending) {
-        // TODO: wire up real transactional email (Resend / Postmark /
-        // SendGrid). For now we log the code on the server only — the
-        // client never sees it.
-        console.log(`[password-reset] ${email.trim()}: code=${pending.code} expires=${pending.expiresAt}`);
+        const user = await ctx.runQuery(internal.users.getByEmailInternal, { email });
+        try {
+          await ctx.runAction(internal.emailActions.sendTransactional, {
+            templateKey: "password_reset",
+            toEmail: email.trim().toLowerCase(),
+            context: {
+              name: user?.name,
+              resetCode: pending.code,
+              resetExpiresMinutes: 15,
+            },
+            metadata: {
+              source: "forgot-password",
+            },
+          });
+        } catch (sendError) {
+          console.error("Password reset email send failed:", sendError);
+        }
       }
 
       return new Response(JSON.stringify({ success: true }), {
@@ -1944,7 +1960,26 @@ http.route({
         });
       }
 
-      await ctx.runMutation(api.waitlist.join, { email, source, referrer });
+      const result = await ctx.runMutation(api.waitlist.join, { email, source, referrer });
+      if (result?.isNew) {
+        try {
+          await ctx.runAction(internal.emailActions.sendTransactional, {
+            templateKey: "waitlist_joined",
+            toEmail: email.toLowerCase(),
+            context: {
+              email: email.toLowerCase(),
+              waitlistBonusInk: 25,
+              waitlistDiscountPercent: 20,
+            },
+            metadata: {
+              source: "waitlist",
+              waitlistSource: source,
+            },
+          });
+        } catch (sendError) {
+          console.error("Waitlist email send failed:", sendError);
+        }
+      }
       // Always return the same shape regardless of isNew so the client can't
       // tell whether the email was already on the list (no enumeration).
       return new Response(JSON.stringify({ success: true }), {
@@ -2469,6 +2504,148 @@ http.route({
 
 // GET /api/admin/waitlist — list waitlist entries for the admin UI
 http.route({
+  path: "/api/admin/email",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const snapshot = await ctx.runQuery(api.email.getAdminSnapshot, { sessionToken });
+      return new Response(JSON.stringify(snapshot), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to load email settings");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/email",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const body = await request.json().catch(() => ({}));
+      const result = await ctx.runMutation(api.email.updateAdminConfig, {
+        sessionToken,
+        settings: body?.settings,
+        templates: body?.templates,
+      });
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to save email settings");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/email/send-test",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const body = await request.json().catch(() => ({}));
+      const templateKey = typeof body?.templateKey === "string" ? body.templateKey : "";
+      const toEmail = typeof body?.toEmail === "string" ? body.toEmail : "";
+      if (!templateKey || !toEmail.trim()) {
+        return new Response(JSON.stringify({ error: "templateKey and toEmail are required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const result = await ctx.runMutation(api.email.sendAdminTestEmail, {
+        sessionToken,
+        templateKey,
+        toEmail: toEmail.trim().toLowerCase(),
+        context: body?.context,
+      });
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to queue test email");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/email/deliveries",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const corsHeaders = makeCorsHeaders(request);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    try {
+      const sessionToken = getSessionTokenFromRequest(request);
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: "Not authenticated" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const url = new URL(request.url);
+      const limit = Number(url.searchParams.get("limit") ?? 50) || 50;
+      const deliveries = await ctx.runQuery(api.email.listDeliveries, { sessionToken, limit });
+      return new Response(JSON.stringify({ deliveries }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      const message = extractErrorMessage(error, "Failed to load email deliveries");
+      const status = /admin only|not authenticated/i.test(message) ? 403 : 500;
+      return new Response(JSON.stringify({ error: message }), {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+// GET /api/admin/waitlist — list waitlist entries for the admin UI
+http.route({
   path: "/api/admin/waitlist",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
@@ -2555,6 +2732,9 @@ for (const path of [
   "/api/admin/set-plan",
   "/api/admin/set-role",
   "/api/admin/reset-usage",
+  "/api/admin/email",
+  "/api/admin/email/send-test",
+  "/api/admin/email/deliveries",
   "/api/ink/config",
   "/api/ink/balance",
   "/api/ink/preview",
@@ -2588,6 +2768,10 @@ registerStripeRoutes(http);
 // profiles). These are thin wrappers around api.community.* that forward
 // the session token.
 registerCommunityRoutes(http);
+
+// Register public + admin blog routes. The blog is the product-preview
+// acquisition surface: public reads are open, writes are admin-only.
+registerBlogRoutes(http);
 
 // Register user-to-user referral routes (growth loop).
 registerReferralRoutes(http);

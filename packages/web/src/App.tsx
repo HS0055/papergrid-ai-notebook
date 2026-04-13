@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import { isNativeApp } from './utils/platform';
 import { BaselineTest } from './components/__debug__/BaselineTest';
 import { captureReferralFromUrl } from './utils/referralCapture';
+import { PUBLIC_BLOG_ENABLED } from './config/featureFlags';
 
 // Lazy-load community + affiliate + referral so they don't bloat the
 // main bundle for users who never visit them.
@@ -24,6 +25,12 @@ const AffiliatePage = lazy(() =>
 const ReferralPage = lazy(() =>
   import('./components/referral/ReferralPage').then((m) => ({ default: m.ReferralPage })),
 );
+const BlogPage = PUBLIC_BLOG_ENABLED
+  ? lazy(() => import('./components/blog/BlogPage').then((m) => ({ default: m.BlogPage })))
+  : null;
+const BlogPostPage = PUBLIC_BLOG_ENABLED
+  ? lazy(() => import('./components/blog/BlogPostPage').then((m) => ({ default: m.BlogPostPage })))
+  : null;
 
 function LazyFallback() {
   return (
@@ -99,6 +106,20 @@ export default function App() {
             <Route path="/r/:code" element={native ? <Navigate to="/login" replace /> : <LandingPage />} />
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/pricing" element={<PricingPage />} />
+            {PUBLIC_BLOG_ENABLED && BlogPage && BlogPostPage && (
+              <>
+                <Route path="/blog" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <BlogPage />
+                  </Suspense>
+                } />
+                <Route path="/blog/:slug" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <BlogPostPage />
+                  </Suspense>
+                } />
+              </>
+            )}
             {/* High-converting in-house checkout (Stripe Elements). All
                 "Go Pro" / "Buy Ink" CTAs route here instead of redirecting
                 to Stripe-hosted Checkout — keeps users on the Papera
@@ -156,4 +177,3 @@ export default function App() {
     </ErrorBoundary>
   );
 }
-
