@@ -142,29 +142,6 @@ export const LandingPage: React.FC = () => {
         });
       });
 
-      // ── Section-level scroll animations (desktop only) ──
-      // Scrub-based parallax is too expensive on mobile (14+ simultaneous
-      // ScrollTriggers cause scroll jank). Mobile sections just use CSS
-      // reveal transitions via .reveal classes instead.
-      if (!isMobile) {
-        gsap.utils.toArray<HTMLElement>('section:not(.hero-section)').forEach((section) => {
-          gsap.fromTo(
-            section.querySelector('.max-w-7xl, .max-w-5xl, .max-w-6xl') || section,
-            { y: 60 },
-            {
-              y: 0,
-              ease: 'none',
-              scrollTrigger: {
-                trigger: section,
-                start: 'top bottom',
-                end: 'top 20%',
-                scrub: 0.5,
-              },
-            },
-          );
-        });
-      }
-
       // ── Staggered children for bento grids and card layouts ──
       // Only run on desktop — on mobile the cards are already visible (no hover state).
       // Use .bento-card selector instead of [class*="rounded"] to avoid

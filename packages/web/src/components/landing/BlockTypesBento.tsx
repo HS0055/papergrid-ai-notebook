@@ -1,11 +1,16 @@
 import React, { useRef, useEffect } from 'react';
 import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface BlockTypesBentoProps {
   onLaunch: () => void;
 }
 
 export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) => {
+  const sectionRef = useRef<HTMLElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const contentRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -22,6 +27,28 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
           gsap.set(content, { opacity: 1, y: 0 });
         }
       });
+    }
+
+    // Scroll entrance: staggered card reveal
+    const cards = cardRefs.current.filter(Boolean) as HTMLElement[];
+    if (cards.length && gridRef.current) {
+      gsap.fromTo(
+        cards,
+        { opacity: 0, y: 28, scale: 0.96 },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: 0.55,
+          ease: 'power2.out',
+          stagger: 0.055,
+          scrollTrigger: {
+            trigger: gridRef.current,
+            start: 'top 78%',
+            once: true,
+          },
+        },
+      );
     }
 
     return () => {
@@ -109,11 +136,21 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
   };
 
   return (
-    <section className="py-24 px-6" style={{ background: '#ffffff' }}>
-      <div className="max-w-7xl mx-auto">
+    <section
+      ref={sectionRef}
+      className="relative py-24 px-6 overflow-hidden"
+      style={{ background: 'linear-gradient(180deg, #fdfbf7 0%, #f8f6f3 60%, #fdfbf7 100%)' }}
+    >
+      {/* Subtle ambient glow */}
+      <div
+        className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[800px] h-[400px] pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse, rgba(79,70,229,0.04) 0%, transparent 65%)', filter: 'blur(60px)' }}
+      />
+
+      <div className="max-w-7xl mx-auto relative z-10">
         {/* Header */}
         <div className="reveal text-center mb-16">
-          <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--color-indigo-brand)' }}>
+          <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--color-indigo-brand)', letterSpacing: '0.14em' }}>
             22+ Block Types
           </p>
           <h2
@@ -123,13 +160,13 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             Every block. Every thought.{' '}
             <span className="italic" style={{ color: 'var(--color-indigo-brand)' }}>Your way.</span>
           </h2>
-          <p className="text-gray-500 max-w-xl mx-auto text-lg">
+          <p className="max-w-xl mx-auto text-lg" style={{ color: '#64748b', lineHeight: 1.7 }}>
             Mix and match content types to create the exact layout your mind needs.
           </p>
         </div>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-min">
+        <div ref={gridRef} className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ gridAutoRows: '1fr' }}>
           {/* Priority Matrix — large 2×2 */}
           <div
             ref={(el) => { cardRefs.current[0] = el; }}
@@ -141,10 +178,10 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
             <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4 font-sans">Priority Matrix</div>
             <div className="grid grid-cols-2 gap-3 h-[calc(100%-40px)]">
               {[
-                { label: 'Urgent & Important', bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', items: ['Launch MVP', 'Fix critical bug'] },
-                { label: 'Schedule', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', items: ['Write blog post', 'Update roadmap'] },
-                { label: 'Delegate', bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700', items: ['Update docs'] },
-                { label: 'Eliminate', bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-500', items: ['Old meeting notes'] },
+                { label: 'Urgent & Important', bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', items: ['Launch iOS beta', 'Fix payment bug', 'App Store response', 'Patch auth timeout'] },
+                { label: 'Schedule', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', items: ['Referral program V1', 'Record demo video', 'Hiring spec draft', 'Expand prompt library'] },
+                { label: 'Delegate', bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700', items: ['Update help docs', 'Social media bio', 'Non-urgent support'] },
+                { label: 'Eliminate', bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-500', items: ['Weekly status emails', 'Duplicate Notion pages', 'Legacy feature flags'] },
               ].map((q, i) => (
                 <div key={i} className={`${q.bg} border ${q.border} rounded-xl p-3 flex flex-col`}>
                   <div className={`text-[9px] font-bold uppercase tracking-widest ${q.text} mb-2`}>{q.label}</div>
@@ -353,6 +390,15 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
                 </div>
               ))}
             </div>
+            {/* Hover content */}
+            <div
+              ref={(el) => { contentRefs.current[6] = el; }}
+              className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 border border-violet-200 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[10px] font-bold text-violet-600 mb-1" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Drag between columns</div>
+              <div className="text-[10px] font-bold text-violet-600" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ WIP limits</div>
+            </div>
           </div>
 
           {/* Calendar */}
@@ -428,20 +474,40 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
           >
             <div className="text-[9px] font-bold uppercase tracking-widest text-indigo-500 mb-3 font-sans">Weekly View</div>
             <div className="grid grid-cols-7 gap-1.5">
-              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day, i) => (
+              {[
+                { day: 'Mon', blocks: [{ color: '#818cf8', h: 18 }, { color: '#fbbf24', h: 10 }] },
+                { day: 'Tue', blocks: [{ color: '#34d399', h: 12 }, { color: '#818cf8', h: 20 }] },
+                { day: 'Wed', blocks: [{ color: '#818cf8', h: 28 }] },
+                { day: 'Thu', blocks: [{ color: '#f87171', h: 10 }, { color: '#34d399', h: 14 }] },
+                { day: 'Fri', blocks: [{ color: '#818cf8', h: 18 }, { color: '#fbbf24', h: 8 }] },
+                { day: 'Sat', blocks: [{ color: '#c4b5fd', h: 8 }] },
+                { day: 'Sun', blocks: [] },
+              ].map(({ day, blocks }, i) => (
                 <div
                   key={i}
-                  className="rounded-lg p-2 min-h-[60px]"
+                  className="rounded-lg p-1.5 min-h-[60px]"
                   style={{
                     background: i < 5 ? 'rgba(255,255,255,0.8)' : 'rgba(79,70,229,0.05)',
                     border: '1px solid rgba(79,70,229,0.1)',
                   }}
                 >
-                  <div className="text-[8px] font-bold text-indigo-400 uppercase tracking-wider mb-1">{day}</div>
-                  <div className="w-full h-1 rounded-full bg-indigo-200/40 mb-0.5" />
-                  <div className="w-3/4 h-1 rounded-full bg-indigo-200/40" />
+                  <div className="text-[7px] font-bold text-indigo-400 uppercase tracking-wider mb-1">{day}</div>
+                  <div className="flex flex-col gap-0.5">
+                    {blocks.map((b, j) => (
+                      <div key={j} className="w-full rounded-sm" style={{ background: b.color, height: `${b.h / 2}px`, opacity: 0.75 }} />
+                    ))}
+                  </div>
                 </div>
               ))}
+            </div>
+            {/* Hover content */}
+            <div
+              ref={(el) => { contentRefs.current[9] = el; }}
+              className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 border border-indigo-200 pointer-events-none"
+              style={{ opacity: 0, transform: 'translateY(-10px)' }}
+            >
+              <div className="text-[10px] font-bold text-indigo-600 mb-1" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Color-coded time blocks</div>
+              <div className="text-[10px] font-bold text-indigo-600" style={{ opacity: 0, transform: 'translateY(-10px)' }}>✓ Time estimates</div>
             </div>
           </div>
 
@@ -556,8 +622,8 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
 
         {/* More blocks note */}
         <div className="text-center mt-8 mb-4">
-          <p className="text-sm" style={{ color: '#94a3b8' }}>
-            + 8 more block types: Cornell Notes, Index, Rating, Progress Bar, Divider, Section Nav, Daily Sections, and more
+          <p className="text-sm font-medium" style={{ color: '#64748b' }}>
+            Plus 8 more: Cornell Notes · Index · Rating · Progress Bar · Divider · Section Nav · Daily Sections · Sketch
           </p>
         </div>
 
@@ -565,10 +631,13 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
         <div className="reveal text-center mt-12">
           <button
             onClick={onLaunch}
-            className="px-8 py-3.5 font-bold text-white rounded-xl transition-all hover:opacity-90"
-            style={{ background: 'var(--color-indigo-brand)' }}
+            className="inline-flex items-center gap-2 px-8 py-3.5 font-bold text-white rounded-xl transition-all hover:opacity-90"
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              boxShadow: '0 8px 28px rgba(79,70,229,0.3)',
+            }}
           >
-            Build your own layout →
+            Start building — it's free →
           </button>
         </div>
       </div>

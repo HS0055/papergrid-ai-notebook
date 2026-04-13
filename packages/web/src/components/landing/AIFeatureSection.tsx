@@ -8,18 +8,18 @@ gsap.registerPlugin(ScrollTrigger);
 const steps = [
   {
     num: '01',
-    title: 'Describe your need',
-    desc: 'Type anything — "daily planner for a freelancer" or "gratitude journal with habit tracker."',
+    title: 'No templates. No drag-and-drop.',
+    desc: 'Just describe what you need — Papera handles the structure. No blank page, no format hunting.',
   },
   {
     num: '02',
-    title: 'AI designs the layout',
-    desc: 'Our AI generates a full notebook spread — headings, grids, matrices, callouts, and more.',
+    title: 'Papera builds the spread',
+    desc: 'Reads your intent. Builds a complete two-page spread — paper texture, headings, blocks, grids — everything in its right place.',
   },
   {
     num: '03',
-    title: 'Write & customize',
-    desc: 'Every block is editable. Move them, recolor, restyle. Your layout, your rules.',
+    title: 'Every block is yours',
+    desc: 'Edit, reorder, recolor, switch paper textures. When a layout is right, it stays right — no rebuilding it again next week.',
   },
 ];
 
@@ -32,12 +32,103 @@ const prompts = [
   'Time-blocking schedule for deep work',
 ];
 
+interface PromptOutput {
+  heading: string;
+  tasks: string[];
+  grid: { label: string; sub: string }[];
+}
+
+const promptOutputs: PromptOutput[] = [
+  {
+    heading: "Founder's Week — Apr 2026",
+    tasks: [
+      'Mon: Investor deck review + email outreach',
+      'Tue: Team standup, 1:1s, async sprint review',
+      'Wed: Customer discovery calls (3×)',
+      'Thu: Product roadmap deep-dive (2h block)',
+      'Fri: Changelog draft + Product Hunt prep',
+      'Sat: Weekly reflection + OKR check-in',
+    ],
+    grid: [
+      { label: 'Focus', sub: '8–10am' },
+      { label: 'Meetings', sub: '11–1pm' },
+      { label: 'Growth', sub: '3–5pm' },
+    ],
+  },
+  {
+    heading: 'Biology 301 — Cell Division',
+    tasks: [
+      'Mitosis: 4 phases (PMAT)',
+      'Meiosis → 4 haploid cells',
+      'Checkpoints: G1, G2, M',
+    ],
+    grid: [
+      { label: 'Cue', sub: 'Notes' },
+      { label: 'Key Q', sub: 'Answer' },
+      { label: 'Summary', sub: '↓' },
+    ],
+  },
+  {
+    heading: 'January 2026 ✦',
+    tasks: [
+      '○ Read 2 books this month',
+      '• Morning pages daily',
+      '✓ Gym 4× / week habit',
+    ],
+    grid: [
+      { label: 'Habit', sub: 'Streak' },
+      { label: 'Goal', sub: '% Done' },
+      { label: 'Mood', sub: 'Avg ⭐' },
+    ],
+  },
+  {
+    heading: 'Product Sync — Apr 14',
+    tasks: [
+      '@alex: Ship v2 by Friday',
+      '@sam: Update onboarding flow',
+      '@team: Review Q2 roadmap',
+    ],
+    grid: [
+      { label: 'Owner', sub: '@alex' },
+      { label: 'Due', sub: 'Apr 18' },
+      { label: 'Status', sub: '🔴 In prog' },
+    ],
+  },
+  {
+    heading: "Today I'm grateful for…",
+    tasks: [
+      '☀️ Quiet morning coffee',
+      '💙 Team support at review',
+      '🌧 Rain on the window',
+    ],
+    grid: [
+      { label: '😊', sub: 'Energy 8' },
+      { label: '☁️', sub: 'Stress 3' },
+      { label: '✨', sub: 'Focus 9' },
+    ],
+  },
+  {
+    heading: 'Deep Work — Thursday',
+    tasks: [
+      '8–10am: Writing (no meetings)',
+      '11–1pm: Code review + PRs',
+      '2–4pm: Strategic planning',
+    ],
+    grid: [
+      { label: 'AM', sub: 'Deep' },
+      { label: 'PM', sub: 'Shallow' },
+      { label: 'Eve', sub: 'Rest' },
+    ],
+  },
+];
+
 interface AIFeatureSectionProps {
   onLaunch: () => void;
 }
 
 export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) => {
   const [activePromptIdx, setActivePromptIdx] = useState(0);
+  const [displayedIdx, setDisplayedIdx] = useState(0);
   const demoRef = useRef<HTMLDivElement>(null);
   const typingTextRef = useRef<HTMLSpanElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
@@ -45,7 +136,10 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
   const headingBlockRef = useRef<HTMLDivElement>(null);
   const checklistBlockRef = useRef<HTMLDivElement>(null);
   const gridBlockRef = useRef<HTMLDivElement>(null);
+  const hasInitAnimated = useRef(false);
+  const isAnimatingRef = useRef(false);
 
+  // Auto-cycle chips
   useEffect(() => {
     const timer = setInterval(() => {
       setActivePromptIdx(i => (i + 1) % prompts.length);
@@ -53,29 +147,27 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
     return () => clearInterval(timer);
   }, []);
 
-  // AI Demo Animation Timeline
+  // Initial scroll-triggered animation (runs once)
   useEffect(() => {
     if (!demoRef.current || !typingTextRef.current) return;
 
     const ctx = gsap.context(() => {
-      // Initial states
       gsap.set(thinkingRef.current, { opacity: 0, scale: 0.8 });
       gsap.set([headingBlockRef.current, checklistBlockRef.current, gridBlockRef.current], {
         opacity: 0,
         y: 20,
-        scale: 0.95
+        scale: 0.95,
       });
 
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: demoRef.current,
           start: 'top 70%',
-          once: true, // Only play once
+          once: true,
         },
       });
 
-      // Phase 1: Typewriter effect (character by character)
-      const promptText = 'Create a study planner for next week';
+      const promptText = prompts[0];
       const charCount = { val: 0 };
 
       tl.to(charCount, {
@@ -87,70 +179,105 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
           if (typingTextRef.current) {
             typingTextRef.current.textContent = promptText.substring(0, currentLength);
           }
-          // Blink cursor during typing
           if (cursorRef.current) {
             cursorRef.current.style.opacity = Math.random() > 0.3 ? '1' : '0';
           }
         },
       });
 
-      // Steady cursor after typing
-      tl.to(cursorRef.current, {
-        duration: 0.1,
-        opacity: 1,
-      });
+      tl.to(cursorRef.current, { duration: 0.1, opacity: 1 });
 
-      // Phase 2: Thinking indicator
-      tl.to(cursorRef.current, {
-        opacity: 0,
-        duration: 0.3,
-      }, '+=0.3');
-
-      tl.to(thinkingRef.current, {
-        opacity: 1,
-        scale: 1,
-        duration: 0.4,
-        ease: 'back.out(1.7)',
-      }, '-=0.1');
-
-      // Let it think for a moment
+      tl.to(cursorRef.current, { opacity: 0, duration: 0.3 }, '+=0.3');
+      tl.to(thinkingRef.current, { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(1.7)' }, '-=0.1');
       tl.to({}, { duration: 1.8 });
 
-      // Phase 3: Hide thinking, show blocks staggered
-      tl.to(thinkingRef.current, {
-        opacity: 0,
-        scale: 0.8,
-        duration: 0.3,
+      tl.to(thinkingRef.current, { opacity: 0, scale: 0.8, duration: 0.3 });
+      tl.to(headingBlockRef.current, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(1.7)' }, '+=0.2');
+      tl.to(checklistBlockRef.current, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(1.7)' }, '-=0.2');
+      tl.to(gridBlockRef.current, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(1.7)' }, '-=0.2');
+
+      tl.call(() => {
+        hasInitAnimated.current = true;
       });
-
-      // Blocks appear one by one with slide-in animation
-      tl.to(headingBlockRef.current, {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        duration: 0.5,
-        ease: 'back.out(1.7)',
-      }, '+=0.2');
-
-      tl.to(checklistBlockRef.current, {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        duration: 0.5,
-        ease: 'back.out(1.7)',
-      }, '-=0.2');
-
-      tl.to(gridBlockRef.current, {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        duration: 0.5,
-        ease: 'back.out(1.7)',
-      }, '-=0.2');
     }, demoRef);
 
     return () => ctx.revert();
   }, []);
+
+  // Chip-click animation: re-type prompt + swap output content
+  useEffect(() => {
+    if (!hasInitAnimated.current) return;
+    if (isAnimatingRef.current) return;
+
+    const blocks = [
+      headingBlockRef.current,
+      checklistBlockRef.current,
+      gridBlockRef.current,
+    ].filter(Boolean) as HTMLElement[];
+    if (!blocks.length) return;
+
+    isAnimatingRef.current = true;
+
+    const promptText = prompts[activePromptIdx];
+
+    // Clear typing area immediately
+    if (typingTextRef.current) typingTextRef.current.textContent = '';
+    if (cursorRef.current) cursorRef.current.style.opacity = '1';
+
+    const tl = gsap.timeline({
+      onComplete: () => {
+        isAnimatingRef.current = false;
+      },
+    });
+
+    // Fade out existing blocks
+    tl.to(blocks, {
+      opacity: 0,
+      y: 8,
+      scale: 0.97,
+      duration: 0.2,
+      ease: 'power2.in',
+      stagger: 0.04,
+    });
+
+    // Quick re-type of the new prompt
+    const charCount = { val: 0 };
+    tl.to(
+      charCount,
+      {
+        val: promptText.length,
+        duration: Math.min(1.4, promptText.length * 0.042),
+        ease: 'none',
+        onUpdate: () => {
+          const currentLength = Math.floor(charCount.val);
+          if (typingTextRef.current) {
+            typingTextRef.current.textContent = promptText.substring(0, currentLength);
+          }
+        },
+        onComplete: () => {
+          if (cursorRef.current) cursorRef.current.style.opacity = '0';
+        },
+      },
+      '-=0.1',
+    );
+
+    // Show thinking dots while "generating"
+    tl.to(thinkingRef.current, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(1.7)' }, '+=0.05');
+    tl.to(thinkingRef.current, { opacity: 0, scale: 0.8, duration: 0.2 }, '+=0.65');
+
+    // Swap content then reveal
+    tl.call(() => setDisplayedIdx(activePromptIdx));
+    tl.to(blocks, {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      duration: 0.4,
+      ease: 'back.out(1.7)',
+      stagger: 0.07,
+    }, '+=0.05');
+  }, [activePromptIdx]);
+
+  const output = promptOutputs[displayedIdx];
 
   return (
     <section
@@ -170,85 +297,152 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
 
       <div className="max-w-7xl mx-auto relative z-10">
         {/* Section title */}
-        <div className="reveal text-center mb-20">
+        <div className="reveal text-center mb-14">
           <div
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6 border"
             style={{ background: 'rgba(79,70,229,0.08)', borderColor: 'rgba(79,70,229,0.2)', color: '#4f46e5' }}
           >
             <Sparkles size={13} />
-            AI Powered
+            The AI Layout Engine
           </div>
-          <h2 className="font-serif font-bold" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', lineHeight: 1.1, color: 'var(--color-ink)' }}>
-            Describe it.{' '}<span className="italic" style={{ color: '#4f46e5' }}>Get a layout</span>{' '}instantly.
+          <h2 className="font-serif font-bold mb-4" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', lineHeight: 1.1, color: 'var(--color-ink)' }}>
+            Say it.{' '}<span className="italic" style={{ color: '#4f46e5' }}>Papera builds it.</span>
           </h2>
+          <p className="max-w-xl mx-auto text-lg" style={{ color: '#64748b', lineHeight: 1.7 }}>
+            Describe your week in one sentence. Papera builds a complete notebook layout — paper texture, headings, interactive blocks — in seconds.
+          </p>
         </div>
 
-        <div className="flex flex-col lg:flex-row items-center gap-16">
-          {/* Left: Steps */}
-          <div className="flex-1 space-y-10">
-            {steps.map((step, i) => (
-              <div key={step.num} className="reveal-left flex items-start gap-6" style={{ transitionDelay: `${i * 150}ms` }}>
-                <span className="font-serif font-bold shrink-0 leading-none" style={{ fontSize: '3rem', color: 'rgba(79,70,229,0.25)' }}>
-                  {step.num}
-                </span>
-                <div className="pt-2">
-                  <h3 className="font-serif font-bold text-xl mb-2" style={{ color: 'var(--color-ink)' }}>{step.title}</h3>
-                  <p style={{ color: '#64748b', lineHeight: 1.7 }}>{step.desc}</p>
-                </div>
-              </div>
-            ))}
-
-            <button
-              onClick={onLaunch}
-              className="reveal-left flex items-center gap-2 px-7 py-3.5 font-bold text-white rounded-xl transition-all hover:opacity-90 shadow-lg"
-              style={{ background: 'var(--color-indigo-brand)', transitionDelay: '450ms' }}
-            >
-              Try it now <ArrowRight size={16} />
-            </button>
-          </div>
-
-          {/* Right: Mockup terminal */}
-          <div className="reveal-right flex-1 w-full max-w-lg" style={{ transitionDelay: '200ms' }}>
+        {/* Unified demo panel */}
+        <div
+          ref={demoRef}
+          className="reveal rounded-3xl overflow-hidden mb-12"
+          style={{
+            background: '#ffffff',
+            border: '1px solid rgba(0,0,0,0.08)',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.1), 0 4px 20px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div className="flex flex-col lg:flex-row">
+            {/* Left column: prompt input (~40%) */}
             <div
-              className="rounded-2xl overflow-hidden shadow-2xl"
-              style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' }}
+              className="lg:w-2/5 p-8 flex flex-col gap-6"
+              style={{ borderRight: '1px solid rgba(0,0,0,0.07)', background: '#fafafa' }}
             >
-              {/* Terminal titlebar */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: '#e5e7eb', background: '#f9fafb' }}>
-                <div className="w-3 h-3 rounded-full bg-red-500" />
-                <div className="w-3 h-3 rounded-full bg-amber-400" />
-                <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                <span className="ml-2 text-xs font-medium" style={{ color: '#64748b' }}>AI Layout Generator</span>
-              </div>
-
-              {/* Prompt area */}
-              <div className="p-5 border-b" style={{ borderColor: '#e5e7eb' }}>
-                <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#4f46e5' }}>Your prompt</div>
-                <div className="font-hand text-lg transition-all duration-500" style={{ color: '#1a1c23', minHeight: '32px' }}>
-                  {prompts[activePromptIdx]}
-                  <span className="inline-block w-0.5 h-5 ml-0.5 align-middle animate-pulse" style={{ background: '#4f46e5' }} />
+              {/* Prompt label */}
+              <div>
+                <div
+                  className="text-xs font-bold uppercase tracking-widest mb-3"
+                  style={{ color: '#4f46e5' }}
+                >
+                  Your prompt
+                </div>
+                {/* Animated typewriter prompt */}
+                <div
+                  className="font-hand text-lg rounded-xl p-4"
+                  style={{
+                    color: '#1a1c23',
+                    minHeight: '64px',
+                    background: 'rgba(79,70,229,0.04)',
+                    border: '1px solid rgba(79,70,229,0.12)',
+                  }}
+                >
+                  <span ref={typingTextRef}></span>
+                  <span
+                    ref={cursorRef}
+                    className="inline-block w-0.5 h-5 ml-0.5 align-middle"
+                    style={{ background: '#4f46e5', opacity: 0 }}
+                  />
                 </div>
               </div>
 
-              {/* Generated layout preview */}
-              <div className="p-5">
-                <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#64748b' }}>✦ Generated Layout</div>
-                <div className="flex gap-3">
-                  <div className="flex-1 rounded-lg p-3 paper-lines" style={{ backgroundAttachment: 'local', minHeight: '120px' }}>
-                    <div className="font-hand text-sm font-bold text-gray-700 mb-2">Monday</div>
-                    {['9AM Team sync', '11AM Deep work', '2PM Review'].map((t, i) => (
-                      <div key={i} className="flex items-center gap-1.5 mb-1">
-                        <div className="w-2.5 h-2.5 rounded-full border border-indigo-400 shrink-0" />
-                        <span className="font-hand text-xs text-gray-600">{t}</span>
-                      </div>
-                    ))}
+              {/* Prompt chip buttons */}
+              <div>
+                <div className="text-xs font-medium mb-2" style={{ color: '#94a3b8' }}>
+                  Pick a prompt to see it live:
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {prompts.map((p, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActivePromptIdx(i)}
+                      className="text-left px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                      style={{
+                        background: activePromptIdx === i ? 'rgba(79,70,229,0.1)' : 'transparent',
+                        color: activePromptIdx === i ? '#4f46e5' : '#64748b',
+                        border: `1px solid ${activePromptIdx === i ? 'rgba(79,70,229,0.25)' : 'rgba(0,0,0,0.07)'}`,
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right column: generated output (~60%) */}
+            <div className="lg:w-3/5 relative" style={{ minHeight: '380px' }}>
+              <div
+                className="absolute inset-0 paper-lines"
+                style={{ backgroundAttachment: 'local' }}
+              />
+              <div className="relative z-10 p-8" style={{ minHeight: '380px' }}>
+                {/* Thinking indicator */}
+                <div
+                  ref={thinkingRef}
+                  className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full z-20"
+                  style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.2)' }}
+                >
+                  <span className="text-xs font-medium" style={{ color: '#4f46e5' }}>AI thinking</span>
+                  <div className="flex gap-1">
+                    <div className="thinking-dot"></div>
+                    <div className="thinking-dot"></div>
+                    <div className="thinking-dot"></div>
                   </div>
-                  <div className="flex-1 rounded-lg p-3 paper-dots" style={{ backgroundAttachment: 'local', minHeight: '120px' }}>
-                    <div className="font-hand text-sm font-bold text-gray-700 mb-2">Priorities</div>
-                    <div className="grid grid-cols-2 gap-1 h-16">
-                      {['🔴 Urgent', '🟡 Plan', '🔵 Delegate', '⚪ Drop'].map((q, i) => (
-                        <div key={i} className="rounded text-center flex items-center justify-center" style={{ background: ['rgba(251,113,133,0.15)', 'rgba(251,191,36,0.15)', 'rgba(56,189,248,0.15)', 'rgba(148,163,184,0.1)'][i], fontSize: '9px' }}>
-                          <span className="font-hand text-gray-700 text-[9px]">{q}</span>
+                </div>
+
+                {/* Generated blocks — content driven by displayedIdx */}
+                <div className="space-y-4">
+                  {/* Heading block */}
+                  <div
+                    ref={headingBlockRef}
+                    className="p-4 rounded-lg"
+                    style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(79,70,229,0.2)' }}
+                  >
+                    <h4 className="font-hand font-bold text-xl text-gray-800">{output.heading}</h4>
+                  </div>
+
+                  {/* Checklist block */}
+                  <div
+                    ref={checklistBlockRef}
+                    className="p-4 rounded-lg"
+                    style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(148,163,184,0.2)' }}
+                  >
+                    <div className="space-y-2">
+                      {output.tasks.map((task, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 border-gray-400 shrink-0"></div>
+                          <span className="font-hand text-sm text-gray-700">{task}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Grid/table block */}
+                  <div
+                    ref={gridBlockRef}
+                    className="p-4 rounded-lg"
+                    style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(148,163,184,0.2)' }}
+                  >
+                    <div className="grid grid-cols-3 gap-2">
+                      {output.grid.map((cell, i) => (
+                        <div
+                          key={i}
+                          className="text-center p-2 rounded"
+                          style={{ background: 'rgba(79,70,229,0.08)' }}
+                        >
+                          <div className="font-hand text-xs font-bold text-gray-600">{cell.label}</div>
+                          <div className="font-hand text-[10px] text-gray-500 mt-1">{cell.sub}</div>
                         </div>
                       ))}
                     </div>
@@ -256,126 +450,55 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
                 </div>
               </div>
             </div>
-
-            {/* Prompt chips */}
-            <div className="mt-5 flex flex-wrap gap-2">
-              {prompts.slice(0, 4).map((p, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActivePromptIdx(i)}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                  style={{
-                    background: activePromptIdx === i ? 'rgba(79,70,229,0.12)' : 'rgba(0,0,0,0.03)',
-                    color: activePromptIdx === i ? '#4f46e5' : '#64748b',
-                    border: `1px solid ${activePromptIdx === i ? 'rgba(79,70,229,0.3)' : 'rgba(0,0,0,0.08)'}`,
-                  }}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
-        {/* AI Demo Area - Real-time typing simulation */}
-        <div ref={demoRef} className="mt-24 max-w-3xl mx-auto">
-          <div className="text-center mb-8">
-            <h3 className="font-serif font-bold text-2xl mb-2" style={{ color: 'var(--color-ink)' }}>
-              See it in action
-            </h3>
-            <p style={{ color: '#64748b' }}>Watch AI generate a complete notebook layout from scratch</p>
-          </div>
-
-          <div
-            className="rounded-2xl overflow-hidden shadow-2xl"
-            style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' }}
-          >
-            {/* Prompt input area */}
-            <div className="p-6 border-b" style={{ borderColor: '#e5e7eb', background: '#f9fafb' }}>
-              <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#4f46e5' }}>
-                Your prompt
-              </div>
-              <div className="font-hand text-lg" style={{ color: '#1a1c23', minHeight: '32px' }}>
-                <span ref={typingTextRef}></span>
+        {/* Step callout strips */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-12">
+          {steps.map((step, i) => (
+            <div
+              key={step.num}
+              className="reveal rounded-2xl px-6 py-5"
+              style={{
+                background: 'rgba(79,70,229,0.05)',
+                border: '1px solid rgba(79,70,229,0.12)',
+                transitionDelay: `${i * 100}ms`,
+              }}
+            >
+              <div className="flex items-start gap-4">
                 <span
-                  ref={cursorRef}
-                  className="inline-block w-0.5 h-5 ml-0.5 align-middle"
-                  style={{ background: '#4f46e5', opacity: 0 }}
-                />
-              </div>
-            </div>
-
-            {/* Generated content area */}
-            <div className="p-6 paper-lines" style={{ minHeight: '400px', position: 'relative' }}>
-              {/* Thinking indicator */}
-              <div
-                ref={thinkingRef}
-                className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full"
-                style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.2)' }}
-              >
-                <span className="text-xs font-medium" style={{ color: '#4f46e5' }}>AI thinking</span>
-                <div className="flex gap-1">
-                  <div className="thinking-dot"></div>
-                  <div className="thinking-dot"></div>
-                  <div className="thinking-dot"></div>
-                </div>
-              </div>
-
-              {/* Generated blocks */}
-              <div className="space-y-4">
-                {/* Heading block */}
-                <div
-                  ref={headingBlockRef}
-                  className="p-4 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(79,70,229,0.2)' }}
+                  className="font-serif font-bold shrink-0 leading-none mt-0.5"
+                  style={{ fontSize: '1.75rem', color: 'rgba(79,70,229,0.3)' }}
                 >
-                  <h4 className="font-hand font-bold text-xl text-gray-800">Weekly Study Plan</h4>
-                </div>
-
-                {/* Checklist block */}
-                <div
-                  ref={checklistBlockRef}
-                  className="p-4 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(148,163,184,0.2)' }}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded border-2 border-gray-400"></div>
-                      <span className="font-hand text-sm text-gray-700">Monday: Review notes from last week</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded border-2 border-gray-400"></div>
-                      <span className="font-hand text-sm text-gray-700">Wednesday: Practice problems (Ch. 5-7)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded border-2 border-gray-400"></div>
-                      <span className="font-hand text-sm text-gray-700">Friday: Study group session</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Grid/table block */}
-                <div
-                  ref={gridBlockRef}
-                  className="p-4 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(148,163,184,0.2)' }}
-                >
-                  <div className="grid grid-cols-3 gap-2">
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].slice(0, 3).map((day, i) => (
-                      <div
-                        key={i}
-                        className="text-center p-2 rounded"
-                        style={{ background: 'rgba(79,70,229,0.08)' }}
-                      >
-                        <div className="font-hand text-xs font-bold text-gray-600">{day}</div>
-                        <div className="font-hand text-[10px] text-gray-500 mt-1">2-4pm</div>
-                      </div>
-                    ))}
-                  </div>
+                  {step.num}
+                </span>
+                <div>
+                  <h3 className="font-serif font-bold text-base mb-1" style={{ color: 'var(--color-ink)' }}>
+                    {step.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed" style={{ color: '#64748b' }}>
+                    {step.desc}
+                  </p>
                 </div>
               </div>
             </div>
-          </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <div className="reveal text-center">
+          <button
+            onClick={onLaunch}
+            className="inline-flex items-center gap-2 font-bold text-white transition-all hover:opacity-90"
+            style={{
+              background: '#4f46e5',
+              borderRadius: '10px',
+              padding: '11px 28px',
+              boxShadow: '0 4px 16px rgba(79,70,229,0.28)',
+            }}
+          >
+            Build my first layout <ArrowRight size={16} />
+          </button>
         </div>
       </div>
     </section>

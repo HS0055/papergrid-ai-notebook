@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 import { useScrollSpy } from '../../hooks/useScrollSpy';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { PUBLIC_BLOG_ENABLED } from '../../config/featureFlags';
 
 interface NavBarProps {
   onLaunch: () => void;
@@ -62,6 +63,11 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
               {label}
             </a>
           ))}
+          {PUBLIC_BLOG_ENABLED && (
+            <a href="/blog" className="pb-1 transition-colors hover:text-indigo-600">
+              Blog
+            </a>
+          )}
         </div>
 
         {/* CTA */}
@@ -71,7 +77,7 @@ export const NavBar: React.FC<NavBarProps> = ({ onLaunch }) => {
             isMobile ? 'px-4 py-2 text-xs' : 'px-5 py-2.5 text-sm'
           }`}
         >
-          Open App
+          Try Free
           <ArrowRight size={isMobile ? 13 : 15} className="group-hover:translate-x-0.5 transition-transform" />
         </button>
       </div>
