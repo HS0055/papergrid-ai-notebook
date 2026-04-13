@@ -383,14 +383,14 @@ const promptLayouts: PromptLayout[] = [
 // Block renderer components
 // ---------------------------------------------------------------------------
 
-function RenderHeading({ block }: { block: HeadingBlock }) {
+function RenderHeading({ block, accent }: { block: HeadingBlock; accent: string }) {
   return (
     <div
       className="p-4 rounded-lg"
       style={{
         background: 'rgba(255,255,255,0.85)',
-        borderLeft: '3px solid currentColor',
         border: '1px solid rgba(0,0,0,0.08)',
+        borderLeft: `3px solid ${accent}`,
       }}
     >
       <h4 className="font-serif font-bold text-xl" style={{ color: '#1a1c23' }}>
@@ -681,7 +681,7 @@ function RenderWeeklyView({ block }: { block: WeeklyViewBlock }) {
               {day.label}
             </div>
             {/* Time blocks */}
-            <div className="flex flex-col p-1 gap-0.5" style={{ minHeight: '80px' }}>
+            <div className="flex flex-col p-1 gap-0.5" style={{ height: '88px' }}>
               {day.blocks.map((tb, bi) => (
                 <div
                   key={bi}
@@ -708,7 +708,7 @@ function RenderWeeklyView({ block }: { block: WeeklyViewBlock }) {
 function RenderBlock({ block, accent }: { block: DemoBlock; accent: string }) {
   switch (block.type) {
     case 'HEADING':
-      return <RenderHeading block={block} />;
+      return <RenderHeading block={block} accent={accent} />;
     case 'TEXT':
       return <RenderText block={block} />;
     case 'CHECKBOX':
