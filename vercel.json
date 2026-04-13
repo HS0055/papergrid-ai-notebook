@@ -1,5 +1,5 @@
 {
-    "buildCommand": "npm --workspace @papergrid/core run build && npm --workspace @papergrid/web run build",
+    "buildCommand": "rm -f packages/core/tsconfig.tsbuildinfo && npm --workspace @papergrid/core run build && npm --workspace @papergrid/web run build",
     "outputDirectory": "packages/web/dist",
     "installCommand": "npm install --include=dev --include=optional",
     "framework": null,
