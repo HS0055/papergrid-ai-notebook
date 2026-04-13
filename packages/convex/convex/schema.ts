@@ -71,6 +71,8 @@ export default defineSchema({
     title: v.string(),
     coverColor: v.string(),
     coverImageUrl: v.optional(v.string()),
+    notebookFamily: v.optional(v.string()),
+    notebookVariantId: v.optional(v.string()),
     bookmarks: v.array(v.string()),
     isShared: v.boolean(),
     // Tombstone for background cascade cleanup — when set, the notebook
@@ -89,6 +91,14 @@ export default defineSchema({
     themeColor: v.optional(v.string()),
     sortOrder: v.number(),
     aiGenerated: v.optional(v.boolean()),
+    linedSettings: v.optional(v.any()),
+    showMathResults: v.optional(v.boolean()),
+    hexMapData: v.optional(v.any()),
+    isoFlowData: v.optional(v.any()),
+    gridSheetData: v.optional(v.any()),
+    hexMapDataRight: v.optional(v.any()),
+    isoFlowDataRight: v.optional(v.any()),
+    gridSheetDataRight: v.optional(v.any()),
     createdAt: v.optional(v.string()),
     // Compound index (notebookId, sortOrder) enables O(1) lookup of
     // the current max sortOrder via `.order("desc").take(1)` instead
@@ -150,6 +160,29 @@ export default defineSchema({
     updatedAt: v.string(),
     updatedBy: v.optional(v.id("users")),
   }).index("by_key", ["key"]),
+
+  emailDeliveries: defineTable({
+    templateKey: v.string(),
+    toEmail: v.string(),
+    subject: v.string(),
+    provider: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("skipped"),
+    ),
+    providerMessageId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    triggeredByUserId: v.optional(v.id("users")),
+    triggeredByEmail: v.optional(v.string()),
+    createdAt: v.string(),
+    sentAt: v.optional(v.string()),
+  })
+    .index("by_created", ["createdAt"])
+    .index("by_template", ["templateKey"])
+    .index("by_to", ["toEmail"]),
 
   inkTransactions: defineTable({
     userId: v.id("users"),
@@ -224,6 +257,43 @@ export default defineSchema({
     value: v.number(),
     updatedAt: v.string(),
   }).index("by_key", ["key"]),
+
+  // ============================================================
+  // BLOG
+  // ============================================================
+  blogPosts: defineTable({
+    title: v.string(),
+    slug: v.string(),
+    excerpt: v.string(),
+    body: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("archived"),
+    ),
+    category: v.string(),
+    mentalState: v.string(),
+    tags: v.array(v.string()),
+    featuredImageUrl: v.optional(v.string()),
+    interactivePrompt: v.string(),
+    interactivePlaceholder: v.string(),
+    interactiveOutputTitle: v.string(),
+    productCtaLabel: v.string(),
+    productCtaUrl: v.string(),
+    seoTitle: v.optional(v.string()),
+    seoDescription: v.optional(v.string()),
+    authorName: v.optional(v.string()),
+    readingTimeMinutes: v.number(),
+    viewCount: v.number(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+    publishedAt: v.optional(v.string()),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_status_published", ["status", "publishedAt"])
+    .index("by_category_status", ["category", "status", "publishedAt"])
+    .index("by_updated", ["updatedAt"]),
 
   // ============================================================
   // AFFILIATE PROGRAM

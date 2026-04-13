@@ -9,6 +9,8 @@ import { WaitlistViewer } from './admin/WaitlistViewer';
 import { AffiliatesAdmin } from './admin/AffiliatesAdmin';
 import { ReferralsAdmin } from './admin/ReferralsAdmin';
 import { CommunityAdmin } from './admin/CommunityAdmin';
+import { EmailAdmin } from './admin/EmailAdmin';
+import { BlogAdmin } from './admin/BlogAdmin';
 
 type AdminTab =
   | 'users'
@@ -16,7 +18,9 @@ type AdminTab =
   | 'pricing'
   | 'ink-costs'
   | 'roadmap'
+  | 'blog'
   | 'community'
+  | 'email'
   | 'waitlist'
   | 'affiliates'
   | 'referrals';
@@ -27,7 +31,9 @@ const TAB_ORDER: Array<{ id: AdminTab; label: string; subtitle: string }> = [
   { id: 'pricing', label: 'Pricing', subtitle: 'Landing page display' },
   { id: 'ink-costs', label: 'Ink Costs', subtitle: 'Cost per action' },
   { id: 'roadmap', label: 'Roadmap', subtitle: 'What ships next' },
+  { id: 'blog', label: 'Blog', subtitle: 'Interactive SEO' },
   { id: 'community', label: 'Community', subtitle: 'Replies + news' },
+  { id: 'email', label: 'Email', subtitle: 'Provider + templates' },
   { id: 'waitlist', label: 'Waitlist', subtitle: 'iOS early access' },
   { id: 'affiliates', label: 'Affiliates', subtitle: 'Apps + payouts' },
   { id: 'referrals', label: 'Referrals', subtitle: 'User growth loop' },
@@ -330,9 +336,21 @@ export function AdminPanel() {
           </div>
         )}
 
+        {activeTab === 'blog' && (
+          <div>
+            <BlogAdmin />
+          </div>
+        )}
+
         {activeTab === 'community' && (
           <div>
             <CommunityAdmin />
+          </div>
+        )}
+
+        {activeTab === 'email' && (
+          <div>
+            <EmailAdmin />
           </div>
         )}
 
