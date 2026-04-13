@@ -20,6 +20,7 @@ import type { NotebookPage } from '@papergrid/core';
 export type PaperType = NotebookPage['paperType'];
 
 const RAW = (import.meta.env.VITE_COMING_SOON_PAPERS as string | undefined) ?? '';
+const PUBLIC_BLOG_RAW = (import.meta.env.VITE_PUBLIC_BLOG_ENABLED as string | undefined) ?? '';
 
 const COMING_SOON_SET: ReadonlySet<PaperType> = new Set(
   RAW.split(',')
@@ -47,3 +48,5 @@ export function getReadyPaperTypes(): readonly PaperType[] {
 export function getComingSoonPapers(): readonly PaperType[] {
   return Array.from(COMING_SOON_SET);
 }
+
+export const PUBLIC_BLOG_ENABLED = PUBLIC_BLOG_RAW.toLowerCase() === 'true';

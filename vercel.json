@@ -3,6 +3,10 @@
     "outputDirectory": "packages/web/dist",
     "installCommand": "npm install --include=dev --include=optional",
     "framework": null,
+    "redirects": [
+        { "source": "/blog", "destination": "/", "permanent": false },
+        { "source": "/blog/:path*", "destination": "/", "permanent": false }
+    ],
     "rewrites": [
         { "source": "/(.*)", "destination": "/index.html" }
     ]

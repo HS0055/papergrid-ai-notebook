@@ -3,6 +3,18 @@
     "outputDirectory": "dist",
     "installCommand": "cd ../.. && npm install --include=dev --include=optional",
     "framework": "vite",
+    "redirects": [
+        {
+            "source": "/blog",
+            "destination": "/",
+            "permanent": false
+        },
+        {
+            "source": "/blog/:path*",
+            "destination": "/",
+            "permanent": false
+        }
+    ],
     "rewrites": [
         {
             "source": "/(.*)",
