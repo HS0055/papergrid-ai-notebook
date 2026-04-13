@@ -830,7 +830,7 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
     ].filter(Boolean) as HTMLElement[];
     if (!blocks.length) return;
 
-    gsap.set(blocks, { opacity: 1, y: 0, scale: 1 });
+    gsap.set(blocks, { opacity: 1, y: 0 });
     gsap.set(thinkingRef.current, { opacity: 0, scale: 0.8 });
 
     const promptText = prompts[activePromptIdx];
@@ -842,7 +842,7 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
     });
     currentTlRef.current = tl;
 
-    tl.to(blocks, { opacity: 0, y: 8, scale: 0.97, duration: 0.2, ease: 'power2.in', stagger: 0.04 });
+    tl.to(blocks, { opacity: 0, y: 6, duration: 0.18, ease: 'power2.in', stagger: 0.03 });
 
     const charCount = { val: 0 };
     tl.to(charCount, {
@@ -863,7 +863,7 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
     tl.to(thinkingRef.current, { opacity: 0, scale: 0.8, duration: 0.2 }, '+=0.65');
 
     tl.call(() => setDisplayedIdx(activePromptIdx));
-    tl.to(blocks, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'back.out(1.7)', stagger: 0.07 }, '+=0.05');
+    tl.to(blocks, { opacity: 1, y: 0, duration: 0.35, ease: 'power3.out', stagger: 0.06 }, '+=0.05');
   }, [activePromptIdx]);
 
   const layout = promptLayouts[displayedIdx];
@@ -913,7 +913,7 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
             boxShadow: '0 20px 60px rgba(0,0,0,0.1), 0 4px 20px rgba(0,0,0,0.05)',
           }}
         >
-          <div className="flex flex-col lg:flex-row">
+          <div className="flex flex-col lg:flex-row lg:items-stretch">
             {/* Left column: prompt input (~40%) */}
             <div
               className="lg:w-2/5 p-8 flex flex-col gap-6"
@@ -968,12 +968,12 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
             </div>
 
             {/* Right column: generated output (~60%) */}
-            <div className="lg:w-3/5 relative" style={{ minHeight: '420px' }}>
+            <div className="lg:w-3/5 relative" style={{ height: '480px' }}>
               <div
                 className="absolute inset-0 paper-lines"
                 style={{ backgroundAttachment: 'local' }}
               />
-              <div className="relative z-10 p-6" style={{ minHeight: '420px' }}>
+              <div className="relative z-10 p-6 h-full flex flex-col">
                 {/* Thinking indicator */}
                 <div
                   ref={thinkingRef}
@@ -988,8 +988,8 @@ export const AIFeatureSection: React.FC<AIFeatureSectionProps> = ({ onLaunch }) 
                   </div>
                 </div>
 
-                {/* Generated blocks */}
-                <div className="space-y-3">
+                {/* Generated blocks — fixed-height container prevents layout jumps on swap */}
+                <div className="space-y-3 overflow-y-auto flex-1" style={{ scrollbarWidth: 'none' }}>
                   <div ref={block1Ref}>
                     <RenderBlock block={layout.blocks[0]} accent={accentColor} />
                   </div>
