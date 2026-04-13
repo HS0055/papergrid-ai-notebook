@@ -29,34 +29,35 @@ export const BlockTypesBento: React.FC<BlockTypesBentoProps> = ({ onLaunch }) =>
       });
     }
 
-    // Wrap in gsap.context so ctx.revert() kills both tweens AND ScrollTriggers
-    // on unmount — prevents React StrictMode double-mount from leaving orphaned
-    // ScrollTriggers that cause cards to stay stuck at opacity: 0.
+    // Set initial state OUTSIDE the context so ctx.revert() can never accidentally
+    // clear opacity:0 and leave cards visible mid-cleanup (StrictMode double-mount).
+    const cards = cardRefs.current.filter(Boolean) as HTMLElement[];
+    gsap.set(cards, { opacity: 0, y: 28, scale: 0.96 });
+
     const ctx = gsap.context(() => {
-      const cards = cardRefs.current.filter(Boolean) as HTMLElement[];
       if (cards.length && gridRef.current) {
-        gsap.fromTo(
-          cards,
-          { opacity: 0, y: 28, scale: 0.96 },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.55,
-            ease: 'power2.out',
-            stagger: 0.055,
-            scrollTrigger: {
-              trigger: gridRef.current,
-              start: 'top 78%',
-              once: true,
-            },
+        // Use gsap.to (not fromTo) — initial state is already set above.
+        gsap.to(cards, {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: 0.55,
+          ease: 'power2.out',
+          stagger: 0.055,
+          scrollTrigger: {
+            trigger: gridRef.current,
+            start: 'top 78%',
+            once: true,
           },
-        );
+        });
       }
     }, sectionRef);
 
     return () => {
       ctx.revert();
+      // Explicitly reset on cleanup so mount-2 always starts from a known state.
+      const c = cardRefs.current.filter(Boolean) as HTMLElement[];
+      gsap.set(c, { opacity: 0, y: 28, scale: 0.96 });
     };
   }, []);
 
