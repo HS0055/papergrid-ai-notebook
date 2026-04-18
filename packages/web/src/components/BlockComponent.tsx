@@ -163,21 +163,23 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
           `pointer-events-auto` on the individual buttons so the
           invisible resting state can't intercept clicks on the
           block content below.  */}
-      <div className="absolute right-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-20 pointer-events-none bg-white/90 backdrop-blur rounded-lg shadow-sm border border-black/5 p-0.5">
-        <div className="pointer-events-auto w-7 h-7 flex items-center justify-center text-gray-400 cursor-move hover:text-gray-600 active:bg-gray-100 rounded" {...dragHandleProps}>
+      <div className="absolute right-2 top-1.5 opacity-40 md:opacity-0 md:group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex gap-0.5 z-20 pointer-events-none bg-white/90 backdrop-blur rounded-xl shadow-sm border border-black/5 p-0.5">
+        <div className="pointer-events-auto w-10 h-10 md:w-7 md:h-7 flex items-center justify-center text-gray-400 cursor-move hover:text-gray-600 active:bg-gray-100 rounded-lg" {...dragHandleProps} style={{ touchAction: 'none' }}>
           <GripVertical size={16} />
         </div>
         <button
           onClick={() => onChange(block.id, { side: block.side === 'right' ? 'left' : 'right' })}
-          className="pointer-events-auto w-7 h-7 flex items-center justify-center hover:bg-blue-100 active:bg-blue-200 rounded text-gray-400 hover:text-blue-500"
+          className="pointer-events-auto w-10 h-10 md:w-7 md:h-7 flex items-center justify-center hover:bg-blue-100 active:bg-blue-200 rounded-lg text-gray-400 hover:text-blue-500"
           aria-label="Move block to other page"
+          style={{ touchAction: 'manipulation' }}
         >
           <ArrowLeftRight size={14} />
         </button>
         <button
           onClick={() => onDelete(block.id)}
-          className="pointer-events-auto w-7 h-7 flex items-center justify-center hover:bg-red-100 active:bg-red-200 rounded text-gray-400 hover:text-red-500"
+          className="pointer-events-auto w-10 h-10 md:w-7 md:h-7 flex items-center justify-center hover:bg-red-100 active:bg-red-200 rounded-lg text-gray-400 hover:text-red-500 active:text-red-500"
           aria-label="Delete block"
+          style={{ touchAction: 'manipulation' }}
         >
           <Trash2 size={14} />
         </button>
@@ -298,7 +300,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
         )}
 
         {block.type === BlockType.DIVIDER && (
-          <div className="w-full flex items-center justify-center group/divider relative" style={{ height: '32px', marginBottom: '32px' }}>
+          <div tabIndex={0} className="w-full flex items-center justify-center group/divider relative focus:outline-none" style={{ height: '32px', marginBottom: '32px' }}>
             {block.emphasis === 'bold' ? (
               <div className={`w-full border-t-4 ${colorClasses.border} rounded-full`}></div>
             ) : block.emphasis === 'italic' ? (

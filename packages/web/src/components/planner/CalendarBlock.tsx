@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Block, CalendarData, CalendarEvent } from '@papergrid/core';
 import { Plus, X } from 'lucide-react';
 
@@ -59,6 +59,20 @@ export const CalendarBlock: React.FC<CalendarBlockProps> = ({ block, onChange, c
 
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [newEventTitle, setNewEventTitle] = useState('');
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleDayLongPressStart = useCallback((day: number) => {
+    pressTimer.current = setTimeout(() => {
+      setEditingDay(prev => prev === day ? null : day);
+    }, 500);
+  }, []);
+
+  const handleDayLongPressEnd = useCallback(() => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  }, []);
 
   const today = new Date();
   const isCurrentMonth = today.getMonth() + 1 === data.month && today.getFullYear() === data.year;
@@ -188,7 +202,10 @@ export const CalendarBlock: React.FC<CalendarBlockProps> = ({ block, onChange, c
                     <button
                       onClick={() => toggleHighlight(dayNum)}
                       onDoubleClick={() => setEditingDay(editingDay === dayNum ? null : dayNum)}
-                      className={`w-7 h-7 rounded-full text-xs font-sans transition-all flex items-center justify-center flex-shrink-0 ${
+                      onTouchStart={() => handleDayLongPressStart(dayNum)}
+                      onTouchEnd={handleDayLongPressEnd}
+                      onTouchMove={handleDayLongPressEnd}
+                      className={`w-8 h-8 md:w-7 md:h-7 rounded-full text-xs font-sans transition-all flex items-center justify-center flex-shrink-0 ${
                         isToday && isHighlighted
                           ? `${colorClasses.highlight} ${colorClasses.text} font-bold ring-2 ring-current`
                           : isToday
@@ -224,6 +241,11 @@ export const CalendarBlock: React.FC<CalendarBlockProps> = ({ block, onChange, c
           })}
         </div>
 
+        {/* Mobile hint: long press to add events */}
+        <div className="md:hidden text-center text-[9px] font-sans text-gray-300 py-1">
+          Hold a day to add event
+        </div>
+
         {/* Events list */}
         {events.length > 0 && (
           <div className={`border-t ${colorClasses.border} px-3 py-2`}>
@@ -256,7 +278,7 @@ export const CalendarBlock: React.FC<CalendarBlockProps> = ({ block, onChange, c
                       </span>
                       <button
                         onClick={() => removeEvent(day, ei)}
-                        className="opacity-0 group-hover/event:opacity-100 text-gray-300 hover:text-red-400 transition-opacity ml-auto"
+                        className="text-gray-300 hover:text-red-400 md:opacity-0 md:group-hover/event:opacity-100 transition-opacity ml-auto active:text-red-500"
                         aria-label={`Remove event: ${evt.title}`}
                       >
                         <X size={12} />

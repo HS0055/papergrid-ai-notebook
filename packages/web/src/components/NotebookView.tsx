@@ -604,28 +604,37 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const renderBlockMenu = (side: 'left' | 'right') => {
     if (openMenu !== side) return null;
     return (
-      <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 anim-fab-pop pointer-events-auto">
-        <div className="flex flex-wrap justify-center gap-1.5 bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl p-3 border border-gray-200 max-w-[320px] max-h-[60vh] overflow-y-auto">
-          {allowedTypes.map(type => {
-            const config = BLOCK_BUTTON_CONFIG[type];
-            return (
-              <button
-                key={type}
-                onClick={() => addBlock(type, side)}
-                className="p-2 hover:bg-indigo-50 rounded-xl text-gray-600 hover:text-indigo-600 text-xs flex flex-col items-center gap-1 w-14 transition-colors"
-              >
-                {config.icon}
-                <span>{config.label}</span>
-              </button>
-            );
-          })}
+      <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 anim-fab-pop pointer-events-auto w-[min(92vw,360px)]">
+        <div className="bg-white/96 backdrop-blur-md shadow-2xl rounded-2xl border border-gray-200 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100">
+            <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-gray-400">Add block</span>
+            <button
+              onClick={() => setOpenMenu(null)}
+              className="w-8 h-8 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-600 rounded-full flex items-center justify-center transition-colors"
+              aria-label="Close block menu"
+            >
+              <X size={15} />
+            </button>
+          </div>
+          {/* Grid */}
+          <div className="flex flex-wrap justify-start gap-1.5 p-3 max-h-[52vh] overflow-y-auto">
+            {allowedTypes.map(type => {
+              const config = BLOCK_BUTTON_CONFIG[type];
+              return (
+                <button
+                  key={type}
+                  onClick={() => addBlock(type, side)}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 active:scale-95 transition-all w-[72px] h-[60px]"
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  <span className="flex items-center justify-center w-7 h-7">{config.icon}</span>
+                  <span className="text-[10px] font-sans leading-none text-center">{config.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <button
-          onClick={() => setOpenMenu(null)}
-          className="absolute -top-2 -right-2 w-6 h-6 bg-gray-800 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-700 transition-colors"
-        >
-          <X size={12} />
-        </button>
       </div>
     );
   };
@@ -1039,8 +1048,13 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           return (
             <>
               {isPaperEmpty && !isCanvasPaper && !hideChrome && (
-                <div className="text-gray-400 font-hand text-xl md:text-2xl text-center mt-16 md:mt-20 opacity-50 select-none pointer-events-none">
-                  Tap anywhere to start writing
+                <div className="flex flex-col items-center gap-3 mt-14 md:mt-20 opacity-40 select-none pointer-events-none">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                  </svg>
+                  <span className="text-gray-400 font-hand text-lg md:text-xl text-center">
+                    Tap the <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-500 text-[11px] font-bold align-middle mx-0.5">+</span> to add a block
+                  </span>
                 </div>
               )}
               {isPaperEmpty && (page.paperType === 'hex' || page.paperType === 'isometric') && isLeft && !hideChrome && (

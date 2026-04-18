@@ -11,7 +11,7 @@ import {
   Palette, BookOpen, LayoutDashboard, ListChecks, Calendar, PenLine,
   Printer, Volume2, VolumeX, Wand2, Trash2,
   Users, DollarSign, Gift, Maximize2, Minimize2, CreditCard,
-  MessageSquare, Droplet, Megaphone,
+  MessageSquare, Droplet, Megaphone, Layers, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { useSoundEffects } from '../hooks/useSoundEffects';
 import { useAuth } from '../hooks/useAuth';
@@ -536,7 +536,6 @@ export const Dashboard: React.FC = () => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
-  const [showBookmarks, setShowBookmarks] = useState(false);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -565,6 +564,10 @@ export const Dashboard: React.FC = () => {
   // AI generation approval flow
   const [pendingPages, setPendingPages] = useState<NotebookPage[] | null>(null);
   const [pendingInkCost, setPendingInkCost] = useState(0);
+  const [pendingInsertAt, setPendingInsertAt] = useState<number | null>(null);
+
+  // Page manager panel
+  const [showPageManager, setShowPageManager] = useState(false);
 
   // Animation states
   const [contentKey, setContentKey] = useState(0);
@@ -863,6 +866,19 @@ export const Dashboard: React.FC = () => {
     navigate('/community');
   }, [handleOpenCommunityNews, navigate, unreadNewsCount]);
 
+  const toggleBookmarkForPage = useCallback((pageId: string) => {
+    setNotebooks(prev => prev.map(nb => {
+      if (nb.id !== activeNotebookId) return nb;
+      const bookmarks = nb.bookmarks ?? [];
+      return {
+        ...nb,
+        bookmarks: bookmarks.includes(pageId)
+          ? bookmarks.filter(id => id !== pageId)
+          : [...bookmarks, pageId],
+      };
+    }));
+  }, [activeNotebookId]);
+
   // Esc to exit focus mode. Bound at the window level so it works
   // regardless of which child has focus.
   useEffect(() => {
@@ -873,6 +889,21 @@ export const Dashboard: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [focusMode]);
+
+  // B key — toggle bookmark on current page (desktop shortcut)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'b' && e.key !== 'B') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
+      if (activePageIndex < 0) return;
+      const nb = notebooks.find(n => n.id === activeNotebookId);
+      const page = nb?.pages[activePageIndex];
+      if (page) toggleBookmarkForPage(page.id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [notebooks, activeNotebookId, activePageIndex, toggleBookmarkForPage]);
 
   // Open the Stripe Customer Billing Portal so the user can manage /
   // cancel their subscription. Falls back to navigating /pricing if
@@ -1219,7 +1250,7 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleNewPage = (templateBlocks?: Block[]) => {
+  const handleNewPage = (templateBlocks?: Block[], insertAt?: number) => {
     const newPage: NotebookPage = {
       id: crypto.randomUUID(),
       title: '',
@@ -1230,13 +1261,36 @@ export const Dashboard: React.FC = () => {
     setNotebooks(prev => {
       const updated = prev.map(nb => {
         if (nb.id !== activeNotebookId) return nb;
-        return { ...nb, pages: [...nb.pages, newPage] };
+        const pages = [...nb.pages];
+        if (insertAt !== undefined && insertAt >= 0 && insertAt <= pages.length) {
+          pages.splice(insertAt, 0, newPage);
+        } else {
+          pages.push(newPage);
+        }
+        return { ...nb, pages };
       });
       const nb = updated.find(n => n.id === activeNotebookId);
       if (nb) {
+        const newIdx = insertAt !== undefined && insertAt >= 0 ? insertAt : nb.pages.length - 1;
         setPageDirection('right');
-        setActivePageIndex(nb.pages.length - 1);
+        setActivePageIndex(newIdx);
       }
+      return updated;
+    });
+  };
+
+  const handleMovePage = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0) return;
+    setNotebooks(prev => {
+      const updated = prev.map(nb => {
+        if (nb.id !== activeNotebookId) return nb;
+        const pages = [...nb.pages];
+        if (toIndex >= pages.length) return nb;
+        const [moved] = pages.splice(fromIndex, 1);
+        pages.splice(toIndex, 0, moved);
+        return { ...nb, pages };
+      });
+      setActivePageIndex(toIndex);
       return updated;
     });
   };
@@ -1331,7 +1385,11 @@ export const Dashboard: React.FC = () => {
         aiGenerated: true,
       }));
 
-      // Show approval dialog — user decides whether to add pages
+      // Show approval dialog — default insert after current page (or end)
+      const insertDefault = activePageIndex >= 0
+        ? activePageIndex + 1
+        : null;
+      setPendingInsertAt(insertDefault);
       setPendingPages(newPages);
       setPendingInkCost(newPages.length); // 1 Ink per page
     } catch (error) {
@@ -1340,19 +1398,27 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  // Approve generated pages — add them to notebook
+  // Approve generated pages — add them to notebook at chosen position
   const approveGeneratedPages = () => {
     if (!pendingPages) return;
     const newPages = pendingPages;
+    const insertAt = pendingInsertAt;
     setNotebooks(prev => {
       const updated = prev.map(nb => {
         if (nb.id !== activeNotebookId) return nb;
-        return { ...nb, pages: [...nb.pages, ...newPages] };
+        const pages = [...nb.pages];
+        if (insertAt !== null && insertAt >= 0 && insertAt <= pages.length) {
+          pages.splice(insertAt, 0, ...newPages);
+        } else {
+          pages.push(...newPages);
+        }
+        return { ...nb, pages };
       });
       const nb = updated.find(n => n.id === activeNotebookId);
       if (nb) {
+        const firstNewIdx = insertAt !== null && insertAt >= 0 ? insertAt : nb.pages.length - newPages.length;
         setPageDirection('right');
-        setActivePageIndex(nb.pages.length - newPages.length);
+        setActivePageIndex(firstNewIdx);
       }
       return updated;
     });
@@ -1364,28 +1430,20 @@ export const Dashboard: React.FC = () => {
     );
     setPendingPages(null);
     setPendingInkCost(0);
+    setPendingInsertAt(null);
   };
 
   // Decline generated pages — discard without adding
   const declineGeneratedPages = () => {
     setPendingPages(null);
     setPendingInkCost(0);
+    setPendingInsertAt(null);
     addToast('Generation discarded — no Ink charged', 'success');
   };
 
   const toggleBookmark = () => {
     if (!activePage) return;
-    setNotebooks(prev => prev.map(nb => {
-      if (nb.id !== activeNotebookId) return nb;
-      const bookmarks = nb.bookmarks ?? [];
-      const isBookmarked = bookmarks.includes(activePage.id);
-      return {
-        ...nb,
-        bookmarks: isBookmarked
-          ? bookmarks.filter(id => id !== activePage.id)
-          : [...bookmarks, activePage.id]
-      };
-    }));
+    toggleBookmarkForPage(activePage.id);
   };
 
   const handleExportPdf = async () => {
@@ -1923,39 +1981,45 @@ export const Dashboard: React.FC = () => {
             </div>
           ))}
 
-          {/* Bookmarks Section (sidebar list) */}
+          {/* Bookmarks Section (sidebar list) — always visible when any exist */}
           {bookmarkedPages.length > 0 && (
             <div className="mt-4">
-              <button
-                onClick={() => setShowBookmarks(!showBookmarks)}
-                className="w-full px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2 hover:text-gray-400 transition-colors"
-              >
-                <Bookmark size={12} />
-                <span>Bookmarks ({bookmarkedPages.length})</span>
-                <ChevronRight size={12} className={`ml-auto transition-transform ${showBookmarks ? 'rotate-90' : ''}`} />
-              </button>
-              {showBookmarks && (
-                <div className="space-y-0.5">
-                  {bookmarkedPages.map(p => {
-                    const pageIdx = activeNotebook.pages.findIndex(pg => pg.id === p.id);
-                    return (
+              <div className="px-3 mb-1.5 flex items-center gap-2">
+                <Bookmark size={11} className="text-amber-500" fill="currentColor" />
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Bookmarks</span>
+                <span className="ml-auto text-[10px] text-gray-600 tabular-nums">{bookmarkedPages.length}</span>
+              </div>
+              <div className="space-y-0.5">
+                {bookmarkedPages.map(p => {
+                  const pageIdx = activeNotebook.pages.findIndex(pg => pg.id === p.id);
+                  const isCurrent = pageIdx === activePageIndex;
+                  return (
+                    <div key={p.id} className={`group/bm flex items-center rounded-lg mx-1 transition-colors ${isCurrent ? 'bg-amber-500/15' : 'hover:bg-gray-800/50'}`}>
                       <button
-                        key={p.id}
                         onClick={() => {
-                          setPageDirection('right');
+                          setPageDirection(pageIdx > activePageIndex ? 'right' : 'left');
                           setActivePageIndex(pageIdx);
+                          sfx.pageFlip();
                           if (window.innerWidth < 768) setIsSidebarOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800/50 hover:text-gray-200 transition-colors flex items-center gap-2"
+                        className="flex-1 text-left px-3 py-2 flex items-center gap-2 min-w-0"
                       >
-                        <Bookmark size={12} className="text-amber-500 shrink-0" fill="currentColor" />
-                        <span className="truncate">{p.title || `Spread ${pageIdx + 1}`}</span>
+                        <span className={`text-[10px] font-bold tabular-nums w-5 shrink-0 ${isCurrent ? 'text-amber-400' : 'text-gray-600'}`}>{pageIdx + 1}</span>
+                        <span className={`text-sm truncate ${isCurrent ? 'text-amber-200 font-medium' : 'text-gray-400'}`}>{p.title || `Page ${pageIdx + 1}`}</span>
                         {p.aiGenerated && <Sparkles size={10} className="text-indigo-400 shrink-0" />}
                       </button>
-                    );
-                  })}
-                </div>
-              )}
+                      <button
+                        onClick={() => toggleBookmarkForPage(p.id)}
+                        className="opacity-0 group-hover/bm:opacity-100 pr-2 text-amber-500 hover:text-amber-300 transition-all"
+                        aria-label="Remove bookmark"
+                        title="Remove bookmark"
+                      >
+                        <Bookmark size={12} fill="currentColor" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -2223,6 +2287,16 @@ export const Dashboard: React.FC = () => {
               </button>
             </>
           )}
+          {activeNotebook.pages.length > 1 && (
+            <button
+              onClick={() => setShowPageManager(true)}
+              className="p-2 bg-white/80 backdrop-blur rounded-lg shadow-sm border border-gray-200 text-gray-700 hover:bg-white hover:text-indigo-600 transition-colors"
+              aria-label="Manage pages"
+              title="Manage pages"
+            >
+              <Layers size={20} />
+            </button>
+          )}
           {activeNotebook.pages.length > 0 && (
             <button
               onClick={handleExportPdf}
@@ -2320,6 +2394,16 @@ export const Dashboard: React.FC = () => {
                   </button>
                 </>
               )}
+              {activeNotebook.pages.length > 1 && (
+                <button
+                  onClick={() => setShowPageManager(true)}
+                  className="p-2 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-700"
+                  aria-label="Manage pages"
+                  title="Manage pages"
+                >
+                  <Layers size={18} />
+                </button>
+              )}
               {activeNotebook.pages.length > 0 && (
                 <button
                   onClick={handleExportPdf}
@@ -2351,17 +2435,18 @@ export const Dashboard: React.FC = () => {
               {bookmarkedPages.map((p, i) => {
                 const pageIdx = activeNotebook.pages.findIndex(pg => pg.id === p.id);
                 const isCurrentPage = pageIdx === activePageIndex;
-                const ribbonColors = [
-                  'from-amber-500 to-amber-600',
-                  'from-rose-500 to-rose-600',
-                  'from-indigo-500 to-indigo-600',
-                  'from-emerald-500 to-emerald-600',
-                  'from-violet-500 to-violet-600',
-                  'from-sky-500 to-sky-600',
-                  'from-pink-500 to-pink-600',
-                  'from-teal-500 to-teal-600',
+                // Solid colors for both ribbon body and the V-notch triangle tail
+                const ribbonPairs: [string, string][] = [
+                  ['#f59e0b', '#d97706'], // amber
+                  ['#f43f5e', '#e11d48'], // rose
+                  ['#6366f1', '#4f46e5'], // indigo
+                  ['#10b981', '#059669'], // emerald
+                  ['#8b5cf6', '#7c3aed'], // violet
+                  ['#0ea5e9', '#0284c7'], // sky
+                  ['#ec4899', '#db2777'], // pink
+                  ['#14b8a6', '#0d9488'], // teal
                 ];
-                const colorClass = ribbonColors[i % ribbonColors.length];
+                const [bodyColor, tailColor] = ribbonPairs[i % ribbonPairs.length];
                 return (
                   <button
                     key={p.id}
@@ -2372,23 +2457,22 @@ export const Dashboard: React.FC = () => {
                     }}
                     className={`group/ribbon relative flex items-center transition-all duration-300 ${isCurrentPage ? 'translate-x-0' : '-translate-x-2 hover:translate-x-0'}`}
                     title={p.title || `Page ${pageIdx + 1}`}
+                    style={{ touchAction: 'manipulation' }}
                   >
                     {/* Ribbon body */}
                     <div
-                      className={`relative bg-gradient-to-r ${colorClass} shadow-lg rounded-r-sm ${isCurrentPage ? 'w-20 md:w-28' : 'w-8 md:w-12 group-hover/ribbon:w-20 md:group-hover/ribbon:w-28'} h-7 transition-all duration-300 flex items-center overflow-hidden`}
+                      className={`relative shadow-lg rounded-r-sm ${isCurrentPage ? 'w-20 md:w-28' : 'w-8 md:w-12 group-hover/ribbon:w-20 md:group-hover/ribbon:w-28'} h-7 transition-all duration-300 flex items-center overflow-hidden`}
+                      style={{ backgroundColor: bodyColor }}
                     >
-                      {/* Fabric texture overlay */}
-                      <div className="absolute inset-0 opacity-20 bg-[repeating-linear-gradient(90deg,transparent,transparent_1px,rgba(255,255,255,0.1)_1px,rgba(255,255,255,0.1)_2px)]" />
-                      {/* Label — only visible when expanded */}
-                      <span className={`text-white text-[10px] font-medium pl-2 pr-1 truncate whitespace-nowrap transition-opacity duration-200 ${isCurrentPage ? 'opacity-100' : 'opacity-0 group-hover/ribbon:opacity-100'}`}>
+                      <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(90deg,transparent,transparent_1px,rgba(255,255,255,0.15)_1px,rgba(255,255,255,0.15)_2px)]" />
+                      <span className={`text-white text-[10px] font-semibold pl-2.5 pr-1 truncate whitespace-nowrap transition-opacity duration-200 ${isCurrentPage ? 'opacity-100' : 'opacity-0 group-hover/ribbon:opacity-100'}`}>
                         {p.title || `Pg ${pageIdx + 1}`}
                       </span>
                     </div>
-                    {/* Ribbon tail / V-notch */}
-                    <div className={`w-0 h-0 border-t-[14px] border-b-[14px] border-l-[6px] border-t-transparent border-b-transparent transition-colors`}
-                      style={{
-                        borderLeftColor: isCurrentPage ? undefined : undefined,
-                      }}
+                    {/* V-notch tail — correctly coloured */}
+                    <div
+                      className="w-0 h-0 border-t-[14px] border-b-[14px] border-l-[7px] border-t-transparent border-b-transparent flex-shrink-0"
+                      style={{ borderLeftColor: tailColor }}
                     />
                   </button>
                 );
@@ -2643,10 +2727,16 @@ export const Dashboard: React.FC = () => {
               Web:    full dot strip + label + add button */}
           {native ? (
             activePageIndex !== -1 && activeNotebook.pages.length > 0 && !keyboardVisible ? (
-              <div className="mt-0.5 flex items-center justify-center shrink-0 pointer-events-none">
-                <span className="px-2 py-0.5 rounded-full bg-black/30 backdrop-blur text-white text-[10px] font-sans tabular-nums tracking-wide">
+              <div className="mt-0.5 flex items-center justify-center shrink-0">
+                <button
+                  onClick={() => setShowPageManager(true)}
+                  className="px-3 py-1 rounded-full bg-black/30 active:bg-black/50 backdrop-blur text-white text-[11px] font-sans tabular-nums tracking-wide transition-colors flex items-center gap-1.5"
+                  style={{ touchAction: 'manipulation' }}
+                  aria-label="Manage pages"
+                >
+                  <Layers size={10} />
                   {activePageIndex + 1}/{activeNotebook.pages.length}
-                </span>
+                </button>
               </div>
             ) : null
           ) : (
@@ -2655,21 +2745,43 @@ export const Dashboard: React.FC = () => {
               {getPageLabel()}
             </span>
             {activeNotebook.pages.length > 0 && activeNotebook.pages.length <= 20 && (
-              <div className="flex items-center gap-1">
-                {activeNotebook.pages.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setPageDirection(i > activePageIndex ? 'right' : 'left');
-                      setActivePageIndex(i);
-                    }}
-                    className={`w-1.5 h-1.5 rounded-full transition-all ${i === activePageIndex
-                      ? 'bg-indigo-500 scale-150'
-                      : 'bg-gray-300 hover:bg-gray-400'
-                      }`}
-                  />
-                ))}
+              <div className="flex items-center gap-0.5">
+                {activeNotebook.pages.map((p, i) => {
+                  const isActive = i === activePageIndex;
+                  const isBookmarked = (activeNotebook.bookmarks ?? []).includes(p.id);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setPageDirection(i > activePageIndex ? 'right' : 'left');
+                        setActivePageIndex(i);
+                      }}
+                      title={`${p.title || `Page ${i + 1}`}${isBookmarked ? ' 🔖' : ''}`}
+                      className="p-1.5 flex items-center justify-center relative"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      <span className={`block transition-all duration-200 ${isActive
+                        ? 'w-4 h-2 bg-indigo-500 rounded-full'
+                        : 'w-2 h-2 bg-gray-300 hover:bg-gray-400 rounded-full'
+                        }`}
+                      />
+                      {isBookmarked && (
+                        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
+            )}
+            {/* Page manager */}
+            {activeNotebook.pages.length > 1 && (
+              <button
+                onClick={() => setShowPageManager(true)}
+                className="p-1.5 rounded-full bg-white/80 hover:bg-indigo-100 border border-gray-200 hover:border-indigo-300 text-gray-500 hover:text-indigo-600 shadow-sm transition-all hover:scale-110"
+                title="Manage pages"
+              >
+                <Layers size={14} />
+              </button>
             )}
             {/* Add new page — always accessible */}
             <button
@@ -2734,6 +2846,27 @@ export const Dashboard: React.FC = () => {
               ))}
             </div>
 
+            {/* Insert position selector */}
+            {activeNotebook && activeNotebook.pages.length > 0 && (
+              <div className="px-6 py-3 border-t border-gray-100">
+                <label className="text-xs font-sans font-bold uppercase tracking-wider text-gray-400 block mb-1.5">
+                  Insert position
+                </label>
+                <select
+                  value={pendingInsertAt ?? activeNotebook.pages.length}
+                  onChange={e => setPendingInsertAt(Number(e.target.value))}
+                  className="w-full text-sm font-sans bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-400 text-gray-700"
+                >
+                  <option value={0}>Before page 1</option>
+                  {activeNotebook.pages.map((p, i) => (
+                    <option key={p.id} value={i + 1}>
+                      After page {i + 1}{p.title ? ` — ${p.title}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Cost summary */}
             <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -2760,6 +2893,120 @@ export const Dashboard: React.FC = () => {
                 className="flex-1 px-4 py-2.5 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-indigo-500/20"
               >
                 Add {pendingPages.length} {pendingPages.length === 1 ? 'Page' : 'Pages'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Page Manager Modal */}
+      {showPageManager && activeNotebook && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setShowPageManager(false)}
+        >
+          <div
+            className="bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Page Order</h3>
+                <p className="text-xs text-gray-400">{activeNotebook.pages.length} pages</p>
+              </div>
+              <button
+                onClick={() => setShowPageManager(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto max-h-[62vh] divide-y divide-gray-50">
+              {activeNotebook.pages.map((page, i) => {
+                const paperColors: Record<string, string> = {
+                  lined: 'bg-sky-400', grid: 'bg-emerald-400', dotted: 'bg-violet-400',
+                  blank: 'bg-gray-300', music: 'bg-rose-400', isometric: 'bg-amber-400', hex: 'bg-teal-400',
+                };
+                const dot = paperColors[page.paperType || 'lined'] ?? 'bg-gray-300';
+                const isCurrent = i === activePageIndex;
+                return (
+                  <div
+                    key={page.id}
+                    className={`flex items-center gap-3 px-4 transition-colors ${isCurrent ? 'bg-indigo-50' : 'hover:bg-gray-50 active:bg-gray-100'}`}
+                    style={{ minHeight: '56px' }}
+                  >
+                    {/* Page number badge */}
+                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${isCurrent ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-500'}`}>
+                      {i + 1}
+                    </span>
+                    {/* Page info — tappable to navigate */}
+                    <button
+                      className="flex-1 text-left min-w-0 py-3"
+                      style={{ touchAction: 'manipulation' }}
+                      onClick={() => {
+                        setPageDirection(i > activePageIndex ? 'right' : 'left');
+                        setActivePageIndex(i);
+                        setShowPageManager(false);
+                      }}
+                    >
+                      <div className={`text-sm font-medium truncate ${isCurrent ? 'text-indigo-700' : 'text-gray-800'}`}>
+                        {page.title || <span className="text-gray-400 italic">Untitled</span>}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
+                        <span className="text-[10px] text-gray-400 capitalize">{page.paperType || 'lined'} · {page.blocks.length} block{page.blocks.length !== 1 ? 's' : ''}</span>
+                      </div>
+                    </button>
+                    {/* Bookmark + Move buttons */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <button
+                        onClick={() => toggleBookmarkForPage(page.id)}
+                        className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
+                          (activeNotebook.bookmarks ?? []).includes(page.id)
+                            ? 'text-amber-500 bg-amber-50 hover:bg-amber-100'
+                            : 'text-gray-300 hover:text-amber-400 hover:bg-amber-50'
+                        }`}
+                        style={{ touchAction: 'manipulation' }}
+                        aria-label={(activeNotebook.bookmarks ?? []).includes(page.id) ? 'Remove bookmark' : 'Bookmark page'}
+                      >
+                        <Bookmark size={14} fill={(activeNotebook.bookmarks ?? []).includes(page.id) ? 'currentColor' : 'none'} />
+                      </button>
+                      <button
+                        onClick={() => handleMovePage(i, i - 1)}
+                        disabled={i === 0}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed active:bg-gray-200 transition-colors"
+                        style={{ touchAction: 'manipulation' }}
+                        aria-label="Move page up"
+                      >
+                        <ArrowUp size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleMovePage(i, i + 1)}
+                        disabled={i === activeNotebook.pages.length - 1}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed active:bg-gray-200 transition-colors"
+                        style={{ touchAction: 'manipulation' }}
+                        aria-label="Move page down"
+                      >
+                        <ArrowDown size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-100" style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
+              <button
+                onClick={() => {
+                  handleNewPage(undefined, activePageIndex + 1);
+                  setShowPageManager(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-indigo-900/20"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <Plus size={16} />
+                Insert page after current
               </button>
             </div>
           </div>
