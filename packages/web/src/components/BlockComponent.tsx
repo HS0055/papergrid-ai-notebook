@@ -154,7 +154,7 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
   };
 
   return (
-    <div data-block-type={block.type} className="group relative flex items-start -ml-16 mb-0.5 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 py-0.5 min-w-0">
+    <div data-block-type={block.type} className="group relative flex items-start -ml-16 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 min-w-0">
       {/* Block Controls (Hover)
           Moved from `left-2` (which overlapped the checkbox/content
           inside narrow container blocks like Top 3 Priorities) to

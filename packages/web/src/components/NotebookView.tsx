@@ -942,7 +942,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           calc, so we don't need defensive `pb-20` reservations any more. */}
       <div
         data-scroll-container
-        className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 md:px-10 pt-3 md:pt-8 ${
+        className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 md:px-10 pt-8 ${
           native
             ? (keyboardVisible ? 'pb-4' : 'pb-24')
             : 'pb-20 md:pb-8'

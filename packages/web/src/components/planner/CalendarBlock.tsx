@@ -103,7 +103,7 @@ export const CalendarBlock: React.FC<CalendarBlockProps> = ({ block, onChange, c
       calendarData: { ...data, events: [...events, newEvent] },
     });
     setNewEventTitle('');
-    setEditingDay(null);
+    // Keep editingDay open so the user can add multiple events to the same day
   };
 
   const removeEvent = (day: number, index: number) => {
