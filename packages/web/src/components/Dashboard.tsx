@@ -536,6 +536,7 @@ export const Dashboard: React.FC = () => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -1905,6 +1906,7 @@ export const Dashboard: React.FC = () => {
             <div className="relative">
               <Search size={14} className="absolute left-3 top-2.5 text-gray-500" />
               <input
+                ref={searchInputRef}
                 className="w-full pl-9 pr-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-gray-600 transition-colors"
                 placeholder="Search notebooks..."
                 value={sidebarSearch}
@@ -2345,7 +2347,7 @@ export const Dashboard: React.FC = () => {
             className="md:hidden w-full shrink-0 z-30 flex items-center justify-between gap-1.5 px-2.5 pb-2 bg-gray-100/95 backdrop-blur-md border-b border-gray-200"
             style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
           >
-            {/* Left cluster: sidebar + sound */}
+            {/* Left cluster: sidebar + search + sound */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -2354,6 +2356,16 @@ export const Dashboard: React.FC = () => {
                 aria-expanded={isSidebarOpen}
               >
                 <Menu size={18} />
+              </button>
+              <button
+                onClick={() => {
+                  setIsSidebarOpen(true);
+                  setTimeout(() => searchInputRef.current?.focus(), 120);
+                }}
+                className="p-2 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-500 active:bg-gray-100 transition-colors"
+                aria-label="Search notebooks"
+              >
+                <Search size={18} />
               </button>
               <button
                 onClick={sfx.toggle}

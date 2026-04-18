@@ -154,16 +154,15 @@ export const BlockComponent: React.FC<BlockProps> = ({ block, onChange, onDelete
   };
 
   return (
-    <div data-block-type={block.type} className="group relative flex items-start -ml-16 hover:bg-black/[0.03] transition-colors rounded-lg pl-16 pr-2 min-w-0">
-      {/* Block Controls (Hover)
-          Moved from `left-2` (which overlapped the checkbox/content
-          inside narrow container blocks like Top 3 Priorities) to
-          `right-2` so the handle never blocks the primary click
-          target. Added `pointer-events-none` on the wrapper with
-          `pointer-events-auto` on the individual buttons so the
-          invisible resting state can't intercept clicks on the
-          block content below.  */}
-      <div className="absolute right-2 top-1.5 opacity-40 md:opacity-0 md:group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex gap-0.5 z-20 pointer-events-none bg-white/90 backdrop-blur rounded-xl shadow-sm border border-black/5 p-0.5">
+    <div
+      data-block-type={block.type}
+      tabIndex={0}
+      className="group relative flex items-start -ml-16 hover:bg-black/[0.03] focus:outline-none transition-colors rounded-lg pl-16 pr-2 min-w-0"
+    >
+      {/* Block controls — hidden until this wrapper or any child is focused.
+          tabIndex={0} on the wrapper lets mobile users tap the block background
+          to reveal controls without needing to focus a text input first. */}
+      <div className="absolute right-2 top-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex gap-0.5 z-20 pointer-events-none bg-white/90 backdrop-blur rounded-xl shadow-sm border border-black/5 p-0.5">
         <div className="pointer-events-auto w-10 h-10 md:w-7 md:h-7 flex items-center justify-center text-gray-400 cursor-move hover:text-gray-600 active:bg-gray-100 rounded-lg" {...dragHandleProps} style={{ touchAction: 'none' }}>
           <GripVertical size={16} />
         </div>
